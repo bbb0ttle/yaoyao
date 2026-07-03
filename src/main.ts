@@ -47,7 +47,13 @@ async function init() {
     const len = cw * ch * 4;
     pixelArray = new Uint8ClampedArray(wasm.memory.buffer, ptr, len);
     imageData = new ImageData(pixelArray, cw, ch);
+
+    const elapsed = (performance.now() - start) / 1000;
+    wasm.update_frame(elapsed);
+    ctx.putImageData(imageData, 0, 0);
   }
+
+  let start = performance.now();
 
   // initial size and listener
   resizeToDevice();
@@ -60,8 +66,6 @@ async function init() {
       resizeRaf = 0;
     });
   });
-
-  let start = performance.now();
 
   function loop(now: number) {
     const elapsed = (now - start) / 1000;
