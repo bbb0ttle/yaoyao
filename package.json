@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "zig build wasm && vite",
+    "dev": "vite",
     "build": "zig build wasm && vite build",
     "build:zig": "zig build wasm",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/node": "^26.1.0",
     "typescript": "^5.8.0",
     "vite": "^6.3.0"
   }
