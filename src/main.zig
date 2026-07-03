@@ -17,16 +17,21 @@ export fn get_height() u32 {
     return height;
 }
 
-export fn update_frame(time: f32) void {
+// export fn update_frame(time: f32) void {
+export fn update_frame() void {
     var i: usize = 0;
     while (i < framebuffer.len) : (i += 4) {
-        const pixel_index = i / 4;
-        const x: f32 = @floatFromInt(pixel_index % width);
-        const y: f32 = @floatFromInt(pixel_index / width);
+        // const pixel_index = i / 4;
+        // const x: f32 = @floatFromInt(pixel_index % width);
+        // const y: f32 = @floatFromInt(pixel_index / width);
 
-        framebuffer[i + 0] = @intFromFloat((x / @as(f32, @floatFromInt(width))) * 255.0);
-        framebuffer[i + 1] = @intFromFloat((y / @as(f32, @floatFromInt(height))) * 255.0);
-        framebuffer[i + 2] = @intFromFloat(@mod(time * 50.0, 255.0));
+        // framebuffer[i + 0] = @intFromFloat((x / @as(f32, @floatFromInt(width))) * 255.0);
+        // framebuffer[i + 1] = @intFromFloat((y / @as(f32, @floatFromInt(height))) * 255.0);
+        // framebuffer[i + 2] = @intFromFloat(@mod(time * 50.0, 255.0));
+        // framebuffer[i + 3] = 255;
+        framebuffer[i + 0] = 255;
+        framebuffer[i + 1] = 255;
+        framebuffer[i + 2] = 255;
         framebuffer[i + 3] = 255;
     }
 }
