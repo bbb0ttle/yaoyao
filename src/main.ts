@@ -3,6 +3,7 @@ interface ZCanvasExports extends WebAssembly.Exports {
   get_framebuffer_ptr(): number;
   get_width(): number;
   get_height(): number;
+  resize(w: number, h: number): void;
   update_frame(time: number): void;
 }
 
@@ -18,17 +19,47 @@ async function init() {
 
   const wasm = instance.exports as ZCanvasExports;
 
-  const width = wasm.get_width();
-  const height = wasm.get_height();
-  const ptr = wasm.get_framebuffer_ptr();
+  let pixelArray: Uint8ClampedArray;
+  let imageData: ImageData;
 
-  const pixelArray = new Uint8ClampedArray(
-    wasm.memory.buffer,
-    ptr,
-    width * height * 4,
-  );
+  function getCSSSize() {
+    const rect = canvas.getBoundingClientRect();
+    return { w: Math.max(1, rect.width), h: Math.max(1, rect.height) };
+  }
 
-  const imageData = new ImageData(pixelArray, width, height);
+  function resizeToDevice() {
+    const dpr = window.devicePixelRatio || 1;
+    const { w: cssW, h: cssH } = getCSSSize();
+    const w = Math.max(1, Math.floor(cssW * dpr));
+    const h = Math.max(1, Math.floor(cssH * dpr));
+
+    const maxDim = 4096;
+    const cw = Math.min(w, maxDim);
+    const ch = Math.min(h, maxDim);
+
+    canvas.width = cw;
+    canvas.height = ch;
+
+    wasm.resize(cw, ch);
+
+    const ptr = wasm.get_framebuffer_ptr();
+    if (ptr === 0) return;
+    const len = cw * ch * 4;
+    pixelArray = new Uint8ClampedArray(wasm.memory.buffer, ptr, len);
+    imageData = new ImageData(pixelArray, cw, ch);
+  }
+
+  // initial size and listener
+  resizeToDevice();
+
+  let resizeRaf = 0;
+  window.addEventListener("resize", () => {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => {
+      resizeToDevice();
+      resizeRaf = 0;
+    });
+  });
 
   let start = performance.now();
 
