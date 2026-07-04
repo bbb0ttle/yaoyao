@@ -11,7 +11,7 @@ function zigWatchPlugin(): Plugin {
         });
       }
       build();
-      server.watcher.add("src/main.zig");
+      server.watcher.add("src");
       server.watcher.on("change", (path) => {
         if (path.endsWith(".zig")) {
           console.log(`[zig-watch] ${path} changed, rebuilding...`);
@@ -23,5 +23,10 @@ function zigWatchPlugin(): Plugin {
 }
 
 export default defineConfig({
+  root: 'web',
+  publicDir: '../public',
+  build: {
+    outDir: '../dist',
+  },
   plugins: [zigWatchPlugin()],
 });

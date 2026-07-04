@@ -1,0 +1,70 @@
+const business = @import("core/business.zig");
+const Rgba = business.Rgba;
+
+pub const FrameBuffer = struct {
+    buf: []u8,
+    width: u32,
+    height: u32,
+
+    pub fn setPixel(self: FrameBuffer, x: i32, y: i32, color: Rgba) void {
+        if (x < 0 or x >= @as(i32, @intCast(self.width))) return;
+        if (y < 0 or y >= @as(i32, @intCast(self.height))) return;
+        const idx = (@as(usize, @intCast(y)) * @as(usize, self.width) + @as(usize, @intCast(x))) * 4;
+        self.buf[idx] = color.r;
+        self.buf[idx + 1] = color.g;
+        self.buf[idx + 2] = color.b;
+        self.buf[idx + 3] = color.a;
+    }
+
+    pub fn clear(self: FrameBuffer, color: Rgba) void {
+        var i: usize = 0;
+        while (i < self.buf.len) : (i += 4) {
+            self.buf[i + 0] = color.r;
+            self.buf[i + 1] = color.g;
+            self.buf[i + 2] = color.b;
+            self.buf[i + 3] = color.a;
+        }
+    }
+
+    pub fn fillTriangle(self: FrameBuffer, x0: i32, y0: i32, x1: i32, y1: i32, x2: i32, y2: i32, color: Rgba) void {
+        const v = business.sortVerticesByY(.{ x0, y0 }, .{ x1, y1 }, .{ x2, y2 });
+
+        const top_y = v[0][1];
+        const mid_y = v[1][1];
+        const bot_y = v[2][1];
+
+        if (bot_y == top_y) return;
+
+        var y = top_y;
+        while (y <= bot_y) : (y += 1) {
+            const t2: f32 = if (bot_y != top_y) @as(f32, @floatFromInt(y - top_y)) / @as(f32, @floatFromInt(bot_y - top_y)) else 0;
+            const x_left = @as(i32, @intFromFloat(@as(f32, @floatFromInt(v[0][0])) + t2 * @as(f32, @floatFromInt(v[2][0] - v[0][0]))));
+            const x_right: i32 = if (y <= mid_y) blk: {
+                const t1: f32 = if (mid_y != top_y) @as(f32, @floatFromInt(y - top_y)) / @as(f32, @floatFromInt(mid_y - top_y)) else 0;
+                break :blk @as(i32, @intFromFloat(@as(f32, @floatFromInt(v[0][0])) + t1 * @as(f32, @floatFromInt(v[1][0] - v[0][0]))));
+            } else blk: {
+                const t3: f32 = if (bot_y != mid_y) @as(f32, @floatFromInt(y - mid_y)) / @as(f32, @floatFromInt(bot_y - mid_y)) else 0;
+                break :blk @as(i32, @intFromFloat(@as(f32, @floatFromInt(v[1][0])) + t3 * @as(f32, @floatFromInt(v[2][0] - v[1][0]))));
+            };
+
+            const lx = if (x_left < x_right) x_left else x_right;
+            const rx = if (x_left > x_right) x_left else x_right;
+
+            var x = lx;
+            while (x <= rx) : (x += 1) {
+                self.setPixel(x, y, color);
+            }
+        }
+    }
+};
+
+pub fn drawCursor(fb: FrameBuffer, mouse_x: i32, mouse_y: i32) void {
+    const x0 = mouse_x;
+    const y0 = mouse_y;
+    const x1 = mouse_x + 28;
+    const y1 = mouse_y + 16;
+    const x2 = mouse_x + 14;
+    const y2 = mouse_y + 30;
+
+    fb.fillTriangle(x0, y0, x1, y1, x2, y2, Rgba.black);
+}
