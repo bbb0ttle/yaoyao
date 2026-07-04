@@ -1,5 +1,6 @@
 interface ZCanvasExports extends WebAssembly.Exports {
   memory: WebAssembly.Memory;
+  init(): void;
   get_framebuffer_ptr(): number;
   get_width(): number;
   get_height(): number;
@@ -19,6 +20,7 @@ async function init() {
   });
 
   const wasm = instance.exports as ZCanvasExports;
+  wasm.init();
 
   let pixelArray: Uint8ClampedArray;
   let imageData: ImageData;
