@@ -1,3 +1,4 @@
+const std = @import("std");
 const business = @import("core/business.zig");
 const Rgba = business.Rgba;
 
@@ -24,6 +25,25 @@ pub const FrameBuffer = struct {
             self.buf[i + 2] = color.b;
             self.buf[i + 3] = color.a;
         }
+    }
+
+    pub fn resize(self: FrameBuffer, new_w: u32, new_h: u32, allocator: std.mem.Allocator) !FrameBuffer {
+        const new_len: usize = @as(usize, new_w) * @as(usize, new_h) * 4;
+        if (new_len == 0) return FrameBuffer{ .buf = &[_]u8{}, .width = new_w, .height = new_h };
+
+        const new_buf = try allocator.alloc(u8, new_len);
+        if (self.buf.len != 0) {
+            const copy_w: u32 = if (new_w < self.width) new_w else self.width;
+            const copy_h: u32 = if (new_h < self.height) new_h else self.height;
+            var y: u32 = 0;
+            while (y < copy_h) : (y += 1) {
+                const src_start: usize = @as(usize, y) * @as(usize, self.width) * 4;
+                const dst_start: usize = @as(usize, y) * @as(usize, new_w) * 4;
+                const row_bytes: usize = @as(usize, copy_w) * 4;
+                @memcpy(new_buf[dst_start..][0..row_bytes], self.buf[src_start..][0..row_bytes]);
+            }
+        }
+        return FrameBuffer{ .buf = new_buf, .width = new_w, .height = new_h };
     }
 
     pub fn fillTriangle(self: FrameBuffer, x0: i32, y0: i32, x1: i32, y1: i32, x2: i32, y2: i32, color: Rgba) void {
