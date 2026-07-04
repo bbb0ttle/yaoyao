@@ -116,6 +116,12 @@ pub const FrameBuffer = struct {
     }
 };
 
+pub const Mouse = struct {
+    x: i32,
+    y: i32,
+    on_canvas: bool,
+};
+
 pub fn drawCursor(fb: FrameBuffer, mouse_x: i32, mouse_y: i32) void {
     const x0 = mouse_x;
     const y0 = mouse_y;
