@@ -5,8 +5,7 @@ interface ZCanvasExports extends WebAssembly.Exports {
   get_width(): number;
   get_height(): number;
   resize(w: number, h: number): void;
-  set_mouse(x: number, y: number, on_canvas: number): void;
-  update_frame(time: number): void;
+  update_frame(elapsed: number, unix_ms: number, dpr: number): void;
 }
 
 async function init() {
@@ -50,33 +49,11 @@ async function init() {
     const len = cw * ch * 4;
     pixelArray = new Uint8ClampedArray(wasm.memory.buffer, ptr, len);
     imageData = new ImageData(pixelArray, cw, ch);
-
-    const elapsed = (performance.now() - start) / 1000;
-    wasm.update_frame(elapsed);
     ctx.putImageData(imageData, 0, 0);
   }
 
-  // mouse tracking for custom cursor
-  let mouseX = 0;
-  let mouseY = 0;
-  let mouseOnCanvas = false;
-
-  canvas.addEventListener("mousemove", (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    mouseX = Math.round((e.clientX - rect.left) * scaleX);
-    mouseY = Math.round((e.clientY - rect.top) * scaleY);
-    mouseOnCanvas = true;
-  });
-
-  canvas.addEventListener("mouseleave", () => {
-    mouseOnCanvas = false;
-  });
-
   let start = performance.now();
 
-  // initial size and listener
   resizeToDevice();
 
   let resizeRaf = 0;
@@ -88,10 +65,9 @@ async function init() {
     });
   });
 
-  function loop(now: number) {
-    const elapsed = (now - start) / 1000;
-    wasm.set_mouse(mouseX, mouseY, mouseOnCanvas ? 1 : 0);
-    wasm.update_frame(elapsed);
+  function loop(_now: number) {
+    const elapsed = (performance.now() - start) / 1000;
+    wasm.update_frame(elapsed, Date.now(), window.devicePixelRatio || 1);
     ctx.putImageData(imageData, 0, 0);
     requestAnimationFrame(loop);
   }

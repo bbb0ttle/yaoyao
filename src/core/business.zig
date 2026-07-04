@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const Rgba = struct {
     r: u8,
     g: u8,
@@ -6,6 +8,23 @@ pub const Rgba = struct {
 
     pub const white = Rgba{ .r = 255, .g = 255, .b = 255, .a = 255 };
     pub const black = Rgba{ .r = 0, .g = 0, .b = 0, .a = 255 };
+    pub const heart_bg = Rgba{ .r = 251, .g = 192, .b = 93, .a = 255 };
+    pub const heart_fill = Rgba{ .r = 251, .g = 93, .b = 99, .a = 255 };
+    pub const heart_stroke = Rgba{ .r = 251, .g = 192, .b = 93, .a = 255 };
+    pub const timer_text = Rgba{ .r = 251, .g = 93, .b = 99, .a = 255 };
+};
+
+pub const Vec2 = struct {
+    x: f32,
+    y: f32,
+
+    pub fn add(self: Vec2, other: Vec2) Vec2 {
+        return Vec2{ .x = self.x + other.x, .y = self.y + other.y };
+    }
+
+    pub fn copy(self: Vec2) Vec2 {
+        return Vec2{ .x = self.x, .y = self.y };
+    }
 };
 
 pub fn sortVerticesByY(v0: [2]i32, v1: [2]i32, v2: [2]i32) [3][2]i32 {
@@ -26,4 +45,72 @@ pub fn sortVerticesByY(v0: [2]i32, v1: [2]i32, v2: [2]i32) [3][2]i32 {
         v[2] = tmp;
     }
     return v;
+}
+
+/// Parametric heart curve. t in [0, 2π], result in [-2, 2] for x, roughly [-2.5, 1.5] for y.
+pub fn createHeartPos(t: f32) Vec2 {
+    const s = @sin(t);
+    const x = 2.0 * s * s * s;
+    const y = -(2.0 * ((13.0 * @cos(t) - 5.0 * @cos(2.0 * t) - 2.0 * @cos(3.0 * t) - @cos(4.0 * t)) / 16.0));
+    return Vec2{ .x = x, .y = y };
+}
+
+/// Smooth periodic oscillation suitable for breathing effects.
+/// Returns a value in [min, max] that oscillates with period ~0.67s.
+pub fn breath(sec: f32, min: f32, max: f32) f32 {
+    const e = std.math.e;
+    const a = 1.0 / e;
+    const b = e - a;
+    return (@exp(@sin(sec * 3.0 * std.math.pi)) - a) * (max - min) / b + min;
+}
+
+/// Linear interpolation: returns t * b / a.
+pub fn scale(val: f32, a: f32, b: f32) f32 {
+    return val * b / a;
+}
+
+/// 3x5 bitmap font for digits 0-9 and '.'.
+/// Each row is stored in the low 3 bits of a u8. Row 0 = top.
+pub const FONT_3X5: [22][5]u8 = .{
+    .{ 0b111, 0b101, 0b101, 0b101, 0b111 }, // 0
+    .{ 0b010, 0b110, 0b010, 0b010, 0b111 }, // 1
+    .{ 0b111, 0b001, 0b111, 0b100, 0b111 }, // 2
+    .{ 0b111, 0b001, 0b111, 0b001, 0b111 }, // 3
+    .{ 0b101, 0b101, 0b111, 0b001, 0b001 }, // 4
+    .{ 0b111, 0b100, 0b111, 0b001, 0b111 }, // 5
+    .{ 0b111, 0b100, 0b111, 0b101, 0b111 }, // 6
+    .{ 0b111, 0b001, 0b001, 0b001, 0b001 }, // 7
+    .{ 0b111, 0b101, 0b111, 0b101, 0b111 }, // 8
+    .{ 0b111, 0b101, 0b111, 0b001, 0b111 }, // 9
+    .{ 0b000, 0b000, 0b000, 0b000, 0b010 }, // .
+    .{ 0b000, 0b000, 0b000, 0b000, 0b000 }, // (space)
+    .{ 0b111, 0b100, 0b100, 0b100, 0b111 }, // [
+    .{ 0b111, 0b001, 0b001, 0b001, 0b111 }, // ]
+    .{ 0b001, 0b001, 0b111, 0b101, 0b111 }, // d
+    .{ 0b010, 0b000, 0b111, 0b101, 0b111 }, // a
+    .{ 0b101, 0b101, 0b111, 0b001, 0b110 }, // y
+    .{ 0b011, 0b100, 0b010, 0b001, 0b110 }, // s
+    .{ 0b110, 0b101, 0b101, 0b101, 0b110 }, // D
+    .{ 0b010, 0b101, 0b111, 0b101, 0b101 }, // A
+    .{ 0b101, 0b101, 0b111, 0b010, 0b010 }, // Y
+    .{ 0b011, 0b100, 0b010, 0b001, 0b110 }, // S
+};
+
+pub fn charIndex(c: u8) usize {
+    return switch (c) {
+        '0'...'9' => c - '0',
+        '.' => 10,
+        ' ' => 11,
+        '[' => 12,
+        ']' => 13,
+        'd' => 14,
+        'a' => 15,
+        'y' => 16,
+        's' => 17,
+        'D' => 18,
+        'A' => 19,
+        'Y' => 20,
+        'S' => 21,
+        else => 22,
+    };
 }
