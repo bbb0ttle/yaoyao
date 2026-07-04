@@ -145,18 +145,21 @@ pub const FrameBuffer = struct {
             if (v[1] > max_y) max_y = v[1];
         }
 
-        var intersections: [64]i32 = undefined;
+        var intersections: [64]f32 = undefined;
         var y = min_y;
         while (y <= max_y) : (y += 1) {
+            const yf: f32 = @floatFromInt(y);
             var count: usize = 0;
             var i: usize = 0;
             while (i < vertices.len) : (i += 1) {
                 const j = (i + 1) % vertices.len;
-                const v0 = vertices[i];
-                const v1 = vertices[j];
-                if ((v0[1] <= y and v1[1] > y) or (v1[1] <= y and v0[1] > y)) {
-                    const t: f32 = @as(f32, @floatFromInt(y - v0[1])) / @as(f32, @floatFromInt(v1[1] - v0[1]));
-                    const x = @as(i32, @intFromFloat(@as(f32, @floatFromInt(v0[0])) + t * @as(f32, @floatFromInt(v1[0] - v0[0]))));
+                const v0y: f32 = @floatFromInt(vertices[i][1]);
+                const v1y: f32 = @floatFromInt(vertices[j][1]);
+                if ((v0y <= yf and v1y > yf) or (v1y <= yf and v0y > yf)) {
+                    const v0x: f32 = @floatFromInt(vertices[i][0]);
+                    const v1x: f32 = @floatFromInt(vertices[j][0]);
+                    const t: f32 = (yf - v0y) / (v1y - v0y);
+                    const x = v0x + t * (v1x - v0x);
                     if (count < 64) {
                         intersections[count] = x;
                         count += 1;
@@ -178,10 +181,34 @@ pub const FrameBuffer = struct {
 
             var k: usize = 0;
             while (k + 1 < count) : (k += 2) {
-                var x = intersections[k];
-                const end = intersections[k + 1];
-                while (x <= end) : (x += 1) {
-                    self.setPixelAlpha(x, y, color);
+                const xl: f32 = intersections[k];
+                const xr: f32 = intersections[k + 1];
+                const ixl: i32 = @intFromFloat(xl);
+                const ixr: i32 = @intFromFloat(xr);
+
+                if (ixl == ixr) {
+                    const cover = @min(1.0, @max(0.0, xr - xl));
+                    if (cover > 0.0) {
+                        var aa = color;
+                        aa.a = @intFromFloat(@as(f32, @floatFromInt(color.a)) * cover);
+                        self.setPixelAlpha(ixl, y, aa);
+                    }
+                } else {
+                    // left edge pixel
+                    var aa = color;
+                    aa.a = @intFromFloat(@as(f32, @floatFromInt(color.a)) * @min(1.0, @max(0.0, @as(f32, @floatFromInt(ixl + 1)) - xl)));
+                    self.setPixelAlpha(ixl, y, aa);
+
+                    // interior pixels (fully covered)
+                    var x = ixl + 1;
+                    while (x < ixr) : (x += 1) {
+                        self.setPixelAlpha(x, y, color);
+                    }
+
+                    // right edge pixel
+                    var aa2 = color;
+                    aa2.a = @intFromFloat(@as(f32, @floatFromInt(color.a)) * @min(1.0, @max(0.0, xr - @as(f32, @floatFromInt(ixr)))));
+                    self.setPixelAlpha(ixr, y, aa2);
                 }
             }
         }
@@ -189,7 +216,7 @@ pub const FrameBuffer = struct {
 
     pub fn drawHeartParticle(self: FrameBuffer, cx: i32, cy: i32, size: f32, fill: Rgba) void {
         const s = size;
-        const N: usize = 16;
+        const N: usize = 32;
         var points: [N][2]i32 = undefined;
 
         // Two cubic bezier curves forming a heart shape:
@@ -334,7 +361,7 @@ const Particle = struct {
     }
 };
 
-const PARTICLE_POOL_SIZE: usize = 800;
+const PARTICLE_POOL_SIZE: usize = 1500;
 var particle_pool: [PARTICLE_POOL_SIZE]Particle = undefined;
 var particle_pool_len: usize = 0;
 
@@ -347,6 +374,7 @@ fn allocParticle(pos: Vec2, elapsed: f32, opts: ParticleOpts) *Particle {
                 return &particle_pool[i];
             }
         }
+        particle_pool[0] = Particle.init(pos, elapsed, opts);
         return &particle_pool[0];
     }
     particle_pool[particle_pool_len] = Particle.init(pos, elapsed, opts);
@@ -373,7 +401,7 @@ pub const HeartSystem = struct {
     canvas_h: f32,
     dpr: f32,
 
-    pub fn init(elapsed: f32, cx: f32, cy: f32, canvas_h: f32, dpr: f32) HeartSystem {
+    pub fn init(elapsed: f32, cx: f32, cy: f32, canvas_h: f32, fp_x: f32, fp_y: f32, dpr: f32) HeartSystem {
         particle_pool_len = 0;
 
         var self = HeartSystem{
@@ -405,13 +433,13 @@ pub const HeartSystem = struct {
             };
         }
 
-        self.float_pair[0] = allocParticle(Vec2{ .x = cx - 7.0 * dpr, .y = canvas_h - 80.0 * dpr }, elapsed, .{
+        self.float_pair[0] = allocParticle(Vec2{ .x = fp_x, .y = fp_y }, elapsed, .{
             .immortal = true,
             .floating = true,
             .beat = true,
             .size = MAX_PARTICLE_SIZE * dpr,
         });
-        self.float_pair[1] = allocParticle(Vec2{ .x = cx, .y = canvas_h - 82.0 * dpr }, elapsed, .{
+        self.float_pair[1] = allocParticle(Vec2{ .x = fp_x + 7.0 * dpr, .y = fp_y - 2.0 * dpr }, elapsed, .{
             .immortal = true,
             .floating = true,
             .beat = true,
@@ -444,7 +472,7 @@ pub const HeartSystem = struct {
         }
     }
 
-    pub fn render(self: HeartSystem, fb: FrameBuffer, elapsed: f32) void {
+    pub fn render(self: HeartSystem, fb: FrameBuffer, elapsed: f32, t: f32) void {
         _ = elapsed;
         const stroke_width: f32 = 2.0 * self.dpr;
         var i: usize = 0;
@@ -452,20 +480,18 @@ pub const HeartSystem = struct {
             const p = &particle_pool[i];
             if (!p.alive) continue;
 
-            const alpha: u8 = if (p.immortal) 255 else @as(u8, @intCast(@max(0, @min(255, @as(i32, @intFromFloat(business.scale(p.lifespan, MAX_LIFESPAN, 200.0)))))));
+            const max_alpha: f32 = if (p.immortal) 255.0 else business.scale(p.lifespan, MAX_LIFESPAN, 200.0);
 
             const px: i32 = @as(i32, @intFromFloat(p.pos.x));
             const py: i32 = @as(i32, @intFromFloat(p.pos.y));
             const display_size: f32 = business.scale(p.lifespan, MAX_LIFESPAN, p.size);
 
-            // stroke: heart_stroke color with lifespan-based alpha
             var stroke_color = Rgba.heart_stroke;
-            stroke_color.a = @as(u8, @intCast(@max(0, @min(255, @as(i32, @intFromFloat(p.lifespan))))));
+            stroke_color.a = @intFromFloat(@min(255.0, p.lifespan) * t);
             fb.drawHeartParticle(px, py, display_size + stroke_width, stroke_color);
 
-            // fill
             var fill = Rgba.heart_fill;
-            fill.a = alpha;
+            fill.a = @intFromFloat(max_alpha * t);
             fb.drawHeartParticle(px, py, display_size, fill);
         }
     }
