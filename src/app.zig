@@ -291,7 +291,7 @@ pub const FrameBuffer = struct {
 
 // --- Particle System ---
 
-const MAX_LIFESPAN: f32 = 80.0;
+const MAX_LIFESPAN: f32 = 135.0;
 const MAX_PARTICLE_SIZE: f32 = 12.0;
 
 pub const ParticleOpts = struct {
@@ -361,7 +361,7 @@ const Particle = struct {
     }
 };
 
-const PARTICLE_POOL_SIZE: usize = 1500;
+const PARTICLE_POOL_SIZE: usize = 5000;
 var particle_pool: [PARTICLE_POOL_SIZE]Particle = undefined;
 var particle_pool_len: usize = 0;
 
