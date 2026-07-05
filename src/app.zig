@@ -504,24 +504,14 @@ pub const HeartSystem = struct {
 // --- MeteorSystem ---
 
 const MAX_HEADS: usize = 15;
-const MAX_TRAILS_PER_FRAME: usize = MAX_HEADS;
 const METEOR_SIZE: f32 = 8.0;
 const TRAIL_SIZE: f32 = 12.0;
-const TRAIL_LIFESPAN: f32 = 60.0;
+const TRAIL_LIFESPAN: f32 = 50.0;
 const METEOR_SPEED: f32 = 6.0;
-const PILE_LIFESPAN: f32 = 40.0;
-const PILE_FLOOR_OFFSET: f32 = 30.0;
-const EDGE_MARGIN: f32 = 80.0;
-
-pub const MeteorState = enum {
-    flying,
-    falling,
-    piled,
-};
+const FADE_MARGIN: f32 = 100.0;
 
 const MeteorHead = struct {
     particle: *Particle,
-    state: MeteorState,
 };
 
 pub const MeteorSystem = struct {
@@ -529,7 +519,6 @@ pub const MeteorSystem = struct {
     head_count: usize,
     vel_x: f32,
     vel_y: f32,
-    has_direction: bool,
     canvas_w: f32,
     canvas_h: f32,
     dpr: f32,
@@ -540,7 +529,6 @@ pub const MeteorSystem = struct {
             .head_count = 0,
             .vel_x = 0,
             .vel_y = 0,
-            .has_direction = false,
             .canvas_w = canvas_w,
             .canvas_h = canvas_h,
             .dpr = dpr,
@@ -550,9 +538,8 @@ pub const MeteorSystem = struct {
     pub fn on_click(self: *MeteorSystem, x: f32, y: f32) void {
         const dpr = self.dpr;
         const cw = self.canvas_w;
-        const margin = EDGE_MARGIN * dpr;
+        const margin = FADE_MARGIN * dpr;
 
-        // compute parallel flight direction: from top-right area toward click point
         const src_cx = cw - margin;
         const src_cy = margin;
         const dx = x - src_cx;
@@ -562,9 +549,7 @@ pub const MeteorSystem = struct {
 
         self.vel_x = dx / len * METEOR_SPEED * dpr;
         self.vel_y = dy / len * METEOR_SPEED * dpr;
-        self.has_direction = true;
 
-        // spawn immortal head hearts with randomized start positions
         const count: usize = 12;
         const spread_range: f32 = cw * 0.5;
         var i: usize = 0;
@@ -582,72 +567,66 @@ pub const MeteorSystem = struct {
             const speed_var = randomRange(0.7, 1.3);
             p.vel = Vec2{ .x = self.vel_x * speed_var, .y = self.vel_y * speed_var };
 
-            self.heads[self.head_count] = MeteorHead{
-                .particle = p,
-                .state = .flying,
-            };
+            self.heads[self.head_count] = MeteorHead{ .particle = p };
             self.head_count += 1;
         }
     }
 
     pub fn update(self: *MeteorSystem) void {
         const dpr = self.dpr;
+        const fade_zone = FADE_MARGIN * dpr;
 
         var i: usize = 0;
         while (i < self.head_count) : (i += 1) {
-            const h = &self.heads[i];
-            const p = h.particle;
+            const p = self.heads[i].particle;
             if (!p.alive) continue;
 
-            switch (h.state) {
-                .flying => {
-                    p.pos.x += p.vel.x;
-                    p.pos.y += p.vel.y;
+            p.pos.x += p.vel.x;
+            p.pos.y += p.vel.y;
 
-                    // spawn trail particle behind the head (at old position before the move)
-                    const trail = allocParticle(Vec2{ .x = p.pos.x - p.vel.x, .y = p.pos.y - p.vel.y }, 0, .{
-                        .size = TRAIL_SIZE * dpr,
-                    });
-                    trail.vel = Vec2{ .x = 0, .y = 0 };
-                    trail.acc = Vec2{ .x = 0, .y = 0 };
-                    trail.lifespan = TRAIL_LIFESPAN;
+            const trail_x = p.pos.x - p.vel.x;
+            const trail_y = p.pos.y - p.vel.y;
 
-                    if (p.pos.x < 0 or p.pos.x > self.canvas_w) {
-                        h.state = .falling;
-                        p.pos.x = @max(0, @min(p.pos.x, self.canvas_w));
-                        p.vel.x = 0;
-                        p.vel.y = 2.0 * dpr;
-                    } else if (p.pos.y > self.canvas_h - PILE_FLOOR_OFFSET * dpr) {
-                        h.state = .piled;
-                        p.pos.y = self.canvas_h - PILE_FLOOR_OFFSET * dpr;
-                        p.vel.x = 0;
-                        p.vel.y = 0;
-                        p.immortal = false;
-                        p.lifespan = PILE_LIFESPAN;
-                        p.size = 5.0 * dpr;
-                    }
-                },
-                .falling => {
-                    p.vel.y += 0.15 * dpr;
-                    p.pos.y += p.vel.y;
+            // fade out when approaching any screen edge
+            const dist_left = p.pos.x;
+            const dist_right = self.canvas_w - p.pos.x;
+            const dist_top = p.pos.y;
+            const dist_bottom = self.canvas_h - p.pos.y;
+            const min_dist = @min(@min(dist_left, dist_right), @min(dist_top, dist_bottom));
 
-                    if (p.pos.y > self.canvas_h - PILE_FLOOR_OFFSET * dpr) {
-                        h.state = .piled;
-                        p.pos.y = self.canvas_h - PILE_FLOOR_OFFSET * dpr;
-                        p.vel.x = 0;
-                        p.vel.y = 0;
-                        p.immortal = false;
-                        p.lifespan = PILE_LIFESPAN;
-                        p.size = 5.0 * dpr;
-                    }
-                },
-                .piled => {
-                    p.lifespan -= 2.0;
-                    if (p.lifespan <= 0) {
-                        p.alive = false;
-                    }
-                },
+            if (min_dist <= 0) {
+                p.alive = false;
+                continue;
             }
+
+            var head_fade: f32 = 1.0;
+            if (min_dist < fade_zone) {
+                head_fade = min_dist / fade_zone;
+                if (head_fade < 0.03) {
+                    p.alive = false;
+                    continue;
+                }
+                p.immortal = false;
+                p.lifespan = head_fade * MAX_LIFESPAN;
+                p.size = METEOR_SIZE * dpr * head_fade;
+            }
+
+            // spawn trail at previous position, lifespan capped by head's fade ratio
+            const trail = allocParticle(Vec2{ .x = trail_x, .y = trail_y }, 0, .{
+                .size = TRAIL_SIZE * dpr,
+            });
+            trail.vel = Vec2{ .x = 0, .y = 0 };
+            trail.acc = Vec2{ .x = 0, .y = 0 };
+
+            const tdl = trail_x;
+            const tdr = self.canvas_w - trail_x;
+            const tdt = trail_y;
+            const tdb = self.canvas_h - trail_y;
+            const trail_min = @min(@min(tdl, tdr), @min(tdt, tdb));
+            const trail_edge_fade: f32 = if (trail_min <= 0) 0.0
+                else if (trail_min < fade_zone) trail_min / fade_zone
+                else 1.0;
+            trail.lifespan = @min(head_fade, trail_edge_fade) * TRAIL_LIFESPAN;
         }
 
         self.compact();
