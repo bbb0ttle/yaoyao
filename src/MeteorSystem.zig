@@ -3,11 +3,11 @@ const Vec2 = business.Vec2;
 const particle = @import("Particle.zig");
 const random = @import("random.zig");
 
-const MAX_HEADS: usize = 15;
+const MAX_HEADS: usize = 30;
 const METEOR_SIZE: f32 = 8.0;
-const TRAIL_SIZE: f32 = 12.0;
+const TRAIL_SIZE: f32 = 15.0;
 const TRAIL_LIFESPAN: f32 = 50.0;
-const METEOR_SPEED: f32 = 6.0;
+const METEOR_SPEED: f32 = 7.0;
 const FADE_MARGIN: f32 = 100.0;
 
 const MeteorHead = struct {
@@ -50,7 +50,7 @@ pub const MeteorSystem = struct {
         self.vel_x = dx / len * METEOR_SPEED * dpr;
         self.vel_y = dy / len * METEOR_SPEED * dpr;
 
-        const count: usize = 12;
+        const count: usize = 20;
         const spread_range: f32 = cw * 0.5;
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -121,9 +121,7 @@ pub const MeteorSystem = struct {
             const tdt = trail_y;
             const tdb = self.canvas_h - trail_y;
             const trail_min = @min(@min(tdl, tdr), @min(tdt, tdb));
-            const trail_edge_fade: f32 = if (trail_min <= 0) 0.0
-                else if (trail_min < fade_zone) trail_min / fade_zone
-                else 1.0;
+            const trail_edge_fade: f32 = if (trail_min <= 0) 0.0 else if (trail_min < fade_zone) trail_min / fade_zone else 1.0;
             trail.lifespan = @min(head_fade, trail_edge_fade) * TRAIL_LIFESPAN;
         }
 
