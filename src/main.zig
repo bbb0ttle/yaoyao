@@ -1,5 +1,7 @@
 const std = @import("std");
 const app = @import("app.zig");
+const fmt = @import("fmt.zig");
+const FontRenderer = @import("FontRenderer.zig");
 
 var canvas: app.Canvas = undefined;
 var heart: app.HeartSystem = undefined;
@@ -31,7 +33,7 @@ export fn get_height() u32 {
 }
 
 export fn resize(new_w: u32, new_h: u32) void {
-    canvas.resize(new_w, new_h) catch return;
+    canvas.resize(new_w, new_h, .{ .r = 251, .g = 192, .b = 93, .a = 255 }) catch return;
     heart_ready = false;
     meteor_ready = false;
     resize_cooldown = 30;
@@ -46,8 +48,9 @@ export fn update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void {
 
     const int_part: u64 = @intFromFloat(@floor(diff_days));
     const frac: f64 = diff_days - @floor(diff_days);
-    days_text_len = 0;
-    formatUint(int_part);
+    const int_slice = fmt.formatUint(int_part, &days_text_buf);
+    @memcpy(days_text_buf[0..int_slice.len], int_slice);
+    days_text_len = int_slice.len;
     if (days_text_len < days_text_buf.len) {
         days_text_buf[days_text_len] = '.';
         days_text_len += 1;
@@ -120,32 +123,7 @@ export fn update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void {
     const text_g: u8 = @intFromFloat(192.0 - 99.0 * t);
     const text_b: u8 = @intFromFloat(93.0 + 6.0 * t);
     const text_a: u8 = @intFromFloat(255.0 - 25.0 * t);
-    fb.drawText(text_x, text_y, days_text_buf[0..days_text_len], text_scale, .{ .r = 251, .g = text_g, .b = text_b, .a = text_a });
-}
-
-fn formatUint(n: u64) void {
-    if (n == 0) {
-        if (days_text_len < days_text_buf.len) {
-            days_text_buf[days_text_len] = '0';
-            days_text_len += 1;
-        }
-        return;
-    }
-    var tmp: [20]u8 = undefined;
-    var tlen: usize = 0;
-    var v = n;
-    while (v > 0) : (v /= 10) {
-        tmp[tlen] = @as(u8, @intCast(v % 10)) + '0';
-        tlen += 1;
-    }
-    var j: usize = tlen;
-    while (j > 0) {
-        j -= 1;
-        if (days_text_len < days_text_buf.len) {
-            days_text_buf[days_text_len] = tmp[j];
-            days_text_len += 1;
-        }
-    }
+    FontRenderer.drawText(fb, text_x, text_y, days_text_buf[0..days_text_len], text_scale, .{ .r = 251, .g = text_g, .b = text_b, .a = text_a });
 }
 
 export fn handle_click(click_x: f32, click_y: f32) void {

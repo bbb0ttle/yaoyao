@@ -1,5 +1,6 @@
 const std = @import("std");
 const FrameBuffer = @import("FrameBuffer.zig").FrameBuffer;
+const Rgba = @import("types.zig").Rgba;
 
 pub const Canvas = struct {
     buf: []u8,
@@ -10,8 +11,8 @@ pub const Canvas = struct {
     pub fn init(allocator: std.mem.Allocator) Canvas {
         return Canvas{
             .buf = &[_]u8{},
-            .width = 800,
-            .height = 600,
+            .width = 0,
+            .height = 0,
             .allocator = allocator,
         };
     }
@@ -23,9 +24,9 @@ pub const Canvas = struct {
         }
     }
 
-    pub fn resize(self: *Canvas, new_w: u32, new_h: u32) !void {
+    pub fn resize(self: *Canvas, new_w: u32, new_h: u32, fill: Rgba) !void {
         const fb = FrameBuffer{ .buf = self.buf, .width = self.width, .height = self.height };
-        const new_fb = try fb.resize(new_w, new_h, self.allocator);
+        const new_fb = try fb.resize(new_w, new_h, self.allocator, fill);
         if (self.buf.len != 0) self.allocator.free(self.buf);
         self.buf = new_fb.buf;
         self.width = new_fb.width;

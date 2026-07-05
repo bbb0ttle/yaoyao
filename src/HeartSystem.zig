@@ -1,7 +1,8 @@
 const std = @import("std");
-const business = @import("core/business.zig");
-const Rgba = business.Rgba;
-const Vec2 = business.Vec2;
+const types = @import("types.zig");
+const Rgba = types.Rgba;
+const Vec2 = types.Vec2;
+const math = @import("math.zig");
 const FrameBuffer = @import("FrameBuffer.zig").FrameBuffer;
 const particle = @import("Particle.zig");
 
@@ -45,24 +46,20 @@ pub const HeartSystem = struct {
             i += 1;
             t += step;
         }) {
-            const hp = business.createHeartPos(t);
+            const hp = math.createHeartPos(t);
             const pos = Vec2{ .x = hp.x * hscale + hscale + cx, .y = hp.y * hscale + hscale + cy };
             self.contour[i] = ContourPoint{
                 .index = t,
-                .immortal = particle.allocParticle(pos, elapsed, .{ .immortal = true, .size = particle.MAX_PARTICLE_SIZE * dpr }),
+                .immortal = particle.allocParticle(pos, elapsed, .{ .kind = .immortal, .size = particle.MAX_PARTICLE_SIZE * dpr }),
             };
         }
 
         self.float_pair[0] = particle.allocParticle(Vec2{ .x = fp_x, .y = fp_y }, elapsed, .{
-            .immortal = true,
-            .floating = true,
-            .beat = true,
+            .kind = .floating_beat,
             .size = particle.MAX_PARTICLE_SIZE * dpr,
         });
         self.float_pair[1] = particle.allocParticle(Vec2{ .x = fp_x + 7.0 * dpr, .y = fp_y - 2.0 * dpr }, elapsed, .{
-            .immortal = true,
-            .floating = true,
-            .beat = true,
+            .kind = .floating_beat,
             .size = particle.MAX_PARTICLE_SIZE * dpr,
         });
 
@@ -71,11 +68,11 @@ pub const HeartSystem = struct {
 
     pub fn update(self: *HeartSystem, elapsed: f32) void {
         const dpr = self.dpr;
-        const scale_val = business.breath(elapsed - self.birth_sec, 50.0 * dpr, 60.0 * dpr);
-        const size_val = business.breath(elapsed - self.birth_sec, 10.0 * dpr, 15.0 * dpr);
+        const scale_val = math.breath(elapsed - self.birth_sec, 50.0 * dpr, 60.0 * dpr);
+        const size_val = math.breath(elapsed - self.birth_sec, 10.0 * dpr, 15.0 * dpr);
 
         for (&self.contour) |*cp| {
-            const hp = business.createHeartPos(cp.index);
+            const hp = math.createHeartPos(cp.index);
             cp.immortal.pos.x = hp.x * scale_val + 50.0 * dpr + self.cx;
             cp.immortal.pos.y = hp.y * scale_val + 50.0 * dpr + self.cy - 5.0 * dpr;
             cp.immortal.size = size_val;
@@ -100,11 +97,11 @@ pub const HeartSystem = struct {
             const p = &particle.particle_pool[i];
             if (!p.alive) continue;
 
-            const max_alpha: f32 = if (p.immortal) 255.0 else business.scale(p.lifespan, particle.MAX_LIFESPAN, 200.0);
+            const max_alpha: f32 = if (p.kind != .normal and p.lifespan >= particle.MAX_LIFESPAN) 255.0 else math.scale(p.lifespan, particle.MAX_LIFESPAN, 200.0);
 
             const px: i32 = @as(i32, @intFromFloat(p.pos.x));
             const py: i32 = @as(i32, @intFromFloat(p.pos.y));
-            const display_size: f32 = business.scale(p.lifespan, particle.MAX_LIFESPAN, p.size);
+            const display_size: f32 = math.scale(p.lifespan, particle.MAX_LIFESPAN, p.size);
 
             var stroke_color = Rgba.heart_stroke;
             stroke_color.a = @intFromFloat(@min(255.0, p.lifespan) * t);
