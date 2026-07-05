@@ -506,7 +506,7 @@ pub const HeartSystem = struct {
 const MAX_HEADS: usize = 15;
 const MAX_TRAILS_PER_FRAME: usize = MAX_HEADS;
 const METEOR_SIZE: f32 = 8.0;
-const TRAIL_SIZE: f32 = 10.0;
+const TRAIL_SIZE: f32 = 12.0;
 const TRAIL_LIFESPAN: f32 = 60.0;
 const METEOR_SPEED: f32 = 6.0;
 const PILE_LIFESPAN: f32 = 40.0;
@@ -601,15 +601,16 @@ pub const MeteorSystem = struct {
 
             switch (h.state) {
                 .flying => {
-                    // spawn trail particle with zero velocity so it falls cleanly
-                    const trail = allocParticle(p.pos.copy(), 0, .{
+                    p.pos.x += p.vel.x;
+                    p.pos.y += p.vel.y;
+
+                    // spawn trail particle behind the head (at old position before the move)
+                    const trail = allocParticle(Vec2{ .x = p.pos.x - p.vel.x, .y = p.pos.y - p.vel.y }, 0, .{
                         .size = TRAIL_SIZE * dpr,
                     });
                     trail.vel = Vec2{ .x = 0, .y = 0 };
+                    trail.acc = Vec2{ .x = 0, .y = 0 };
                     trail.lifespan = TRAIL_LIFESPAN;
-
-                    p.pos.x += p.vel.x;
-                    p.pos.y += p.vel.y;
 
                     if (p.pos.x < 0 or p.pos.x > self.canvas_w) {
                         h.state = .falling;
