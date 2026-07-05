@@ -1,4 +1,5 @@
-const Vec2 = @import("types.zig").Vec2;
+const business = @import("core/business.zig");
+const Vec2 = business.Vec2;
 const particle = @import("Particle.zig");
 const random = @import("random.zig");
 
@@ -59,7 +60,8 @@ pub const MeteorSystem = struct {
             const sy: f32 = margin + random.randomRange(0, spread_range * 0.4);
 
             const p = particle.allocParticle(Vec2{ .x = sx, .y = sy }, 0, .{
-                .kind = .meteor_head,
+                .immortal = true,
+                .meteor = true,
                 .size = METEOR_SIZE * dpr,
             });
             const speed_var = random.randomRange(0.7, 1.3);
@@ -103,6 +105,7 @@ pub const MeteorSystem = struct {
                     p.alive = false;
                     continue;
                 }
+                p.immortal = false;
                 p.lifespan = head_fade * particle.MAX_LIFESPAN;
                 p.size = METEOR_SIZE * dpr * head_fade;
             }
@@ -118,7 +121,9 @@ pub const MeteorSystem = struct {
             const tdt = trail_y;
             const tdb = self.canvas_h - trail_y;
             const trail_min = @min(@min(tdl, tdr), @min(tdt, tdb));
-            const trail_edge_fade: f32 = if (trail_min <= 0) 0.0 else if (trail_min < fade_zone) trail_min / fade_zone else 1.0;
+            const trail_edge_fade: f32 = if (trail_min <= 0) 0.0
+                else if (trail_min < fade_zone) trail_min / fade_zone
+                else 1.0;
             trail.lifespan = @min(head_fade, trail_edge_fade) * TRAIL_LIFESPAN;
         }
 

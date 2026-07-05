@@ -1,5 +1,6 @@
 const std = @import("std");
-const Rgba = @import("types.zig").Rgba;
+const business = @import("core/business.zig");
+const Rgba = business.Rgba;
 
 pub const FrameBuffer = struct {
     buf: []u8,
@@ -43,17 +44,17 @@ pub const FrameBuffer = struct {
         }
     }
 
-    pub fn resize(self: FrameBuffer, new_w: u32, new_h: u32, allocator: std.mem.Allocator, fill: Rgba) !FrameBuffer {
+    pub fn resize(self: FrameBuffer, new_w: u32, new_h: u32, allocator: std.mem.Allocator) !FrameBuffer {
         const new_len: usize = @as(usize, new_w) * @as(usize, new_h) * 4;
         if (new_len == 0) return FrameBuffer{ .buf = &[_]u8{}, .width = new_w, .height = new_h };
 
         const new_buf = try allocator.alloc(u8, new_len);
         var i: usize = 0;
         while (i < new_len) : (i += 4) {
-            new_buf[i + 0] = fill.r;
-            new_buf[i + 1] = fill.g;
-            new_buf[i + 2] = fill.b;
-            new_buf[i + 3] = fill.a;
+            new_buf[i + 0] = Rgba.heart_bg.r;
+            new_buf[i + 1] = Rgba.heart_bg.g;
+            new_buf[i + 2] = Rgba.heart_bg.b;
+            new_buf[i + 3] = Rgba.heart_bg.a;
         }
         if (self.buf.len != 0) {
             const copy_w: u32 = if (new_w < self.width) new_w else self.width;
@@ -174,5 +175,41 @@ pub const FrameBuffer = struct {
         }
 
         self.fillPolygon(points[0..], fill);
+    }
+
+    pub fn drawChar(self: FrameBuffer, x: i32, y: i32, ch: u8, char_scale: u32, color: Rgba) void {
+        const idx = business.charIndex(ch);
+        if (idx >= business.FONT_3X5.len) return;
+
+        const glyph = business.FONT_3X5[idx];
+        var row: usize = 0;
+        while (row < 5) : (row += 1) {
+            const bits = glyph[row];
+            var col: usize = 0;
+            while (col < 3) : (col += 1) {
+                if ((bits >> @as(u3, @intCast(2 - col))) & 1 == 1) {
+                    var dy: u32 = 0;
+                    while (dy < char_scale) : (dy += 1) {
+                        var dx: u32 = 0;
+                        while (dx < char_scale) : (dx += 1) {
+                            self.setPixel(
+                                x + @as(i32, @intCast(col * char_scale)) + @as(i32, @intCast(dx)),
+                                y + @as(i32, @intCast(row * char_scale)) + @as(i32, @intCast(dy)),
+                                color,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn drawText(self: FrameBuffer, x: i32, y: i32, text: []const u8, char_scale: u32, color: Rgba) void {
+        const char_width: i32 = @as(i32, @intCast(3 * char_scale + char_scale));
+        var cx = x;
+        for (text) |ch| {
+            self.drawChar(cx, y, ch, char_scale, color);
+            cx += char_width;
+        }
     }
 };

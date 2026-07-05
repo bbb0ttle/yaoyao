@@ -1,10 +1,3 @@
 pub const Canvas = @import("Canvas.zig").Canvas;
 pub const HeartSystem = @import("HeartSystem.zig").HeartSystem;
 pub const MeteorSystem = @import("MeteorSystem.zig").MeteorSystem;
-pub const FrameBuffer = @import("FrameBuffer.zig").FrameBuffer;
-pub const FontRenderer = @import("FontRenderer.zig");
-pub const types = @import("types.zig");
-pub const math = @import("math.zig");
-pub const font = @import("font.zig");
-pub const fmt = @import("fmt.zig");
-pub const random = @import("random.zig");

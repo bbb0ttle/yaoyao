@@ -3,4 +3,3 @@ zig-out/
 zig-cache/
 .zig-cache/
 dist/
-public/z-canvas.wasm
