@@ -298,6 +298,7 @@ pub const ParticleOpts = struct {
     immortal: bool = false,
     floating: bool = false,
     beat: bool = false,
+    meteor: bool = false,
     size: f32 = MAX_PARTICLE_SIZE,
 };
 
@@ -313,6 +314,7 @@ const Particle = struct {
     immortal: bool,
     floating: bool,
     beat: bool,
+    meteor: bool,
 
     fn init(pos: Vec2, birth_sec: f32, opts: ParticleOpts) Particle {
         return Particle{
@@ -327,11 +329,13 @@ const Particle = struct {
             .immortal = opts.immortal,
             .floating = opts.floating,
             .beat = opts.beat,
+            .meteor = opts.meteor,
         };
     }
 
     fn update(self: *Particle, elapsed: f32, dpr: f32) void {
         if (!self.alive) return;
+        if (self.meteor) return;
         self.age += 0.2;
 
         if (!self.immortal and !self.floating) {
@@ -494,6 +498,172 @@ pub const HeartSystem = struct {
             fill.a = @intFromFloat(max_alpha * t);
             fb.drawHeartParticle(px, py, display_size, fill);
         }
+    }
+};
+
+// --- MeteorSystem ---
+
+const MAX_HEADS: usize = 15;
+const MAX_TRAILS_PER_FRAME: usize = MAX_HEADS;
+const METEOR_SIZE: f32 = 8.0;
+const TRAIL_SIZE: f32 = 10.0;
+const TRAIL_LIFESPAN: f32 = 60.0;
+const METEOR_SPEED: f32 = 6.0;
+const PILE_LIFESPAN: f32 = 40.0;
+const PILE_FLOOR_OFFSET: f32 = 30.0;
+const EDGE_MARGIN: f32 = 80.0;
+
+pub const MeteorState = enum {
+    flying,
+    falling,
+    piled,
+};
+
+const MeteorHead = struct {
+    particle: *Particle,
+    state: MeteorState,
+};
+
+pub const MeteorSystem = struct {
+    heads: [MAX_HEADS]MeteorHead,
+    head_count: usize,
+    vel_x: f32,
+    vel_y: f32,
+    has_direction: bool,
+    canvas_w: f32,
+    canvas_h: f32,
+    dpr: f32,
+
+    pub fn init(canvas_w: f32, canvas_h: f32, dpr: f32) MeteorSystem {
+        return MeteorSystem{
+            .heads = undefined,
+            .head_count = 0,
+            .vel_x = 0,
+            .vel_y = 0,
+            .has_direction = false,
+            .canvas_w = canvas_w,
+            .canvas_h = canvas_h,
+            .dpr = dpr,
+        };
+    }
+
+    pub fn on_click(self: *MeteorSystem, x: f32, y: f32) void {
+        const dpr = self.dpr;
+        const cw = self.canvas_w;
+        const margin = EDGE_MARGIN * dpr;
+
+        // compute parallel flight direction: from top-right area toward click point
+        const src_cx = cw - margin;
+        const src_cy = margin;
+        const dx = x - src_cx;
+        const dy = y - src_cy;
+        const len = @sqrt(dx * dx + dy * dy);
+        if (len < 1.0) return;
+
+        self.vel_x = dx / len * METEOR_SPEED * dpr;
+        self.vel_y = dy / len * METEOR_SPEED * dpr;
+        self.has_direction = true;
+
+        // spawn immortal head hearts with randomized start positions
+        const count: usize = 12;
+        const spread_range: f32 = cw * 0.5;
+        var i: usize = 0;
+        while (i < count) : (i += 1) {
+            if (self.head_count >= MAX_HEADS) break;
+
+            const sx: f32 = cw - margin - randomRange(0, spread_range);
+            const sy: f32 = margin + randomRange(0, spread_range * 0.4);
+
+            const p = allocParticle(Vec2{ .x = sx, .y = sy }, 0, .{
+                .immortal = true,
+                .meteor = true,
+                .size = METEOR_SIZE * dpr,
+            });
+            const speed_var = randomRange(0.7, 1.3);
+            p.vel = Vec2{ .x = self.vel_x * speed_var, .y = self.vel_y * speed_var };
+
+            self.heads[self.head_count] = MeteorHead{
+                .particle = p,
+                .state = .flying,
+            };
+            self.head_count += 1;
+        }
+    }
+
+    pub fn update(self: *MeteorSystem) void {
+        const dpr = self.dpr;
+
+        var i: usize = 0;
+        while (i < self.head_count) : (i += 1) {
+            const h = &self.heads[i];
+            const p = h.particle;
+            if (!p.alive) continue;
+
+            switch (h.state) {
+                .flying => {
+                    // spawn trail particle with zero velocity so it falls cleanly
+                    const trail = allocParticle(p.pos.copy(), 0, .{
+                        .size = TRAIL_SIZE * dpr,
+                    });
+                    trail.vel = Vec2{ .x = 0, .y = 0 };
+                    trail.lifespan = TRAIL_LIFESPAN;
+
+                    p.pos.x += p.vel.x;
+                    p.pos.y += p.vel.y;
+
+                    if (p.pos.x < 0 or p.pos.x > self.canvas_w) {
+                        h.state = .falling;
+                        p.pos.x = @max(0, @min(p.pos.x, self.canvas_w));
+                        p.vel.x = 0;
+                        p.vel.y = 2.0 * dpr;
+                    } else if (p.pos.y > self.canvas_h - PILE_FLOOR_OFFSET * dpr) {
+                        h.state = .piled;
+                        p.pos.y = self.canvas_h - PILE_FLOOR_OFFSET * dpr;
+                        p.vel.x = 0;
+                        p.vel.y = 0;
+                        p.immortal = false;
+                        p.lifespan = PILE_LIFESPAN;
+                        p.size = 5.0 * dpr;
+                    }
+                },
+                .falling => {
+                    p.vel.y += 0.15 * dpr;
+                    p.pos.y += p.vel.y;
+
+                    if (p.pos.y > self.canvas_h - PILE_FLOOR_OFFSET * dpr) {
+                        h.state = .piled;
+                        p.pos.y = self.canvas_h - PILE_FLOOR_OFFSET * dpr;
+                        p.vel.x = 0;
+                        p.vel.y = 0;
+                        p.immortal = false;
+                        p.lifespan = PILE_LIFESPAN;
+                        p.size = 5.0 * dpr;
+                    }
+                },
+                .piled => {
+                    p.lifespan -= 2.0;
+                    if (p.lifespan <= 0) {
+                        p.alive = false;
+                    }
+                },
+            }
+        }
+
+        self.compact();
+    }
+
+    fn compact(self: *MeteorSystem) void {
+        var write: usize = 0;
+        var read: usize = 0;
+        while (read < self.head_count) : (read += 1) {
+            if (self.heads[read].particle.alive) {
+                if (write != read) {
+                    self.heads[write] = self.heads[read];
+                }
+                write += 1;
+            }
+        }
+        self.head_count = write;
     }
 };
 

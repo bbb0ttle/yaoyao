@@ -4,6 +4,8 @@ const app = @import("app.zig");
 var canvas: app.Canvas = undefined;
 var heart: app.HeartSystem = undefined;
 var heart_ready: bool = false;
+var meteor: app.MeteorSystem = undefined;
+var meteor_ready: bool = false;
 var resize_cooldown: u32 = 0;
 var transition_start: f32 = 0.0;
 var days_text_buf: [32]u8 = undefined;
@@ -31,6 +33,7 @@ export fn get_height() u32 {
 export fn resize(new_w: u32, new_h: u32) void {
     canvas.resize(new_w, new_h) catch return;
     heart_ready = false;
+    meteor_ready = false;
     resize_cooldown = 30;
 }
 
@@ -95,6 +98,11 @@ export fn update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void {
         heart = app.HeartSystem.init(elapsed, hx, hy, @as(f32, @floatFromInt(canvas.height)), @as(f32, @floatFromInt(group_left)), fp_y, dpr);
         heart_ready = true;
         transition_start = elapsed;
+
+        if (!meteor_ready) {
+            meteor = app.MeteorSystem.init(@floatFromInt(canvas.width), @floatFromInt(canvas.height), dpr);
+            meteor_ready = true;
+        }
     }
 
     const t: f32 = @min(1.0, (elapsed - transition_start) / TRANSITION_DURATION);
@@ -104,6 +112,10 @@ export fn update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void {
 
     heart.update(elapsed);
     heart.render(fb, elapsed, t);
+
+    if (meteor_ready) {
+        meteor.update();
+    }
 
     const text_g: u8 = @intFromFloat(192.0 - 99.0 * t);
     const text_b: u8 = @intFromFloat(93.0 + 6.0 * t);
@@ -134,4 +146,9 @@ fn formatUint(n: u64) void {
             days_text_len += 1;
         }
     }
+}
+
+export fn handle_click(click_x: f32, click_y: f32) void {
+    if (!meteor_ready) return;
+    meteor.on_click(click_x, click_y);
 }

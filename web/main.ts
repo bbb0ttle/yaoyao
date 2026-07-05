@@ -6,6 +6,7 @@ interface ZCanvasExports extends WebAssembly.Exports {
   get_height(): number;
   resize(w: number, h: number): void;
   update_frame(elapsed: number, unix_ms: number, dpr: number): void;
+  handle_click(x: number, y: number): void;
 }
 
 async function init() {
@@ -63,6 +64,14 @@ async function init() {
       resizeToDevice();
       resizeRaf = 0;
     });
+  });
+
+  canvas.addEventListener("click", (e: MouseEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const x = (e.clientX - rect.left) * dpr;
+    const y = (e.clientY - rect.top) * dpr;
+    wasm.handle_click(x, y);
   });
 
   function loop(_now: number) {
