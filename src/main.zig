@@ -88,7 +88,7 @@ export fn update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void {
     if (resize_cooldown > 0) {
         resize_cooldown -= 1;
         const fb = canvas.frameBuffer();
-        fb.clear(.{ .r = 251, .g = 192, .b = 93, .a = 255 });
+        fb.clear(app.business.Rgba.heart_bg);
         return;
     }
 
@@ -108,7 +108,7 @@ export fn update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void {
     const t: f32 = @min(1.0, (elapsed - transition_start) / TRANSITION_DURATION);
 
     const fb = canvas.frameBuffer();
-    fb.clear(.{ .r = 251, .g = 192, .b = 93, .a = 255 });
+    fb.clear(app.business.Rgba.heart_bg);
 
     heart.update(elapsed);
     heart.render(fb, elapsed, t);
@@ -117,10 +117,7 @@ export fn update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void {
         meteor.update();
     }
 
-    const text_g: u8 = @intFromFloat(192.0 - 99.0 * t);
-    const text_b: u8 = @intFromFloat(93.0 + 6.0 * t);
-    const text_a: u8 = @intFromFloat(255.0 - 25.0 * t);
-    fb.drawText(text_x, text_y, days_text_buf[0..days_text_len], text_scale, .{ .r = 251, .g = text_g, .b = text_b, .a = text_a });
+    fb.drawText(text_x, text_y, days_text_buf[0..days_text_len], text_scale, app.business.Rgba.white);
 }
 
 fn formatUint(n: u64) void {

@@ -8,10 +8,10 @@ pub const Rgba = struct {
 
     pub const white = Rgba{ .r = 255, .g = 255, .b = 255, .a = 255 };
     pub const black = Rgba{ .r = 0, .g = 0, .b = 0, .a = 255 };
-    pub const heart_bg = Rgba{ .r = 251, .g = 192, .b = 93, .a = 255 };
-    pub const heart_fill = Rgba{ .r = 251, .g = 93, .b = 99, .a = 255 };
-    pub const heart_stroke = Rgba{ .r = 251, .g = 192, .b = 93, .a = 255 };
-    pub const timer_text = Rgba{ .r = 251, .g = 93, .b = 99, .a = 255 };
+    pub const heart_bg = Rgba{ .r = 169, .g = 229, .b = 214, .a = 255 };
+    pub const heart_fill = white;
+    pub const heart_stroke = Rgba{ .r = 219, .g = 236, .b = 230, .a = 255 };
+    pub const timer_text = white;
 };
 
 pub const Vec2 = struct {
