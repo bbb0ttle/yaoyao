@@ -145,7 +145,7 @@ fn formatUint(n: u64) void {
     }
 }
 
-export fn handle_click(click_x: f32, click_y: f32) void {
+export fn show_meteor_shower(click_x: f32, click_y: f32) void {
     if (!meteor_ready) return;
-    meteor.on_click(click_x, click_y);
+    meteor.falling(click_x, click_y);
 }

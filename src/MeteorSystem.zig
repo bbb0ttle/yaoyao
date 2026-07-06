@@ -38,7 +38,7 @@ pub const MeteorSystem = struct {
         };
     }
 
-    pub fn on_click(self: *MeteorSystem, x: f32, y: f32) void {
+    pub fn falling(self: *MeteorSystem, x: f32, y: f32) void {
         const dpr = self.dpr;
         const cw = self.canvas_w;
         const margin = FADE_MARGIN * dpr;
