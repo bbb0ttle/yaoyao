@@ -2,3 +2,37 @@
 html, body { width: 100%; height: 100%; }
 body { display: flex; justify-content: center; align-items: center; overflow: hidden; }
 canvas { width: 100%; height: 100%; }
+
+#forecast {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  padding: 10px;
+}
+
+.forecast-list {
+  font-family: Arial, Helvetica, sans-serif;
+  color: white;
+  font-size: 12px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event-item {
+  border-top: dashed 1px white;
+  padding: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+.event-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.event-icon svg path {
+  fill: white;
+  stroke: white;
+}

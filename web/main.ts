@@ -1,6 +1,7 @@
+import { showForcastUI } from './forcast';
 import { type ZCanvasExports } from './types'
 
-async function init() {
+async function init(): Promise<ZCanvasExports> {
   const canvas = document.getElementById("canvas") as HTMLCanvasElement;
   const ctx = canvas.getContext("2d")!;
 
@@ -58,9 +59,9 @@ async function init() {
     });
   });
 
-  canvas.addEventListener("click", (e: MouseEvent) => {
-    wasm.show_meteor_shower(wasm.get_width() / 3, wasm.get_height());
-  });
+  // canvas.addEventListener("click", (e: MouseEvent) => {
+  //   wasm.show_meteor_shower(wasm.get_width() / 3, wasm.get_height());
+  // });
 
   function loop(_now: number) {
     const elapsed = (performance.now() - start) / 1000;
@@ -70,6 +71,13 @@ async function init() {
   }
 
   requestAnimationFrame(loop);
+
+  return wasm;
 }
 
-init();
+init().then(wasm => {
+  showForcastUI("forecast", () => {
+      wasm.show_meteor_shower(wasm.get_width() / 3, wasm.get_height());
+  });
+});
+
