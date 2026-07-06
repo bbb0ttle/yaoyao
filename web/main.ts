@@ -59,11 +59,7 @@ async function init() {
   });
 
   canvas.addEventListener("click", (e: MouseEvent) => {
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const x = (e.clientX - rect.left) * dpr;
-    const y = (e.clientY - rect.top) * dpr;
-    wasm.show_meteor_shower(x, y);
+    wasm.show_meteor_shower(wasm.get_width() / 3, wasm.get_height());
   });
 
   function loop(_now: number) {
