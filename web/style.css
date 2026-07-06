@@ -34,12 +34,11 @@ canvas { width: 100%; height: 100%; }
 
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* gap: 10px; */
 }
 
 .event-item {
-  border-top: dashed 1px white;
-  padding: 10px;
+  padding: 0 10px;
   display: flex;
   gap: 10px;
 }
@@ -52,4 +51,37 @@ canvas { width: 100%; height: 100%; }
 .event-icon svg path {
   fill: white;
   stroke: white;
+}
+
+.status-pending:hover .event-start::after {
+  opacity: 1;
+}
+
+.event-start::after {
+  content: '会有流星雨！';
+  display: inline-block;
+  margin: 0 2px;
+  opacity: 0;
+  transition: opacity .2s ease-out;
+}
+
+.event-status {
+  opacity: 1;
+  transition: opacity .2s ease-out;
+}
+
+.event-info {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  justify-content: center;
+}
+
+.event-item.event-status.status-active .event-start {
+  display: none;
+}
+
+.event-status.status-ended {
+  opacity: 0;
 }

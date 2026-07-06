@@ -75,7 +75,8 @@ export class ForecastUI {
     const startTime = document.createElement('div');
     startTime.className = 'event-start';
     const startDate = new Date(event.dateTime);
-    startTime.textContent = `流星雨于 ${this.formatDateTime(startDate)} 开始`;
+    startTime.textContent = `${this.formatDateTime(startDate)}`;
+    // startTime.title = '会有流星雨!';
 
     // 持续时间
     const duration = document.createElement('div');
@@ -88,8 +89,8 @@ export class ForecastUI {
     status.dataset.statusKey = event.dateTime; // 用于更新时定位
 
     infoWrapper.appendChild(startTime);
-    infoWrapper.appendChild(duration);
-    // infoWrapper.appendChild(status);
+    // infoWrapper.appendChild(duration);
+    infoWrapper.appendChild(status);
 
     item.appendChild(iconWrapper);
     item.appendChild(infoWrapper);
@@ -103,7 +104,7 @@ export class ForecastUI {
   /**
    * 更新单个事件的状态显示
    */
-  private updateEventStatus(statusElement: HTMLElement, event: MeteoreShowerEvent): void {
+  private updateEventStatus(statusElement: HTMLDivElement, event: MeteoreShowerEvent): void {
     const now = Date.now();
     const start = new Date(event.dateTime).getTime();
     const end = start + event.durationMs;
@@ -112,20 +113,26 @@ export class ForecastUI {
     let className = '';
     if (now < start) {
       const remaining = start - now;
-      statusText = `倒计时：${this.formatTimeRemaining(remaining)}`;
+      // statusText = `倒计时：${this.formatTimeRemaining(remaining)}`;
       className = 'status-pending';
     } else if (now >= start && now < end) {
       const elapsed = now - start;
       const total = event.durationMs;
-      const progress = Math.min(100, (elapsed / total) * 100);
-      statusText = `进行中 ${Math.round(progress)}%`;
+      const remaining = total - elapsed;
+      // const progress = Math.min(100, (elapsed / total) * 100);
+      statusText = `${this.formatTimeRemaining(remaining)}`;
+      // statusText = `${Math.round(progress)}%`;
       className = 'status-active';
     } else {
-      statusText = '已结束';
+      // statusText = '已结束';
       className = 'status-ended';
     }
     statusElement.textContent = statusText;
-    statusElement.className = `event-status ${className}`;
+    const targetAncestor = statusElement?.parentElement?.parentElement;
+    if ( targetAncestor && targetAncestor.className !== '' && !targetAncestor.classList.contains(className)) {
+      targetAncestor.classList.add('event-status');
+      targetAncestor.classList.add(className);
+    }
   }
 
   /**
@@ -134,7 +141,7 @@ export class ForecastUI {
   private updateAllStatuses(): void {
     const items = this.listElement.querySelectorAll('.event-item');
     for (const item of items) {
-      const statusEl = item.querySelector('.event-status') as HTMLElement;
+      const statusEl = item.querySelector('.event-status') as HTMLDivElement;
       if (!statusEl) continue;
       // 通过日期找到对应的事件
       const eventId = statusEl.dataset.statusKey;
@@ -196,15 +203,22 @@ export class ForecastUI {
     return `${minutes} 分 ${remainingSeconds} 秒`;
   }
 
+  private padStart = (num: number) => {
+    const prefix = num < 10 ? '0' : '';
+    return `${prefix}${num}`;
+
+  }
+
   private formatTimeRemaining(ms: number): string {
-    if (ms <= 0) return '即将开始';
+    if (ms <= 0) return '';
     const seconds = Math.floor(ms / 1000);
-    if (seconds < 60) return `${seconds} 秒`;
+
+    if (seconds < 60) return `00:00:${this.padStart(seconds)}`;
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    if (minutes < 60) return `${minutes} 分 ${remainingSeconds} 秒`;
+    if (minutes < 60) return `00:${this.padStart(minutes)}:${this.padStart(remainingSeconds)} `;
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    return `${hours} 时 ${remainingMinutes} 分 ${remainingSeconds} 秒`;
+    return `${this.padStart(hours)}:${this.padStart(remainingMinutes)}:${this.padStart(remainingSeconds)}`;
   }
 }
