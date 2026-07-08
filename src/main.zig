@@ -149,3 +149,12 @@ export fn show_meteor_shower(click_x: f32, click_y: f32) void {
     if (!meteor_ready) return;
     meteor.falling(click_x, click_y);
 }
+
+// iOS C ABI aliases (kept alongside WASM exports above)
+export fn zc_init() void { init(); }
+export fn zc_get_framebuffer_ptr() usize { return get_framebuffer_ptr(); }
+export fn zc_get_width() u32 { return get_width(); }
+export fn zc_get_height() u32 { return get_height(); }
+export fn zc_resize(new_w: u32, new_h: u32) void { resize(new_w, new_h); }
+export fn zc_update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void { update_frame(elapsed, unix_ms, dpr); }
+export fn zc_show_meteor_shower(click_x: f32, click_y: f32) void { show_meteor_shower(click_x, click_y); }

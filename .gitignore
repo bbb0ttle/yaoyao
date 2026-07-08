@@ -3,3 +3,10 @@ zig-out/
 zig-cache/
 .zig-cache/
 dist/
+.DS_store
+
+# iOS build artifacts
+ios/build/
+ios/ZCanvas.xcframework
+ios/ZCanvas.xcodeproj/xcuserdata
+ios/ZCanvas.xcodeproj/project.xcworkspace/xcuserdata
