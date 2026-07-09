@@ -314,7 +314,7 @@ fn updateAndFillBuffers(w: f32, h: f32, elapsed: f32, dpr: f32) void {
 fn fillTextInstances(w: f32, h: f32, dpr: f32, start_inst: u32, cap: u32) u32 {
     const pixel_size: f32 = @max(1.0, dpr); // font pixel radius; each pixel = 2*dpr on screen, matching main-branch text_scale
     const char_stride: f32 = pixel_size * 2.0 * 3.0 + pixel_size; // 3 cols × diameter + 1 gap
-    const gap: f32 = 30.0 * dpr;
+    const gap: f32 = 43.0 * dpr;
 
     // Position text relative to the float-heart pair.
     // Use a fixed max radius + margin so the text stays still regardless of
@@ -326,7 +326,7 @@ fn fillTextInstances(w: f32, h: f32, dpr: f32, start_inst: u32, cap: u32) u32 {
     const base_text_x: f32 = hearts_right_edge + gap;
 
     // Fixed baseline — same as the float pair's reference y in initSystems.
-    const text_y: f32 = h - 80.0 * dpr;
+    const text_y: f32 = h - 83.0 * dpr;
 
     // Center the entire group (float hearts + gap + text) on screen.
     const hearts_left_edge: f32 = @min(left_h.pos.x - max_hr, right_h.pos.x - max_hr);
