@@ -32,11 +32,17 @@ pub fn build(b: *std.Build) void {
     const sim_arm_lib = createIOSLib(b, .aarch64, .simulator, optimize);
     const sim_x86_lib = createIOSLib(b, .x86_64, .simulator, optimize);
 
+    // Repack each Zig-built archive with Apple's libtool to ensure 64-bit
+    // Mach-O members are 8-byte aligned, which Xcode's linker requires.
+    const device_a = repackStaticLib(b, device_lib, "libzcanvas.a");
+    const sim_arm_a = repackStaticLib(b, sim_arm_lib, "libzcanvas.a");
+    const sim_x86_a = repackStaticLib(b, sim_x86_lib, "libzcanvas.a");
+
     // Combine simulator slices into a single fat static library.
     const sim_fat = b.addSystemCommand(&.{ "lipo", "-create", "-output" });
     const sim_fat_out = sim_fat.addOutputFileArg("libzcanvas.a");
-    sim_fat.addArtifactArg(sim_arm_lib);
-    sim_fat.addArtifactArg(sim_x86_lib);
+    sim_fat.addFileArg(sim_arm_a);
+    sim_fat.addFileArg(sim_x86_a);
 
     // Package device and simulator libraries into an XCFramework.
     const rm = b.addSystemCommand(&.{ "rm", "-rf" });
@@ -44,7 +50,7 @@ pub fn build(b: *std.Build) void {
 
     const xcframework = b.addSystemCommand(&.{ "xcodebuild", "-create-xcframework" });
     xcframework.addArg("-library");
-    xcframework.addArtifactArg(device_lib);
+    xcframework.addFileArg(device_a);
     xcframework.addArg("-headers");
     xcframework.addDirectoryArg(b.path("ios/include"));
     xcframework.addArg("-library");
@@ -56,6 +62,31 @@ pub fn build(b: *std.Build) void {
     xcframework.step.dependOn(&rm.step);
 
     ios_build.dependOn(&xcframework.step);
+}
+
+fn repackStaticLib(
+    b: *std.Build,
+    lib: *std.Build.Step.Compile,
+    name: []const u8,
+) std.Build.LazyPath {
+    const script =
+        \\set -e
+        \\work_dir="$1_work"
+        \\rm -rf "$work_dir"
+        \\mkdir -p "$work_dir"
+        \\cd "$work_dir"
+        \\xcrun ar -x "$OLDPWD/$2"
+        \\chmod +r *.o
+        \\rm -f __.SYMDEF*
+        \\xcrun ar -rcs "$OLDPWD/$1" *.o
+        \\xcrun ranlib "$OLDPWD/$1"
+        \\cd "$OLDPWD"
+        \\rm -rf "$work_dir"
+    ;
+    const repack = b.addSystemCommand(&.{ "sh", "-c", script, "--" });
+    const output = repack.addOutputFileArg(name);
+    repack.addArtifactArg(lib);
+    return output;
 }
 
 fn createIOSLib(

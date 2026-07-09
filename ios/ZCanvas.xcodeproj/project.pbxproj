@@ -20,7 +20,7 @@
 		000000000000000000000403 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000303 /* PrivacyInfo.xcprivacy */; };
 		000000000000000000000601 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000501 /* SwiftUI.framework */; };
 		000000000000000000000602 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000502 /* MetalKit.framework */; };
-		000000000000000000000603 /* ZCanvas.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000503 /* ZCanvas.xcframework */; };
+		D7FEF5922FFF2FE800BF733A /* ZCanvas.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000503 /* ZCanvas.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,7 +38,7 @@
 		000000000000000000000303 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		000000000000000000000501 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		000000000000000000000502 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
-		000000000000000000000503 /* ZCanvas.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ZCanvas.xcframework; path = ../ZCanvas.xcframework; sourceTree = "<group>"; };
+		000000000000000000000503 /* ZCanvas.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ZCanvas.xcframework; sourceTree = "<group>"; };
 		000000000000000000000701 /* ZCanvas.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZCanvas.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -47,7 +47,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				000000000000000000000603 /* ZCanvas.xcframework in Frameworks */,
+				D7FEF5922FFF2FE800BF733A /* ZCanvas.xcframework in Frameworks */,
 				000000000000000000000602 /* MetalKit.framework in Frameworks */,
 				000000000000000000000601 /* SwiftUI.framework in Frameworks */,
 			);
@@ -317,9 +317,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = T34B69546N;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -339,6 +340,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.zcanvas;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "ZCanvas/ZCanvas-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -351,9 +353,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = T34B69546N;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -373,6 +376,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.zcanvas;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "ZCanvas/ZCanvas-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
