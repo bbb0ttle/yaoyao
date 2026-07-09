@@ -50,10 +50,13 @@ void main() {
         // Diamond SDF: |x| + |y| <= 1
         d = 1.0 - (abs(v_uv.x) + abs(v_uv.y));
     } else {
-        // Heart SDF: classic implicit heart curve (x^2 + y^2 - 1)^3 - x^2 * y^3 <= 0
-        // v_uv is in [-1,1]; shift y to center the heart
-        float x = v_uv.x;
-        float y = v_uv.y + 0.25;
+        // Heart SDF. Scale x to keep lobes inside the quad (the algebraic
+        // curve naturally reaches x ≈ ±1.12 at y ≈ 0.5).
+        // Scale y to compress vertically for a slimmer, more elegant shape
+        // closer to the Bezier-heart proportions from the main branch.
+        // y is flipped because ortho(0,w,h,0) maps local-up → screen-down.
+        float x = v_uv.x * 1.35;
+        float y = (-v_uv.y + 0.25) * 1.32;
         float x2 = x * x;
         float y2 = y * y;
         float h = x2 + y2 - 1.0;
