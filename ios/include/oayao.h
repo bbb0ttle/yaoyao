@@ -31,6 +31,10 @@ void oy_resize(uint32_t new_w, uint32_t new_h);
 /// Resize with a new externally-provided buffer. The old buffer is abandoned.
 void oy_resize_with_buffer(uint8_t* buf, uint32_t w, uint32_t h, uint32_t bpr);
 
+/// Swap the framebuffer pointer without resetting render state.
+/// Dimensions must match the current buffer.
+void oy_set_buffer(uint8_t* buf);
+
 /// Advance one frame and render into the framebuffer.
 /// elapsed: seconds since init()
 /// unix_ms: Unix epoch time in milliseconds (used for the day counter text)

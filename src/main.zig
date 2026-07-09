@@ -77,6 +77,10 @@ export fn resize(new_w: u32, new_h: u32) void {
     resize_cooldown = 30;
 }
 
+export fn set_buffer(buf: [*]u8) void {
+    fb_ptr = buf;
+}
+
 export fn resize_with_buffer(buf: [*]u8, w: u32, h: u32, bpr: u32) void {
     fb_ptr = buf;
     fb_ptr_set = true;
@@ -211,5 +215,6 @@ export fn oy_get_width() u32 { return get_width(); }
 export fn oy_get_height() u32 { return get_height(); }
 export fn oy_resize(new_w: u32, new_h: u32) void { resize(new_w, new_h); }
 export fn oy_resize_with_buffer(buf: [*]u8, w: u32, h: u32, bpr: u32) void { resize_with_buffer(buf, w, h, bpr); }
+export fn oy_set_buffer(buf: [*]u8) void { set_buffer(buf); }
 export fn oy_update_frame(elapsed: f32, unix_ms: f64, dpr: f32) void { update_frame(elapsed, unix_ms, dpr); }
 export fn oy_show_meteor_shower(click_x: f32, click_y: f32) void { show_meteor_shower(click_x, click_y); }

@@ -78,11 +78,14 @@ struct CanvasView: UIViewRepresentable {
         func draw(in view: MTKView) {
             let t0 = CACurrentMediaTime()
             let bridge = OayaoBridge.shared
+
+            // Double-buffering: acquire a buffer, point Zig at it, then render.
+            guard let buffer = bridge.nextBuffer() else { return }
+            bridge.bindBuffer(buffer)
             bridge.updateFrame(dpr: Float(view.contentScaleFactor))
             let t1 = CACurrentMediaTime()
 
-            guard let buffer = bridge.buffer,
-                  let pipelineState = pipelineState,
+            guard let pipelineState = pipelineState,
                   let renderPassDescriptor = view.currentRenderPassDescriptor,
                   let commandBuffer = commandQueue.makeCommandBuffer() else {
                 return
