@@ -1,6 +1,7 @@
 node_modules/
 zig-out/
 zig-cache/
+zig-pkg/
 .zig-cache/
 dist/
 .DS_store

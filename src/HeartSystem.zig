@@ -2,7 +2,6 @@ const std = @import("std");
 const business = @import("core/business.zig");
 const Rgba = business.Rgba;
 const Vec2 = business.Vec2;
-const FrameBuffer = @import("FrameBuffer.zig").FrameBuffer;
 const particle = @import("Particle.zig");
 
 const CONTOUR_COUNT: usize = 30;
@@ -101,49 +100,4 @@ pub const HeartSystem = struct {
         }
     }
 
-    pub fn render(self: HeartSystem, fb: FrameBuffer, elapsed: f32, t: f32) void {
-        _ = elapsed;
-        const stroke_width: f32 = 2.0 * self.dpr;
-        const fb_w: f32 = @floatFromInt(fb.width);
-        const fb_h: f32 = @floatFromInt(fb.height);
-        const radius_margin: f32 = stroke_width + 3.0;
-
-        const count = particle.alive_count;
-        const indices = particle.alive_indices[0..count];
-        var ai: usize = 0;
-        while (ai < count) : (ai += 1) {
-            const p = &particle.particle_pool[indices[ai]];
-
-            const max_alpha: f32 = if (p.immortal) 255.0 else business.scale(p.lifespan, particle.MAX_LIFESPAN, 200.0);
-
-            const px: i32 = @as(i32, @intFromFloat(p.pos.x));
-            const py: i32 = @as(i32, @intFromFloat(p.pos.y));
-            const display_size: f32 = business.scale(p.lifespan, particle.MAX_LIFESPAN, p.size);
-
-            // Off-screen culling (option 2).
-            const radius: f32 = display_size + radius_margin;
-            if (p.pos.x + radius < 0.0 or p.pos.x - radius >= fb_w or
-                p.pos.y + radius < 0.0 or p.pos.y - radius >= fb_h) {
-                continue;
-            }
-
-            var stroke_color = Rgba.heart_stroke;
-            stroke_color.a = @intFromFloat(@min(255.0, p.lifespan) * t);
-            if (stroke_color.a > 10) {
-                if (display_size + stroke_width < 8.0) {
-                    fb.drawDiamondParticle(px, py, display_size + stroke_width, stroke_color);
-                } else {
-                    fb.drawHeartParticle(px, py, display_size + stroke_width, stroke_color);
-                }
-            }
-
-            var fill = Rgba.heart_fill;
-            fill.a = @intFromFloat(max_alpha * t);
-            if (display_size < 8.0) {
-                fb.drawDiamondParticle(px, py, display_size, fill);
-            } else {
-                fb.drawHeartParticle(px, py, display_size, fill);
-            }
-        }
-    }
 };
