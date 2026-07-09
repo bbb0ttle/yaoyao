@@ -3,7 +3,6 @@ const sokol = @import("sokol");
 const sg = sokol.gfx;
 const sapp = sokol.app;
 const sglue = sokol.glue;
-const sdtx = sokol.debugtext;
 const slog = sokol.log;
 const shd = @import("shaders/particle.glsl.zig");
 
@@ -55,25 +54,16 @@ var gs: GpuState = .{};
 // Orthographic projection: pixel coords → NDC
 fn ortho(left: f32, right: f32, bottom: f32, top: f32) [16]f32 {
     return .{
-        2.0 / (right - left), 0.0, 0.0, 0.0,
-        0.0, 2.0 / (top - bottom), 0.0, 0.0,
-        0.0, 0.0, -1.0, 0.0,
-        -(right + left) / (right - left), -(top + bottom) / (top - bottom), 0.0, 1.0,
+        2.0 / (right - left),             0.0,                              0.0,  0.0,
+        0.0,                              2.0 / (top - bottom),             0.0,  0.0,
+        0.0,                              0.0,                              -1.0, 0.0,
+        -(right + left) / (right - left), -(top + bottom) / (top - bottom), 0.0,  1.0,
     };
 }
 
 export fn init() void {
     sg.setup(.{
         .environment = sglue.environment(),
-        .logger = .{ .func = slog.func },
-    });
-
-    sdtx.setup(.{
-        .fonts = init: {
-            var f: [8]sdtx.FontDesc = @splat(.{});
-            f[0] = sdtx.fontKc853();
-            break :init f;
-        },
         .logger = .{ .func = slog.func },
     });
 
@@ -182,23 +172,11 @@ export fn frame() void {
         sg.draw(0, 6, @intCast(gs.instance_count));
     }
 
-    // Text overlay
-    sdtx.canvas(w, h);
-    sdtx.origin(0.0, 2.0);
-    sdtx.home();
-    sdtx.color3b(255, 255, 255);
-    sdtx.pos(w * 0.05, h * 0.95);
-    if (gs.days_text_len > 0) {
-        sdtx.puts(gs.days_text_buf[0..gs.days_text_len :0]);
-    }
-    sdtx.draw();
-
     sg.endPass();
     sg.commit();
 }
 
 export fn cleanup() void {
-    sdtx.shutdown();
     sg.shutdown();
 }
 
@@ -253,6 +231,10 @@ fn updateAndFillBuffers(w: f32, h: f32, elapsed: f32, dpr: f32) void {
             gs.days_text_buf[gs.days_text_len] = byte;
             gs.days_text_len += 1;
         }
+    }
+    // Null-terminate for sokol_debugtext.puts (expects [:0]const u8).
+    if (gs.days_text_len < gs.days_text_buf.len) {
+        gs.days_text_buf[gs.days_text_len] = 0;
     }
 
     // Physics
@@ -320,7 +302,79 @@ fn updateAndFillBuffers(w: f32, h: f32, elapsed: f32, dpr: f32) void {
             inst_count += 1;
         }
     }
+    // Text overlay: emit filled-square instances for the day counter.
+    // Uses the 3×5 bitmap font from business.FONT_3X5.
+    if (gs.days_text_len > 0) {
+        inst_count = fillTextInstances(w, h, dpr, inst_count, cap);
+    }
+
     gs.instance_count = inst_count;
+}
+
+fn fillTextInstances(w: f32, h: f32, dpr: f32, start_inst: u32, cap: u32) u32 {
+    const pixel_size: f32 = @max(1.0, dpr); // font pixel radius; each pixel = 2*dpr on screen, matching main-branch text_scale
+    const char_stride: f32 = pixel_size * 2.0 * 3.0 + pixel_size; // 3 cols × diameter + 1 gap
+    const gap: f32 = 30.0 * dpr;
+
+    // Position text relative to the float-heart pair.
+    // Use a fixed max radius + margin so the text stays still regardless of
+    // beat-driven size oscillation and floating position drift.
+    const max_hr: f32 = (particle.MAX_PARTICLE_SIZE + 4.0) * dpr;
+    const left_h = gs.heart.float_pair[0];
+    const right_h = gs.heart.float_pair[1];
+    const hearts_right_edge: f32 = @max(left_h.pos.x + max_hr, right_h.pos.x + max_hr);
+    const base_text_x: f32 = hearts_right_edge + gap;
+
+    // Fixed baseline — same as the float pair's reference y in initSystems.
+    const text_y: f32 = h - 80.0 * dpr;
+
+    // Center the entire group (float hearts + gap + text) on screen.
+    const hearts_left_edge: f32 = @min(left_h.pos.x - max_hr, right_h.pos.x - max_hr);
+    const text_width: f32 = @as(f32, @floatFromInt(gs.days_text_len)) * char_stride;
+    const group_right: f32 = base_text_x + text_width;
+    const group_center: f32 = (hearts_left_edge + group_right) / 2.0;
+    const text_x: f32 = base_text_x + (w / 2.0 - group_center);
+
+    var inst_count = start_inst;
+
+    const color = Rgba.white;
+    const r: f32 = @as(f32, @floatFromInt(color.r)) / 255.0;
+    const g: f32 = @as(f32, @floatFromInt(color.g)) / 255.0;
+    const b: f32 = @as(f32, @floatFromInt(color.b)) / 255.0;
+
+    for (gs.days_text_buf[0..gs.days_text_len], 0..) |ch, ci| {
+        const char_idx = business.charIndex(ch);
+        if (char_idx >= business.FONT_3X5.len) continue;
+        const glyph = business.FONT_3X5[char_idx];
+
+        const cx: f32 = text_x + @as(f32, @floatFromInt(ci)) * char_stride;
+
+        var row: usize = 0;
+        while (row < 5) : (row += 1) {
+            const bits = glyph[row];
+            var col: usize = 0;
+            while (col < 3) : (col += 1) {
+                if ((bits >> @as(u3, @intCast(2 - col))) & 1 == 0) {
+                    continue;
+                }
+                if (inst_count >= cap) return inst_count;
+
+                gs.instance_buf[inst_count] = .{
+                    .pos_x = cx + @as(f32, @floatFromInt(col)) * pixel_size * 2.0 + pixel_size,
+                    .pos_y = text_y + @as(f32, @floatFromInt(row)) * pixel_size * 2.0 + pixel_size,
+                    .size = pixel_size,
+                    .r = r,
+                    .g = g,
+                    .b = b,
+                    .a = 1.0,
+                    .shape = 2.0, // filled square
+                };
+                inst_count += 1;
+            }
+        }
+    }
+
+    return inst_count;
 }
 
 fn formatUint(n: u64) void {

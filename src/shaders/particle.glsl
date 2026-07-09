@@ -49,7 +49,7 @@ void main() {
     if (v_shape < 0.5) {
         // Diamond SDF: |x| + |y| <= 1
         d = 1.0 - (abs(v_uv.x) + abs(v_uv.y));
-    } else {
+    } else if (v_shape < 1.5) {
         // Heart SDF. Scale x to keep lobes inside the quad (the algebraic
         // curve naturally reaches x ≈ ±1.12 at y ≈ 0.5).
         // Scale y to compress vertically for a slimmer, more elegant shape
@@ -61,6 +61,9 @@ void main() {
         float y2 = y * y;
         float h = x2 + y2 - 1.0;
         d = -(h * h * h - x2 * y2 * y);
+    } else {
+        // Filled square for text pixels — fully opaque, crisp edges.
+        d = 2.0;
     }
 
     // Anti-aliased edge: smoothstep over 1 pixel width
