@@ -336,7 +336,7 @@ fn fillTextInstances(w: f32, h: f32, dpr: f32, start_inst: u32, cap: u32) u32 {
 
     // Text starts after the hearts area + gap.
     const text_x: f32 = group_left + hearts_area_w + gap;
-    const text_y: f32 = h - 80.0 * dpr;
+    const text_y: f32 = h - 83.0 * dpr;
 
     var inst_count = start_inst;
 
