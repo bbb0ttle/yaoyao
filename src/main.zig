@@ -314,26 +314,29 @@ fn updateAndFillBuffers(w: f32, h: f32, elapsed: f32, dpr: f32) void {
 fn fillTextInstances(w: f32, h: f32, dpr: f32, start_inst: u32, cap: u32) u32 {
     const pixel_size: f32 = @max(1.0, dpr); // font pixel radius; each pixel = 2*dpr on screen, matching main-branch text_scale
     const char_stride: f32 = pixel_size * 2.0 * 3.0 + pixel_size; // 3 cols × diameter + 1 gap
-    const gap: f32 = 43.0 * dpr;
-
-    // Position text relative to the float-heart pair.
-    // Use a fixed max radius + margin so the text stays still regardless of
-    // beat-driven size oscillation and floating position drift.
+    const gap: f32 = 4.0 * dpr;
     const max_hr: f32 = (particle.MAX_PARTICLE_SIZE + 4.0) * dpr;
+
+    // Compute text width first so we know the full group extent.
+    const text_width: f32 = @as(f32, @floatFromInt(gs.days_text_len)) * char_stride;
+
+    // Float-heart area width: spread between the two hearts + radius margins.
+    const hearts_area_w: f32 = 7.0 * dpr + 2.0 * max_hr;
+    const group_w: f32 = hearts_area_w + gap + text_width;
+    const group_left: f32 = w / 2.0 - group_w / 2.0;
+
+    // Reposition the float-heart pair to the centered group origin.
     const left_h = gs.heart.float_pair[0];
     const right_h = gs.heart.float_pair[1];
-    const hearts_right_edge: f32 = @max(left_h.pos.x + max_hr, right_h.pos.x + max_hr);
-    const base_text_x: f32 = hearts_right_edge + gap;
+    const dx: f32 = (group_left + max_hr) - left_h.pos.x;
+    left_h.pos.x += dx;
+    right_h.pos.x += dx;
+    left_h.pos.y = h - 80.0 * dpr;
+    right_h.pos.y = h - 80.0 * dpr - 2.0 * dpr;
 
-    // Fixed baseline — same as the float pair's reference y in initSystems.
-    const text_y: f32 = h - 83.0 * dpr;
-
-    // Center the entire group (float hearts + gap + text) on screen.
-    const hearts_left_edge: f32 = @min(left_h.pos.x - max_hr, right_h.pos.x - max_hr);
-    const text_width: f32 = @as(f32, @floatFromInt(gs.days_text_len)) * char_stride;
-    const group_right: f32 = base_text_x + text_width;
-    const group_center: f32 = (hearts_left_edge + group_right) / 2.0;
-    const text_x: f32 = base_text_x + (w / 2.0 - group_center);
+    // Text starts after the hearts area + gap.
+    const text_x: f32 = group_left + hearts_area_w + gap;
+    const text_y: f32 = h - 80.0 * dpr;
 
     var inst_count = start_inst;
 
