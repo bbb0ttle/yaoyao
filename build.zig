@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "z-canvas",
+        .name = "oayao",
         .root_module = wasm_module,
     });
     exe.entry = .disabled;
@@ -34,19 +34,19 @@ pub fn build(b: *std.Build) void {
 
     // Repack each Zig-built archive with Apple's libtool to ensure 64-bit
     // Mach-O members are 8-byte aligned, which Xcode's linker requires.
-    const device_a = repackStaticLib(b, device_lib, "libzcanvas.a");
-    const sim_arm_a = repackStaticLib(b, sim_arm_lib, "libzcanvas.a");
-    const sim_x86_a = repackStaticLib(b, sim_x86_lib, "libzcanvas.a");
+    const device_a = repackStaticLib(b, device_lib, "liboayao.a");
+    const sim_arm_a = repackStaticLib(b, sim_arm_lib, "liboayao.a");
+    const sim_x86_a = repackStaticLib(b, sim_x86_lib, "liboayao.a");
 
     // Combine simulator slices into a single fat static library.
     const sim_fat = b.addSystemCommand(&.{ "lipo", "-create", "-output" });
-    const sim_fat_out = sim_fat.addOutputFileArg("libzcanvas.a");
+    const sim_fat_out = sim_fat.addOutputFileArg("liboayao.a");
     sim_fat.addFileArg(sim_arm_a);
     sim_fat.addFileArg(sim_x86_a);
 
     // Package device and simulator libraries into an XCFramework.
     const rm = b.addSystemCommand(&.{ "rm", "-rf" });
-    rm.addDirectoryArg(b.path("ios/ZCanvas.xcframework"));
+    rm.addDirectoryArg(b.path("ios/Oayao.xcframework"));
 
     const xcframework = b.addSystemCommand(&.{ "xcodebuild", "-create-xcframework" });
     xcframework.addArg("-library");
@@ -58,7 +58,7 @@ pub fn build(b: *std.Build) void {
     xcframework.addArg("-headers");
     xcframework.addDirectoryArg(b.path("ios/include"));
     xcframework.addArg("-output");
-    xcframework.addDirectoryArg(b.path("ios/ZCanvas.xcframework"));
+    xcframework.addDirectoryArg(b.path("ios/Oayao.xcframework"));
     xcframework.step.dependOn(&rm.step);
 
     ios_build.dependOn(&xcframework.step);
@@ -107,7 +107,7 @@ fn createIOSLib(
 
     const lib = b.addLibrary(.{
         .linkage = .static,
-        .name = "zcanvas",
+        .name = "oayao",
         .root_module = module,
     });
     lib.entry = .disabled;

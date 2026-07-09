@@ -1,7 +1,10 @@
 import SwiftUI
 import MetalKit
+import QuartzCore
 
 /// Renders the Zig framebuffer through Metal as a full-screen textured quad.
+/// Zig writes directly into a shared MTLBuffer; a GPU blit encoder copies
+/// buffer → texture, eliminating the per-frame CPU memcpy.
 struct CanvasView: UIViewRepresentable {
     func makeUIView(context: Context) -> MTKView {
         let device = MTLCreateSystemDefaultDevice()!
@@ -38,6 +41,13 @@ struct CanvasView: UIViewRepresentable {
         private var texture: MTLTexture?
         private var lastSize: CGSize = .zero
 
+        // Temporary performance instrumentation.
+        private var perfFrameCount = 0
+        private var perfAccumUpdate: Double = 0
+        private var perfAccumBlit: Double = 0
+        private var perfAccumTotal: Double = 0
+        private let perfLogInterval = 60
+
         override init() {
             self.device = MTLCreateSystemDefaultDevice()!
             self.commandQueue = device.makeCommandQueue()!
@@ -60,35 +70,29 @@ struct CanvasView: UIViewRepresentable {
 
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
             guard size.width > 0, size.height > 0 else { return }
-            ZCanvasBridge.shared.resize(width: UInt32(size.width), height: UInt32(size.height))
+            OayaoBridge.shared.resize(width: UInt32(size.width), height: UInt32(size.height))
             lastSize = size
-            texture = nil // Recreate on next draw
+            texture = nil
         }
 
         func draw(in view: MTKView) {
-            let bridge = ZCanvasBridge.shared
+            let t0 = CACurrentMediaTime()
+            let bridge = OayaoBridge.shared
             bridge.updateFrame(dpr: Float(view.contentScaleFactor))
+            let t1 = CACurrentMediaTime()
 
-            guard let ptr = bridge.framebufferPtr,
+            guard let buffer = bridge.buffer,
                   let pipelineState = pipelineState,
                   let renderPassDescriptor = view.currentRenderPassDescriptor,
-                  let commandBuffer = commandQueue.makeCommandBuffer(),
-                  let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                  let commandBuffer = commandQueue.makeCommandBuffer() else {
                 return
             }
 
             let width = Int(bridge.width)
             let height = Int(bridge.height)
-            guard width > 0, height > 0 else {
-                encoder.endEncoding()
-                if let drawable = view.currentDrawable {
-                    commandBuffer.present(drawable)
-                }
-                commandBuffer.commit()
-                return
-            }
+            guard width > 0, height > 0 else { return }
 
-            // Lazily recreate the texture when the framebuffer size changes.
+            // Lazy-create the GPU-private blit-target texture.
             if texture == nil || texture!.width != width || texture!.height != height {
                 let descriptor = MTLTextureDescriptor.texture2DDescriptor(
                     pixelFormat: .rgba8Unorm,
@@ -96,25 +100,32 @@ struct CanvasView: UIViewRepresentable {
                     height: height,
                     mipmapped: false
                 )
-                descriptor.usage = .shaderRead
-                descriptor.storageMode = .shared
+                descriptor.storageMode = .private
+                descriptor.usage = [.shaderRead, .shaderWrite]
                 texture = device.makeTexture(descriptor: descriptor)
             }
 
-            guard let texture = texture else {
-                encoder.endEncoding()
-                if let drawable = view.currentDrawable {
-                    commandBuffer.present(drawable)
-                }
-                commandBuffer.commit()
-                return
-            }
+            guard let texture = texture else { return }
 
-            // Upload the Zig framebuffer into the Metal texture.
-            let region = MTLRegionMake2D(0, 0, width, height)
-            texture.replace(region: region, mipmapLevel: 0, withBytes: ptr, bytesPerRow: width * 4)
+            // GPU blit: shared buffer → private texture (DMA, no CPU memcpy).
+            if let blitEncoder = commandBuffer.makeBlitCommandEncoder() {
+                blitEncoder.copy(
+                    from: buffer,
+                    sourceOffset: 0,
+                    sourceBytesPerRow: Int(bridge.bytesPerRow),
+                    sourceBytesPerImage: Int(bridge.height * bridge.bytesPerRow),
+                    sourceSize: MTLSize(width: width, height: height, depth: 1),
+                    to: texture,
+                    destinationSlice: 0,
+                    destinationLevel: 0,
+                    destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0)
+                )
+                blitEncoder.endEncoding()
+            }
+            let t2 = CACurrentMediaTime()
 
             // Draw a full-screen quad.
+            guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
             encoder.setRenderPipelineState(pipelineState)
             encoder.setFragmentTexture(texture, index: 0)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
@@ -124,13 +135,28 @@ struct CanvasView: UIViewRepresentable {
                 commandBuffer.present(drawable)
             }
             commandBuffer.commit()
+            let t3 = CACurrentMediaTime()
+
+            perfFrameCount += 1
+            perfAccumUpdate += t1 - t0
+            perfAccumBlit += t2 - t1
+            perfAccumTotal += t3 - t0
+            if perfFrameCount >= perfLogInterval {
+                let n = Double(perfFrameCount)
+                NSLog(String(format: "[DEBUG-perf] avg over %d frames: update=%.2f ms, blit=%.2f ms, total CPU=%.2f ms",
+                             perfFrameCount, perfAccumUpdate / n * 1000, perfAccumBlit / n * 1000, perfAccumTotal / n * 1000))
+                perfFrameCount = 0
+                perfAccumUpdate = 0
+                perfAccumBlit = 0
+                perfAccumTotal = 0
+            }
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let view = gesture.view else { return }
             let point = gesture.location(in: view)
             let scale = view.contentScaleFactor
-            ZCanvasBridge.shared.triggerMeteorShower(at: CGPoint(x: point.x * scale, y: point.y * scale))
+            OayaoBridge.shared.triggerMeteorShower(at: CGPoint(x: point.x * scale, y: point.y * scale))
         }
     }
 }

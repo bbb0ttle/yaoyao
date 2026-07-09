@@ -7,6 +7,6 @@ dist/
 
 # iOS build artifacts
 ios/build/
-ios/ZCanvas.xcframework
-ios/ZCanvas.xcodeproj/xcuserdata
-ios/ZCanvas.xcodeproj/project.xcworkspace/xcuserdata
+ios/Oayao.xcframework
+ios/Oayao.xcodeproj/xcuserdata
+ios/Oayao.xcodeproj/project.xcworkspace/xcuserdata

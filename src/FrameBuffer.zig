@@ -2,15 +2,51 @@ const std = @import("std");
 const business = @import("core/business.zig");
 const Rgba = business.Rgba;
 
+const HEART_VERTEX_COUNT: usize = 32;
+
+fn makeHeartUnitVertices() [HEART_VERTEX_COUNT][2]f32 {
+    var pts: [HEART_VERTEX_COUNT][2]f32 = undefined;
+    var pi: usize = 0;
+    while (pi < HEART_VERTEX_COUNT) : (pi += 1) {
+        const t: f32 = @as(f32, @floatFromInt(pi)) / @as(f32, @floatFromInt(HEART_VERTEX_COUNT));
+        const px: f32, const py: f32 = if (t < 0.5) blk: {
+            const t2 = t * 2.0;
+            const u = 1.0 - t2;
+            const uu = u * u;
+            const tt = t2 * t2;
+            const x0 = -1.5 * uu * t2 - 3.0 * u * tt;
+            const y0 = -1.5 * uu * t2 + u * tt + tt * t2;
+            break :blk .{ x0, y0 };
+        } else blk: {
+            const t2 = (t - 0.5) * 2.0;
+            const u = 1.0 - t2;
+            const uu = u * u;
+            const tt = t2 * t2;
+            const x1 = 3.0 * uu * t2 + 1.5 * u * tt;
+            const y1 = u * uu + uu * t2 - 1.5 * u * tt;
+            break :blk .{ x1, y1 };
+        };
+        pts[pi] = .{ px, py };
+    }
+    return pts;
+}
+
+const heart_unit_vertices = makeHeartUnitVertices();
+
 pub const FrameBuffer = struct {
     buf: []u8,
     width: u32,
     height: u32,
+    bytes_per_row: u32,
+
+    fn pixelOffset(self: FrameBuffer, x: i32, y: i32) usize {
+        return @as(usize, @intCast(y)) * self.bytes_per_row + @as(usize, @intCast(x)) * 4;
+    }
 
     pub fn setPixel(self: FrameBuffer, x: i32, y: i32, color: Rgba) void {
         if (x < 0 or x >= @as(i32, @intCast(self.width))) return;
         if (y < 0 or y >= @as(i32, @intCast(self.height))) return;
-        const idx = (@as(usize, @intCast(y)) * @as(usize, self.width) + @as(usize, @intCast(x))) * 4;
+        const idx = self.pixelOffset(x, y);
         self.buf[idx] = color.r;
         self.buf[idx + 1] = color.g;
         self.buf[idx + 2] = color.b;
@@ -25,7 +61,7 @@ pub const FrameBuffer = struct {
             self.setPixel(x, y, color);
             return;
         }
-        const idx = (@as(usize, @intCast(y)) * @as(usize, self.width) + @as(usize, @intCast(x))) * 4;
+        const idx = self.pixelOffset(x, y);
         const src_a = @as(u32, color.a);
         const inv_a: u32 = 255 - src_a;
         self.buf[idx] = @as(u8, @intCast((@as(u32, color.r) * src_a + @as(u32, self.buf[idx]) * inv_a) / 255));
@@ -35,20 +71,32 @@ pub const FrameBuffer = struct {
     }
 
     pub fn clear(self: FrameBuffer, color: Rgba) void {
-        var i: usize = 0;
-        while (i < self.buf.len) : (i += 4) {
-            self.buf[i + 0] = color.r;
-            self.buf[i + 1] = color.g;
-            self.buf[i + 2] = color.b;
-            self.buf[i + 3] = color.a;
+        const word: u32 = (@as(u32, color.r))
+            | (@as(u32, color.g) << 8)
+            | (@as(u32, color.b) << 16)
+            | (@as(u32, color.a) << 24);
+        if (self.bytes_per_row == self.width * 4) {
+            const word_count = self.buf.len / 4;
+            const words = @as([*]u32, @ptrCast(@alignCast(self.buf.ptr)))[0..word_count];
+            @memset(words, word);
+        } else {
+            const line_words: usize = @intCast(self.width);
+            var y: u32 = 0;
+            while (y < self.height) : (y += 1) {
+                const row_start = @as(usize, @intCast(y)) * self.bytes_per_row;
+                const words = @as([*]u32, @ptrCast(@alignCast(self.buf.ptr + row_start)))[0..line_words];
+                @memset(words, word);
+            }
         }
     }
 
     pub fn resize(self: FrameBuffer, new_w: u32, new_h: u32, allocator: std.mem.Allocator) !FrameBuffer {
+        const new_bpr = new_w * 4;
         const new_len: usize = @as(usize, new_w) * @as(usize, new_h) * 4;
-        if (new_len == 0) return FrameBuffer{ .buf = &[_]u8{}, .width = new_w, .height = new_h };
+        if (new_len == 0) return FrameBuffer{ .buf = &[_]u8{}, .width = new_w, .height = new_h, .bytes_per_row = new_bpr };
 
         const new_buf = try allocator.alloc(u8, new_len);
+        @memset(new_buf, 0);
         var i: usize = 0;
         while (i < new_len) : (i += 4) {
             new_buf[i + 0] = Rgba.heart_bg.r;
@@ -61,13 +109,13 @@ pub const FrameBuffer = struct {
             const copy_h: u32 = if (new_h < self.height) new_h else self.height;
             var y: u32 = 0;
             while (y < copy_h) : (y += 1) {
-                const src_start: usize = @as(usize, y) * @as(usize, self.width) * 4;
-                const dst_start: usize = @as(usize, y) * @as(usize, new_w) * 4;
+                const src_start: usize = @as(usize, y) * self.bytes_per_row;
+                const dst_start: usize = @as(usize, y) * new_bpr;
                 const row_bytes: usize = @as(usize, copy_w) * 4;
                 @memcpy(new_buf[dst_start..][0..row_bytes], self.buf[src_start..][0..row_bytes]);
             }
         }
-        return FrameBuffer{ .buf = new_buf, .width = new_w, .height = new_h };
+        return FrameBuffer{ .buf = new_buf, .width = new_w, .height = new_h, .bytes_per_row = new_bpr };
     }
 
     pub fn fillPolygon(self: FrameBuffer, vertices: []const [2]i32, color: Rgba) void {
@@ -102,16 +150,15 @@ pub const FrameBuffer = struct {
                 }
             }
 
-            var a: usize = 0;
+            // insertion sort — faster than bubble sort for small arrays
+            var a: usize = 1;
             while (a < count) : (a += 1) {
-                var b: usize = a + 1;
-                while (b < count) : (b += 1) {
-                    if (intersections[a] > intersections[b]) {
-                        const tmp = intersections[a];
-                        intersections[a] = intersections[b];
-                        intersections[b] = tmp;
-                    }
+                const key = intersections[a];
+                var b: isize = @as(isize, @intCast(a)) - 1;
+                while (b >= 0 and intersections[@as(usize, @intCast(b))] > key) : (b -= 1) {
+                    intersections[@as(usize, @intCast(b)) + 1] = intersections[@as(usize, @intCast(b))];
                 }
+                intersections[@as(usize, @intCast(b)) + 1] = key;
             }
 
             var k: usize = 0;
@@ -134,6 +181,18 @@ pub const FrameBuffer = struct {
                     self.setPixelAlpha(ixl, y, aa);
 
                     var x = ixl + 1;
+                    if (color.a == 255 and x < ixr) {
+                        const word: u32 = (@as(u32, color.r))
+                            | (@as(u32, color.g) << 8)
+                            | (@as(u32, color.b) << 16)
+                            | (@as(u32, color.a) << 24);
+                        const row_start = @as(usize, @intCast(y)) * self.bytes_per_row;
+                        const span_off = row_start + @as(usize, @intCast(x)) * 4;
+                        const span_words = @as(usize, @intCast(ixr - x));
+                        const words = @as([*]u32, @ptrCast(@alignCast(self.buf.ptr + span_off)))[0..span_words];
+                        @memset(words, word);
+                        x = ixr;
+                    }
                     while (x < ixr) : (x += 1) {
                         self.setPixelAlpha(x, y, color);
                     }
@@ -147,33 +206,27 @@ pub const FrameBuffer = struct {
     }
 
     pub fn drawHeartParticle(self: FrameBuffer, cx: i32, cy: i32, size: f32, fill: Rgba) void {
-        const s = size;
-        const N: usize = 32;
-        var points: [N][2]i32 = undefined;
+        var points: [HEART_VERTEX_COUNT][2]i32 = undefined;
 
-        var pi: usize = 0;
-        while (pi < N) : (pi += 1) {
-            const t: f32 = @as(f32, @floatFromInt(pi)) / @as(f32, @floatFromInt(N));
-            const px: f32, const py: f32 = if (t < 0.5) blk: {
-                const t2 = t * 2.0;
-                const u = 1.0 - t2;
-                const uu = u * u;
-                const tt = t2 * t2;
-                const x0 = -1.5 * s * uu * t2 - 3.0 * s * u * tt;
-                const y0 = -1.5 * s * uu * t2 + s * u * tt + s * tt * t2;
-                break :blk .{ x0, y0 };
-            } else blk: {
-                const t2 = (t - 0.5) * 2.0;
-                const u = 1.0 - t2;
-                const uu = u * u;
-                const tt = t2 * t2;
-                const x1 = 3.0 * s * uu * t2 + 1.5 * s * u * tt;
-                const y1 = s * u * uu + s * uu * t2 - 1.5 * s * u * tt;
-                break :blk .{ x1, y1 };
+        for (heart_unit_vertices, 0..) |uv, i| {
+            points[i] = .{
+                cx + @as(i32, @intFromFloat(uv[0] * size)),
+                cy + @as(i32, @intFromFloat(uv[1] * size)),
             };
-            points[pi] = .{ cx + @as(i32, @intFromFloat(px)), cy + @as(i32, @intFromFloat(py)) };
         }
 
+        self.fillPolygon(points[0..], fill);
+    }
+
+    pub fn drawDiamondParticle(self: FrameBuffer, cx: i32, cy: i32, size: f32, fill: Rgba) void {
+        const s: i32 = @intFromFloat(size);
+        if (s < 1) return;
+        const points = [_][2]i32{
+            .{ cx, cy - s },
+            .{ cx + s, cy },
+            .{ cx, cy + s },
+            .{ cx - s, cy },
+        };
         self.fillPolygon(points[0..], fill);
     }
 
@@ -182,21 +235,46 @@ pub const FrameBuffer = struct {
         if (idx >= business.FONT_3X5.len) return;
 
         const glyph = business.FONT_3X5[idx];
-        var row: usize = 0;
-        while (row < 5) : (row += 1) {
-            const bits = glyph[row];
-            var col: usize = 0;
-            while (col < 3) : (col += 1) {
-                if ((bits >> @as(u3, @intCast(2 - col))) & 1 == 1) {
-                    var dy: u32 = 0;
-                    while (dy < char_scale) : (dy += 1) {
-                        var dx: u32 = 0;
-                        while (dx < char_scale) : (dx += 1) {
-                            self.setPixel(
-                                x + @as(i32, @intCast(col * char_scale)) + @as(i32, @intCast(dx)),
-                                y + @as(i32, @intCast(row * char_scale)) + @as(i32, @intCast(dy)),
-                                color,
-                            );
+        if (char_scale >= 2 and color.a == 255) {
+            const word: u32 = (@as(u32, color.r))
+                | (@as(u32, color.g) << 8)
+                | (@as(u32, color.b) << 16)
+                | (@as(u32, color.a) << 24);
+            const cs: i32 = @intCast(char_scale);
+            var row: usize = 0;
+            while (row < 5) : (row += 1) {
+                const bits = glyph[row];
+                var col: usize = 0;
+                while (col < 3) : (col += 1) {
+                    if ((bits >> @as(u3, @intCast(2 - col))) & 1 == 1) {
+                        const bx = x + @as(i32, @intCast(col * char_scale));
+                        const by = y + @as(i32, @intCast(row * char_scale));
+                        var dy: i32 = 0;
+                        while (dy < cs) : (dy += 1) {
+                            const row_off = @as(usize, @intCast(by + dy)) * self.bytes_per_row + @as(usize, @intCast(bx)) * 4;
+                            const words = @as([*]u32, @ptrCast(@alignCast(self.buf.ptr + row_off)))[0..char_scale];
+                            @memset(words, word);
+                        }
+                    }
+                }
+            }
+        } else {
+            var row: usize = 0;
+            while (row < 5) : (row += 1) {
+                const bits = glyph[row];
+                var col: usize = 0;
+                while (col < 3) : (col += 1) {
+                    if ((bits >> @as(u3, @intCast(2 - col))) & 1 == 1) {
+                        var dy: u32 = 0;
+                        while (dy < char_scale) : (dy += 1) {
+                            var dx: u32 = 0;
+                            while (dx < char_scale) : (dx += 1) {
+                                self.setPixel(
+                                    x + @as(i32, @intCast(col * char_scale)) + @as(i32, @intCast(dx)),
+                                    y + @as(i32, @intCast(row * char_scale)) + @as(i32, @intCast(dy)),
+                                    color,
+                                );
+                            }
                         }
                     }
                 }

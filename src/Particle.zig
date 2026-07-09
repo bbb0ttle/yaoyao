@@ -26,6 +26,7 @@ pub const Particle = struct {
     floating: bool,
     beat: bool,
     meteor: bool,
+    next_free: usize,
 
     fn init(pos: Vec2, birth_sec: f32, opts: ParticleOpts) Particle {
         return Particle{
@@ -41,6 +42,7 @@ pub const Particle = struct {
             .floating = opts.floating,
             .beat = opts.beat,
             .meteor = opts.meteor,
+            .next_free = PARTICLE_POOL_SIZE,
         };
     }
 
@@ -80,20 +82,42 @@ const PARTICLE_POOL_SIZE: usize = 5000;
 pub var particle_pool: [PARTICLE_POOL_SIZE]Particle = undefined;
 pub var particle_pool_len: usize = 0;
 
-pub fn allocParticle(pos: Vec2, elapsed: f32, opts: ParticleOpts) *Particle {
-    if (particle_pool_len >= PARTICLE_POOL_SIZE) {
-        var i: usize = 0;
-        while (i < PARTICLE_POOL_SIZE) : (i += 1) {
-            if (!particle_pool[i].alive) {
-                particle_pool[i] = Particle.init(pos, elapsed, opts);
-                return &particle_pool[i];
-            }
+// Free list head index. PARTICLE_POOL_SIZE means empty list.
+var free_head: usize = PARTICLE_POOL_SIZE;
+
+// Indices of particles that are still alive after the current frame's updates.
+// Used by renderers to avoid scanning dead slots.
+pub var alive_indices: [PARTICLE_POOL_SIZE]usize = undefined;
+pub var alive_count: usize = 0;
+
+pub fn collectAlive() void {
+    alive_count = 0;
+    free_head = PARTICLE_POOL_SIZE;
+    for (0..particle_pool_len) |i| {
+        if (particle_pool[i].alive) {
+            alive_indices[alive_count] = i;
+            alive_count += 1;
+        } else {
+            particle_pool[i].next_free = free_head;
+            free_head = i;
         }
-        particle_pool[0] = Particle.init(pos, elapsed, opts);
-        return &particle_pool[0];
     }
-    particle_pool[particle_pool_len] = Particle.init(pos, elapsed, opts);
-    const p = &particle_pool[particle_pool_len];
-    particle_pool_len += 1;
-    return p;
+}
+
+pub fn allocParticle(pos: Vec2, elapsed: f32, opts: ParticleOpts) *Particle {
+    if (free_head < PARTICLE_POOL_SIZE) {
+        const idx = free_head;
+        free_head = particle_pool[idx].next_free;
+        particle_pool[idx] = Particle.init(pos, elapsed, opts);
+        return &particle_pool[idx];
+    }
+    if (particle_pool_len < PARTICLE_POOL_SIZE) {
+        const idx = particle_pool_len;
+        particle_pool_len += 1;
+        particle_pool[idx] = Particle.init(pos, elapsed, opts);
+        return &particle_pool[idx];
+    }
+    // Pool exhausted — overwrite slot 0 as last resort.
+    particle_pool[0] = Particle.init(pos, elapsed, opts);
+    return &particle_pool[0];
 }

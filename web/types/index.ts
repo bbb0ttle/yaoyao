@@ -1,4 +1,4 @@
-export interface ZCanvasExports extends WebAssembly.Exports {
+export interface OayaoExports extends WebAssembly.Exports {
   memory: WebAssembly.Memory;
   init(): void;
   get_framebuffer_ptr(): number;

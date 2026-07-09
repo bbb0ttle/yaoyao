@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "000000000000000000000002"
-               BuildableName = "ZCanvas.app"
-               BlueprintName = "ZCanvas"
-               ReferencedContainer = "container:ZCanvas.xcodeproj">
+               BuildableName = "Oayao.app"
+               BlueprintName = "Oayao"
+               ReferencedContainer = "container:Oayao.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,9 +46,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "000000000000000000000002"
-            BuildableName = "ZCanvas.app"
-            BlueprintName = "ZCanvas"
-            ReferencedContainer = "container:ZCanvas.xcodeproj">
+            BuildableName = "Oayao.app"
+            BlueprintName = "Oayao"
+            ReferencedContainer = "container:Oayao.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -63,9 +63,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "000000000000000000000002"
-            BuildableName = "ZCanvas.app"
-            BlueprintName = "ZCanvas"
-            ReferencedContainer = "container:ZCanvas.xcodeproj">
+            BuildableName = "Oayao.app"
+            BlueprintName = "Oayao"
+            ReferencedContainer = "container:Oayao.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

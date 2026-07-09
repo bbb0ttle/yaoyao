@@ -24,7 +24,7 @@ pub const Canvas = struct {
     }
 
     pub fn resize(self: *Canvas, new_w: u32, new_h: u32) !void {
-        const fb = FrameBuffer{ .buf = self.buf, .width = self.width, .height = self.height };
+        const fb = FrameBuffer{ .buf = self.buf, .width = self.width, .height = self.height, .bytes_per_row = self.width * 4 };
         const new_fb = try fb.resize(new_w, new_h, self.allocator);
         if (self.buf.len != 0) self.allocator.free(self.buf);
         self.buf = new_fb.buf;
@@ -33,6 +33,6 @@ pub const Canvas = struct {
     }
 
     pub fn frameBuffer(self: *const Canvas) FrameBuffer {
-        return FrameBuffer{ .buf = self.buf, .width = self.width, .height = self.height };
+        return FrameBuffer{ .buf = self.buf, .width = self.width, .height = self.height, .bytes_per_row = self.width * 4 };
     }
 };

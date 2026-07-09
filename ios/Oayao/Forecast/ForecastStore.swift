@@ -50,7 +50,7 @@ final class ForecastStore: ObservableObject {
     }
 
     private func triggerMeteorShower() {
-        let bridge = ZCanvasBridge.shared
+        let bridge = OayaoBridge.shared
         let x = CGFloat(bridge.width) / 3.0
         let y = CGFloat(bridge.height)
         bridge.triggerMeteorShower(at: CGPoint(x: x, y: y))

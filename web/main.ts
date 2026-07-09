@@ -1,17 +1,17 @@
 import { showForcastUI } from './forcast';
-import { type ZCanvasExports } from './types'
+import { type OayaoExports } from './types'
 
-async function init(): Promise<ZCanvasExports> {
+async function init(): Promise<OayaoExports> {
   const canvas = document.getElementById("canvas") as HTMLCanvasElement;
   const ctx = canvas.getContext("2d")!;
 
-  const response = await fetch("/z-canvas.wasm");
+  const response = await fetch("/oayao.wasm");
   const wasmBytes = await response.arrayBuffer();
   const { instance } = await WebAssembly.instantiate(wasmBytes, {
     env: {},
   });
 
-  const wasm = instance.exports as ZCanvasExports;
+  const wasm = instance.exports as OayaoExports;
   wasm.init();
 
   let pixelArray: Uint8ClampedArray<ArrayBuffer>; 

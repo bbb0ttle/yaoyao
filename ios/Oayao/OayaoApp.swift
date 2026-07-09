@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct ZCanvasApp: App {
+struct OayaoApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
