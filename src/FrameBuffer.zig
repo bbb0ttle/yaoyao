@@ -154,11 +154,11 @@ pub const FrameBuffer = struct {
             var a: usize = 1;
             while (a < count) : (a += 1) {
                 const key = intersections[a];
-                var b: isize = @as(isize, @intCast(a)) - 1;
-                while (b >= 0 and intersections[@as(usize, @intCast(b))] > key) : (b -= 1) {
-                    intersections[@as(usize, @intCast(b)) + 1] = intersections[@as(usize, @intCast(b))];
+                var b: isize = @as(isize, @intCast(a));
+                while (b > 0 and intersections[@as(usize, @intCast(b - 1))] > key) : (b -= 1) {
+                    intersections[@as(usize, @intCast(b))] = intersections[@as(usize, @intCast(b - 1))];
                 }
-                intersections[@as(usize, @intCast(b)) + 1] = key;
+                intersections[@as(usize, @intCast(b))] = key;
             }
 
             var k: usize = 0;
@@ -181,16 +181,20 @@ pub const FrameBuffer = struct {
                     self.setPixelAlpha(ixl, y, aa);
 
                     var x = ixl + 1;
-                    if (color.a == 255 and x < ixr) {
+                    if (color.a == 255 and x < ixr and y >= 0) {
                         const word: u32 = (@as(u32, color.r))
                             | (@as(u32, color.g) << 8)
                             | (@as(u32, color.b) << 16)
                             | (@as(u32, color.a) << 24);
-                        const row_start = @as(usize, @intCast(y)) * self.bytes_per_row;
-                        const span_off = row_start + @as(usize, @intCast(x)) * 4;
-                        const span_words = @as(usize, @intCast(ixr - x));
-                        const words = @as([*]u32, @ptrCast(@alignCast(self.buf.ptr + span_off)))[0..span_words];
-                        @memset(words, word);
+                        const clipped_x = if (x < 0) @as(i32, 0) else x;
+                        const clipped_ixr = @min(ixr, @as(i32, @intCast(self.width)));
+                        if (clipped_x < clipped_ixr) {
+                            const row_start = @as(usize, @intCast(y)) * self.bytes_per_row;
+                            const span_off = row_start + @as(usize, @intCast(clipped_x)) * 4;
+                            const span_words = @as(usize, @intCast(clipped_ixr - clipped_x));
+                            const words = @as([*]u32, @ptrCast(@alignCast(self.buf.ptr + span_off)))[0..span_words];
+                            @memset(words, word);
+                        }
                         x = ixr;
                     }
                     while (x < ixr) : (x += 1) {
