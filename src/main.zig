@@ -409,14 +409,14 @@ fn formatUint(n: u64) void {
 export fn event(ev: [*c]const sapp.Event) void {
     switch (ev.*.type) {
         .TOUCHES_BEGAN => {
-            if (gs.meteor_ready) {
+            if (gs.meteor_ready and gs.heart_ready) {
                 const t = ev.*.touches[0];
-                gs.meteor.falling(t.pos_x, t.pos_y);
+                meteorFromHeart(t.pos_x, t.pos_y);
             }
         },
         .MOUSE_DOWN => {
-            if (gs.meteor_ready) {
-                gs.meteor.falling(ev.*.mouse_x, ev.*.mouse_y);
+            if (gs.meteor_ready and gs.heart_ready) {
+                meteorFromHeart(ev.*.mouse_x, ev.*.mouse_y);
             }
         },
         .RESIZED => {
@@ -425,6 +425,14 @@ export fn event(ev: [*c]const sapp.Event) void {
         },
         else => {},
     }
+}
+
+fn meteorFromHeart(target_x: f32, target_y: f32) void {
+    var spawns: [30]business.Vec2 = undefined;
+    for (&gs.heart.contour, 0..) |*cp, i| {
+        spawns[i] = cp.immortal.pos;
+    }
+    gs.meteor.falling(target_x, target_y, gs.heart.cx, gs.heart.cy, spawns[0..]);
 }
 
 pub fn main() void {

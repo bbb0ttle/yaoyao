@@ -19,8 +19,6 @@ pub const MeteorSystem = struct {
     heads: [MAX_HEADS]MeteorHead,
     head_count: usize,
     cooldown: u32,
-    vel_x: f32,
-    vel_y: f32,
     canvas_w: f32,
     canvas_h: f32,
     dpr: f32,
@@ -30,30 +28,27 @@ pub const MeteorSystem = struct {
             .heads = undefined,
             .head_count = 0,
             .cooldown = 0,
-            .vel_x = 0,
-            .vel_y = 0,
             .canvas_w = canvas_w,
             .canvas_h = canvas_h,
             .dpr = dpr,
         };
     }
 
-    pub fn falling(self: *MeteorSystem, x: f32, y: f32) void {
-        const dpr = self.dpr;
-        const cw = self.canvas_w;
-        const margin = FADE_MARGIN * dpr;
-
-        const src_cx = cw - margin;
-        const src_cy = margin;
-        const dx = x - src_cx;
-        const dy = y - src_cy;
-        const len = @sqrt(dx * dx + dy * dy);
-        if (len < 1.0) return;
+    /// Spawn meteor heads at positions randomly picked from `spawn_positions`,
+    /// all flying parallel in the direction from `ref_x, ref_y` toward the click target.
+    pub fn falling(self: *MeteorSystem, x: f32, y: f32, ref_x: f32, ref_y: f32, spawn_positions: []const Vec2) void {
         if (self.cooldown > 0) return;
+        if (spawn_positions.len == 0) return;
         self.cooldown = CLICK_COOLDOWN_FRAMES;
 
-        self.vel_x = dx / len * METEOR_SPEED * dpr;
-        self.vel_y = dy / len * METEOR_SPEED * dpr;
+        const dpr = self.dpr;
+
+        // Single direction vector for all meteors (parallel flight).
+        const dx = x - ref_x;
+        const dy = y - ref_y;
+        const len = @sqrt(dx * dx + dy * dy);
+        const base_vx: f32 = if (len < 1.0) 0.0 else dx / len * METEOR_SPEED * dpr;
+        const base_vy: f32 = if (len < 1.0) METEOR_SPEED * dpr else dy / len * METEOR_SPEED * dpr;
 
         const count: usize = 20;
 
@@ -71,13 +66,14 @@ pub const MeteorSystem = struct {
             self.compact();
         }
 
-        const spread_range: f32 = cw * 0.5;
         var i: usize = 0;
         while (i < count) : (i += 1) {
             if (self.head_count >= MAX_HEADS) break;
 
-            const sx: f32 = cw - margin - random.randomRange(0, spread_range);
-            const sy: f32 = margin + random.randomRange(0, spread_range * 0.4);
+            const idx = random.randomIndex(spawn_positions.len);
+            const sp = spawn_positions[idx];
+            const sx = sp.x + random.randomRange(-4.0, 4.0) * dpr;
+            const sy = sp.y + random.randomRange(-4.0, 4.0) * dpr;
 
             const p = particle.allocParticle(Vec2{ .x = sx, .y = sy }, 0, .{
                 .immortal = true,
@@ -85,7 +81,7 @@ pub const MeteorSystem = struct {
                 .size = METEOR_SIZE * dpr,
             });
             const speed_var = random.randomRange(0.7, 1.3);
-            p.vel = Vec2{ .x = self.vel_x * speed_var, .y = self.vel_y * speed_var };
+            p.vel = Vec2{ .x = base_vx * speed_var, .y = base_vy * speed_var };
 
             self.heads[self.head_count] = MeteorHead{ .particle = p };
             self.head_count += 1;
