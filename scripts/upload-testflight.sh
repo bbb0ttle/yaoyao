@@ -9,11 +9,14 @@ cd "$PROJECT_DIR"
 # Configuration — set these via environment variables
 # ============================================================
 # Required:
-#   APP_STORE_KEY_ID     — App Store Connect API Key ID (e.g. "ABC1234567")
+#   APP_STORE_KEY_ID     — App Store Connect API Key ID
 #   APP_STORE_ISSUER_ID  — App Store Connect Issuer ID (UUID)
 # Optional:
 #   API_PRIVATE_KEYS_DIR — Directory containing AuthKey_<KEY_ID>.p8
 #                           (defaults to ~/.private_keys)
+#   SIGNING_IDENTITY     — codesign identity name (defaults to "Apple Distribution")
+#   PROVISIONING_PROFILE — path to .mobileprovision file
+#                           (defaults to ~/Library/MobileDevice/Provisioning Profiles/yconnect.mobileprovision)
 
 if [ -z "$APP_STORE_KEY_ID" ] || [ -z "$APP_STORE_ISSUER_ID" ]; then
     echo "Error: App Store Connect API credentials not set."
@@ -28,6 +31,10 @@ if [ -z "$APP_STORE_KEY_ID" ] || [ -z "$APP_STORE_ISSUER_ID" ]; then
     echo "  export APP_STORE_ISSUER_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     exit 1
 fi
+
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-Apple Distribution}"
+PROVISIONING_PROFILE="${PROVISIONING_PROFILE:-$HOME/Library/MobileDevice/Provisioning Profiles/yconnect.mobileprovision}"
+ENTITLEMENTS="$PROJECT_DIR/ios/Oayao.entitlements"
 
 # ============================================================
 # Build
@@ -45,23 +52,29 @@ if [ ! -d "zig-out/Oayao.app" ]; then
 fi
 
 # ============================================================
-# Code Signing Check
+# Code Signing
 # ============================================================
 
-if [ ! -d "zig-out/Oayao.app/_CodeSignature" ]; then
-    echo ""
-    echo "Warning: Oayao.app is not code-signed."
-    echo "TestFlight requires a signed app with a valid provisioning profile."
-    echo ""
-    echo "Sign manually before packaging, for example:"
-    echo "  codesign --force --sign \"Apple Distribution\" --entitlements ios/Oayao.entitlements zig-out/Oayao.app"
-    echo "  cp ~/path/to/profile.mobileprovision zig-out/Oayao.app/embedded.mobileprovision"
-    echo ""
-    read -rp "Continue without signing? (y/N) " confirm
-    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-        exit 1
-    fi
+echo "==> Signing Oayao.app with identity: $SIGNING_IDENTITY..."
+
+if [ ! -f "$PROVISIONING_PROFILE" ]; then
+    echo "Error: Provisioning profile not found at $PROVISIONING_PROFILE"
+    exit 1
 fi
+
+if [ ! -f "$ENTITLEMENTS" ]; then
+    echo "Error: Entitlements file not found at $ENTITLEMENTS"
+    exit 1
+fi
+
+cp "$PROVISIONING_PROFILE" zig-out/Oayao.app/embedded.mobileprovision
+
+codesign --force --sign "$SIGNING_IDENTITY" \
+    --entitlements "$ENTITLEMENTS" \
+    --timestamp=none \
+    zig-out/Oayao.app
+
+echo "    Signed successfully."
 
 # ============================================================
 # Package IPA
@@ -97,4 +110,4 @@ xcrun altool --upload-package zig-out/Oayao.ipa \
 
 echo ""
 echo "==> Done. Check TestFlight at:"
-echo "    https://appstoreconnect.apple.com/apps/com.bkking.oayao/testflight"
+echo "    https://appstoreconnect.apple.com/apps/com.bbking.oayao/testflight"

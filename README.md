@@ -43,7 +43,7 @@ zig build ios-app -Dtarget=aarch64-ios-simulator # create .app bundle
 # then install and launch:
 xcrun simctl boot "iPhone 17"                              # boot simulator (if needed)
 xcrun simctl install booted zig-out/Oayao.app              # install app
-xcrun simctl launch booted com.bkking.oayao                # launch app
+xcrun simctl launch booted com.bbking.oayao                # launch app
 # or:
 ./scripts/build-ios.sh
 ```

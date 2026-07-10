@@ -33,7 +33,7 @@ echo "==> Installing Oayao.app to simulator..."
 xcrun simctl install "$DEVICE_ID" zig-out/Oayao.app
 
 echo "==> Launching oayao in simulator..."
-xcrun simctl launch "$DEVICE_ID" com.bkking.oayao
+xcrun simctl launch "$DEVICE_ID" com.bbking.oayao
 
 echo "==> Bringing Simulator app to foreground..."
 open -a Simulator
