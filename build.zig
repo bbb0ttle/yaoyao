@@ -70,7 +70,7 @@ pub fn build(b: *Build) !void {
 
         if (target.result.os.tag == .ios) {
             // Create .app bundle
-            const app_step = try createIosAppBundle(b, exe);
+            const app_step = try createIosAppBundle(b, exe, target);
             const install_app = b.step("ios-app", "Build Oayao.app bundle for iOS");
             install_app.dependOn(app_step);
         } else {
@@ -195,8 +195,10 @@ fn iosSdkRoot(target: Build.ResolvedTarget) []const u8 {
     }
 }
 
-fn createIosAppBundle(b: *Build, exe: *Build.Step.Compile) !*Build.Step {
-    const script =
+fn createIosAppBundle(b: *Build, exe: *Build.Step.Compile, target: Build.ResolvedTarget) !*Build.Step {
+    const platform = if (target.result.abi == .simulator) "iphonesimulator" else "iphoneos";
+
+    const script = b.fmt(
         \\set -e
         \\APP="zig-out/Oayao.app"
         \\rm -rf "$APP"
@@ -205,8 +207,14 @@ fn createIosAppBundle(b: *Build, exe: *Build.Step.Compile) !*Build.Step {
         \\cp "$2" "$APP/Info.plist"
         \\cp "$3" "$APP/LaunchScreen.storyboard"
         \\cp "$4" "$APP/PrivacyInfo.xcprivacy"
+        \\ACTOOL="/Applications/Xcode.app/Contents/Developer/usr/bin/actool"
+        \\PLISTBUDDY="/usr/libexec/PlistBuddy"
+        \\PARTIAL="/tmp/oayao_partial.plist"
+        \\"$ACTOOL" "$5" --compile "$APP" --platform {s} --minimum-deployment-target 12.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
+        \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
+        \\rm -f "$PARTIAL"
         \\echo "Created Oayao.app bundle at zig-out/Oayao.app"
-    ;
+    , .{platform});
 
     const cmd = b.addSystemCommand(&.{ "sh", "-c" });
     cmd.addArg(script);
@@ -215,6 +223,7 @@ fn createIosAppBundle(b: *Build, exe: *Build.Step.Compile) !*Build.Step {
     cmd.addFileArg(b.path("ios/Info.plist")); // $2
     cmd.addFileArg(b.path("ios/Oayao/LaunchScreen.storyboard")); // $3
     cmd.addFileArg(b.path("ios/Oayao/PrivacyInfo.xcprivacy")); // $4
+    cmd.addDirectoryArg(b.path("ios/Oayao/Assets.xcassets")); // $5
 
     return &cmd.step;
 }
