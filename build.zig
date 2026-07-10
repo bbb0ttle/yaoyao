@@ -5,7 +5,7 @@ const Build = std.Build;
 const sokol_build = @import("sokol");
 
 pub fn build(b: *Build) !void {
-    const target = b.standardTargetOptions(.{});
+    var target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
     const is_web = target.result.cpu.arch.isWasm();
 
@@ -135,9 +135,9 @@ fn buildSokolLib(
     });
 
     const csources = [_][]const u8{
-        "sokol_log.c", "sokol_app.c", "sokol_gfx.c", "sokol_time.c",
-        "sokol_audio.c", "sokol_gl.c", "sokol_debugtext.c", "sokol_shape.c",
-        "sokol_glue.c", "sokol_fetch.c",
+        "sokol_log.c",   "sokol_app.c",   "sokol_gfx.c",       "sokol_time.c",
+        "sokol_audio.c", "sokol_gl.c",    "sokol_debugtext.c", "sokol_shape.c",
+        "sokol_glue.c",  "sokol_fetch.c",
     };
 
     const cflags_native_debug = [_][]const u8{ "-DIMPL", "-DSOKOL_METAL", "-ObjC", "-DSOKOL_DEBUG" };
