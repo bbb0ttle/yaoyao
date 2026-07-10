@@ -74,6 +74,12 @@ codesign --force --sign "$SIGNING_IDENTITY" \
     --timestamp=none \
     zig-out/Oayao.app
 
+# codesign on Xcode 26+ puts CodeResources in _CodeSignature/;
+# App Store Connect still expects a root-level symlink in some cases
+if [ ! -e "zig-out/Oayao.app/CodeResources" ]; then
+    ln -sf _CodeSignature/CodeResources zig-out/Oayao.app/CodeResources
+fi
+
 echo "    Signed successfully."
 
 # ============================================================
@@ -81,10 +87,10 @@ echo "    Signed successfully."
 # ============================================================
 
 echo "==> Packaging IPA..."
-rm -rf /tmp/oayao-payload zig-out/Oayao.ipa
+rm -rf zig-out/Oayao.ipa /tmp/oayao-payload
 mkdir -p /tmp/oayao-payload/Payload
-cp -R zig-out/Oayao.app /tmp/oayao-payload/Payload/
-( cd /tmp/oayao-payload && zip -rq "$PROJECT_DIR/zig-out/Oayao.ipa" Payload )
+ditto zig-out/Oayao.app /tmp/oayao-payload/Payload/Oayao.app
+ditto -c -k --keepParent /tmp/oayao-payload/Payload "$PROJECT_DIR/zig-out/Oayao.ipa"
 rm -rf /tmp/oayao-payload
 echo "    Created zig-out/Oayao.ipa"
 

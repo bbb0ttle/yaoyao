@@ -9,6 +9,12 @@ pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
     const is_web = target.result.cpu.arch.isWasm();
 
+    // Override iOS deployment target: min 12.0, SDK 26.5 (required by App Store Connect)
+    if (target.result.os.tag == .ios) {
+        target.result.os.version_range.semver.min = .{ .major = 12, .minor = 0, .patch = 0 };
+        target.result.os.version_range.semver.max = .{ .major = 26, .minor = 5, .patch = 0 };
+    }
+
     const dep_sokol = b.dependency("sokol", .{});
     const dep_emsdk = b.dependency("emsdk", .{});
 
