@@ -22,30 +22,7 @@ pub const Vec2 = struct {
         return Vec2{ .x = self.x + other.x, .y = self.y + other.y };
     }
 
-    pub fn copy(self: Vec2) Vec2 {
-        return Vec2{ .x = self.x, .y = self.y };
-    }
 };
-
-pub fn sortVerticesByY(v0: [2]i32, v1: [2]i32, v2: [2]i32) [3][2]i32 {
-    var v = [_][2]i32{ v0, v1, v2 };
-    if (v[0][1] > v[1][1]) {
-        const tmp = v[0];
-        v[0] = v[1];
-        v[1] = tmp;
-    }
-    if (v[0][1] > v[2][1]) {
-        const tmp = v[0];
-        v[0] = v[2];
-        v[2] = tmp;
-    }
-    if (v[1][1] > v[2][1]) {
-        const tmp = v[1];
-        v[1] = v[2];
-        v[2] = tmp;
-    }
-    return v;
-}
 
 /// Parametric heart curve. t in [0, 2π], result in [-2, 2] for x, roughly [-2.5, 1.5] for y.
 pub fn createHeartPos(t: f32) Vec2 {
@@ -61,7 +38,9 @@ pub fn breath(sec: f32, min: f32, max: f32) f32 {
     const e = std.math.e;
     const a = 1.0 / e;
     const b = e - a;
-    return (@exp(@sin(sec * 3.0 * std.math.pi)) - a) * (max - min) / b + min;
+    const s = (max - min) / b;
+    const exp_val = @exp(@sin(sec * 3.0 * std.math.pi));
+    return @mulAdd(f32, exp_val, s, min - a * s);
 }
 
 /// Linear interpolation: returns t * b / a.
@@ -129,14 +108,6 @@ test "Vec2.add" {
     try testing.expectApproxEqAbs(1.0, r.y, 1e-6);
 }
 
-test "Vec2.copy" {
-    var a = Vec2{ .x = 5.0, .y = 7.0 };
-    const b = a.copy();
-    a.x = 99.0;
-    try testing.expectApproxEqAbs(5.0, b.x, 1e-6);
-    try testing.expectApproxEqAbs(7.0, b.y, 1e-6);
-}
-
 test "createHeartPos at t=0" {
     const p = createHeartPos(0.0);
     try testing.expectApproxEqAbs(0.0, p.x, 1e-6);
@@ -185,9 +156,3 @@ test "font glyphs are 3-bit valid" {
     }
 }
 
-test "sortVerticesByY ordering" {
-    const sorted = sortVerticesByY(.{ 0, 10 }, .{ 0, 5 }, .{ 0, 0 });
-    try testing.expectEqual(@as(i32, 0), sorted[0][1]);
-    try testing.expectEqual(@as(i32, 5), sorted[1][1]);
-    try testing.expectEqual(@as(i32, 10), sorted[2][1]);
-}

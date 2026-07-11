@@ -86,17 +86,9 @@ pub const HeartSystem = struct {
             cp.immortal.size = size_val;
 
             if (spawn_frame) {
-                _ = particle.allocParticle(cp.immortal.pos.copy(), elapsed, .{ .size = particle.MAX_PARTICLE_SIZE * dpr });
+                _ = particle.allocParticle(cp.immortal.pos, elapsed, .{ .size = particle.MAX_PARTICLE_SIZE * dpr });
             }
         }
 
-        // Update only alive particles (avoids scanning dead slots).
-        particle.collectAlive();
-        const count = particle.alive_count;
-        const indices = particle.alive_indices[0..count];
-        for (indices) |idx| {
-            var p = &particle.particle_pool[idx];
-            p.update(elapsed, dpr);
-        }
     }
 };

@@ -58,8 +58,8 @@ pub const MeteorSystem = struct {
             var freed: usize = 0;
             var j: usize = 0;
             while (j < self.head_count and freed < need) : (j += 1) {
-                if (!self.heads[j].particle.immortal) {
-                    self.heads[j].particle.alive = false;
+                if (!self.heads[j].particle.flags.immortal) {
+                    self.heads[j].particle.flags.alive = false;
                     freed += 1;
                 }
             }
@@ -95,7 +95,7 @@ pub const MeteorSystem = struct {
         var i: usize = 0;
         while (i < self.head_count) : (i += 1) {
             const p = self.heads[i].particle;
-            if (!p.alive) continue;
+            if (!p.flags.alive) continue;
 
             p.pos.x += p.vel.x;
             p.pos.y += p.vel.y;
@@ -110,7 +110,7 @@ pub const MeteorSystem = struct {
             const min_dist = @min(@min(dist_left, dist_right), @min(dist_top, dist_bottom));
 
             if (min_dist <= 0) {
-                p.alive = false;
+                p.flags.alive = false;
                 continue;
             }
 
@@ -118,10 +118,10 @@ pub const MeteorSystem = struct {
             if (min_dist < fade_zone) {
                 head_fade = min_dist / fade_zone;
                 if (head_fade < 0.03) {
-                    p.alive = false;
+                    p.flags.alive = false;
                     continue;
                 }
-                p.immortal = false;
+                p.flags.immortal = false;
                 p.lifespan = head_fade * particle.MAX_LIFESPAN;
                 p.size = METEOR_SIZE * dpr * head_fade;
             }
@@ -149,7 +149,7 @@ pub const MeteorSystem = struct {
         var write: usize = 0;
         var read: usize = 0;
         while (read < self.head_count) : (read += 1) {
-            if (self.heads[read].particle.alive) {
+            if (self.heads[read].particle.flags.alive) {
                 if (write != read) {
                     self.heads[write] = self.heads[read];
                 }

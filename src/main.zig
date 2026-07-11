@@ -237,11 +237,14 @@ fn updateAndFillBuffers(w: f32, h: f32, elapsed: f32, dpr: f32) void {
         gs.days_text_buf[gs.days_text_len] = 0;
     }
 
-    // Physics
+    // Physics — spawn first, then scan + update once
     gs.heart.update(elapsed);
-    particle.collectAlive();
     if (gs.meteor_ready) {
         gs.meteor.update();
+    }
+    particle.collectAlive();
+    for (particle.alive_indices[0..particle.alive_count]) |idx| {
+        particle.particle_pool[idx].update(elapsed, dpr);
     }
 
     // Fill GPU instance buffer
@@ -254,7 +257,7 @@ fn updateAndFillBuffers(w: f32, h: f32, elapsed: f32, dpr: f32) void {
     for (alive) |idx| {
         const p = &particle.particle_pool[idx];
 
-        const max_alpha: f32 = if (p.immortal) 1.0 else business.scale(p.lifespan, particle.MAX_LIFESPAN, 200.0) / 255.0;
+        const max_alpha: f32 = if (p.flags.immortal) 1.0 else business.scale(p.lifespan, particle.MAX_LIFESPAN, 200.0) / 255.0;
         const display_size: f32 = business.scale(p.lifespan, particle.MAX_LIFESPAN, p.size);
 
         // Off-screen culling
