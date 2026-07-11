@@ -100,6 +100,9 @@ fi
 # Build
 # ============================================================
 
+echo "==> Cleaning previous build artifacts..."
+rm -rf "$PROJECT_DIR/zig-out" "$PROJECT_DIR/.zig-cache"
+
 echo "==> Building oayao for iOS Device (aarch64)..."
 zig build -Dtarget=aarch64-ios
 

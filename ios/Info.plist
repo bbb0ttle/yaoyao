@@ -38,6 +38,10 @@
 	<string>23F113</string>
 	<key>DTSDKName</key>
 	<string>iphoneos26.5</string>
+	<key>DTXcode</key>
+	<string>2606</string>
+	<key>DTXcodeBuild</key>
+	<string>17F113</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>MinimumOSVersion</key>
@@ -55,6 +59,8 @@
 	</array>
 	<key>UIStatusBarHidden</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 </dict>
