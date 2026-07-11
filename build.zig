@@ -271,17 +271,14 @@ fn createIosAppBundle(
     const sdk_root = iosSdkRoot(b, target);
     const developer_dir = xcodeDeveloperDir(b);
 
-    // Dynamically construct clang target triple from resolved target.
+    // Construct clang target triple from resolved target.
+    // Keep the deployment target at 12.0 (set at the top of build()) for
+    // maximum device compatibility. Only the architecture varies.
     const clang_arch: []const u8 = if (target.result.cpu.arch == .aarch64) "arm64" else @tagName(target.result.cpu.arch);
-    const ver = target.result.os.version_range.semver.min;
-    const min_ver = if (ver.major == 0 and ver.minor == 0 and ver.patch == 0)
-        std.SemanticVersion{ .major = 12, .minor = 0, .patch = 0 }
-    else
-        ver;
     const clang_target = if (target.result.abi == .simulator)
-        b.fmt("{s}-apple-ios{d}.{d}.{d}-simulator", .{ clang_arch, min_ver.major, min_ver.minor, min_ver.patch })
+        b.fmt("{s}-apple-ios12.0-simulator", .{clang_arch})
     else
-        b.fmt("{s}-apple-ios{d}.{d}.{d}", .{ clang_arch, min_ver.major, min_ver.minor, min_ver.patch });
+        b.fmt("{s}-apple-ios12.0", .{clang_arch});
 
     const script = b.fmt(
         \\set -e

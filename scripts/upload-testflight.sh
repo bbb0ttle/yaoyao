@@ -74,6 +74,29 @@ fi
 echo "==> Version: $APP_VERSION ($APP_BUILD_NUMBER)"
 
 # ============================================================
+# Xcode / SDK validation
+# ============================================================
+
+XCODE_VERSION="$(xcrun xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}')"
+XCODE_VERSION_FULL="$(xcrun xcodebuild -version 2>/dev/null)"
+SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || echo "0")"
+
+echo "==> Xcode $XCODE_VERSION, SDK $SDK_VERSION"
+
+# Check if this is genuinely a beta/preview Xcode (not just a new major version).
+if echo "$XCODE_VERSION_FULL" | grep -qi 'beta\|preview\|seed'; then
+    echo ""
+    echo "ERROR: You are using a beta/preview version of Xcode."
+    echo "App Store Connect requires a release or RC version of Xcode."
+    echo ""
+    echo "To fix:"
+    echo "  1. Install the release Xcode from the Mac App Store or"
+    echo "     https://developer.apple.com/download/applications/"
+    echo "  2. Set DEVELOPER_DIR in .env to point to the release Xcode"
+    exit 1
+fi
+
+# ============================================================
 # Build
 # ============================================================
 
