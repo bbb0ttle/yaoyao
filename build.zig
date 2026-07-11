@@ -9,10 +9,13 @@ pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
     const is_web = target.result.cpu.arch.isWasm();
 
-    // Override iOS deployment target: min 12.0, SDK 26.5 (required by App Store Connect)
+    // Override iOS deployment target: min 12.0, SDK 26.5 (required by App Store Connect).
+    // Must re-resolve the query so the version range is correctly embedded in the binary.
     if (target.result.os.tag == .ios) {
-        target.result.os.version_range.semver.min = .{ .major = 12, .minor = 0, .patch = 0 };
-        target.result.os.version_range.semver.max = .{ .major = 26, .minor = 5, .patch = 0 };
+        var query = target.query;
+        query.os_version_min = .{ .semver = .{ .major = 12, .minor = 0, .patch = 0 } };
+        query.os_version_max = .{ .semver = .{ .major = 26, .minor = 5, .patch = 0 } };
+        target = b.resolveTargetQuery(query);
     }
 
     const dep_sokol = b.dependency("sokol", .{});
@@ -66,20 +69,30 @@ pub fn build(b: *Build) !void {
     }
 
     if (!is_web) {
-        const exe = b.addExecutable(.{
-            .name = "oayao",
-            .root_module = app_mod,
-        });
-        exe.step.dependOn(shd_step);
-        const install = b.addInstallArtifact(exe, .{});
-        b.getInstallStep().dependOn(&install.step);
-
         if (target.result.os.tag == .ios) {
-            // Create .app bundle
-            const app_step = try createIosAppBundle(b, exe, target);
+            // Build static library; Apple's ld64 links the final binary in createIosAppBundle.
+            // This avoids Zig's LLD which lacks LC_ENCRYPTION_INFO, correct segment alignment,
+            // and proper SDK version embedding required by App Store Connect.
+            const lib = b.addLibrary(.{
+                .name = "oayao",
+                .root_module = app_mod,
+            });
+            lib.step.dependOn(shd_step);
+            const install = b.addInstallArtifact(lib, .{});
+            b.getInstallStep().dependOn(&install.step);
+
+            const app_step = try createIosAppBundle(b, lib, lib_sokol, target);
             const install_app = b.step("ios-app", "Build Oayao.app bundle for iOS");
             install_app.dependOn(app_step);
         } else {
+            const exe = b.addExecutable(.{
+                .name = "oayao",
+                .root_module = app_mod,
+            });
+            exe.step.dependOn(shd_step);
+            const install = b.addInstallArtifact(exe, .{});
+            b.getInstallStep().dependOn(&install.step);
+
             const run_cmd = b.addRunArtifact(exe);
             run_cmd.step.dependOn(&install.step);
             const run_step = b.step("run", "Run oayao on desktop");
@@ -140,8 +153,8 @@ fn buildSokolLib(
         "sokol_glue.c",  "sokol_fetch.c",
     };
 
-    const cflags_native_debug = [_][]const u8{ "-DIMPL", "-DSOKOL_METAL", "-ObjC", "-DSOKOL_DEBUG" };
-    const cflags_native_release = [_][]const u8{ "-DIMPL", "-DNDEBUG", "-DSOKOL_METAL", "-ObjC", "-DSOKOL_DEBUG" };
+    const cflags_native_debug = [_][]const u8{ "-DIMPL", "-DSOKOL_METAL", "-ObjC", "-DSOKOL_DEBUG", "-fno-sanitize=undefined" };
+    const cflags_native_release = [_][]const u8{ "-DIMPL", "-DNDEBUG", "-DSOKOL_METAL", "-ObjC", "-fno-sanitize=undefined" };
     const cflags_web_debug = [_][]const u8{ "-DIMPL", "-DSOKOL_GLES3", "-fno-sanitize=undefined" };
     const cflags_web_release = [_][]const u8{ "-DIMPL", "-DNDEBUG", "-DSOKOL_GLES3", "-fno-sanitize=undefined" };
 
@@ -201,35 +214,66 @@ fn iosSdkRoot(target: Build.ResolvedTarget) []const u8 {
     }
 }
 
-fn createIosAppBundle(b: *Build, exe: *Build.Step.Compile, target: Build.ResolvedTarget) !*Build.Step {
+fn createIosAppBundle(
+    b: *Build,
+    lib: *Build.Step.Compile,
+    lib_sokol: *Build.Step.Compile,
+    target: Build.ResolvedTarget,
+) !*Build.Step {
     const platform = if (target.result.abi == .simulator) "iphonesimulator" else "iphoneos";
+    const sdk_root = iosSdkRoot(target);
 
     const script = b.fmt(
         \\set -e
         \\APP="zig-out/Oayao.app"
         \\rm -rf "$APP"
         \\mkdir -p "$APP"
-        \\cp "$1" "$APP/Oayao"
-        \\cp "$2" "$APP/Info.plist"
-        \\cp "$3" "$APP/LaunchScreen.storyboard"
-        \\cp "$4" "$APP/PrivacyInfo.xcprivacy"
+        \\
+        \\# Link with Apple's ld64 via xcrun clang — produces correct LC_ENCRYPTION_INFO,
+        \\# segment alignment, SDK version, and PIE that App Store Connect requires.
+        \\# Zig's .a archives have misaligned Mach-O members; extract to temp .o files first.
+        \\A1="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+        \\A2="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+        \\O1="$(mktemp -d /tmp/oayao_o1.XXXXXX)"
+        \\O2="$(mktemp -d /tmp/oayao_o2.XXXXXX)"
+        \\trap 'rm -rf "$O1" "$O2"' EXIT
+        \\ sh -c 'cd "$1" && ar x "$2" 2>/dev/null; chmod 644 ./*.o 2>/dev/null' -- "$O1" "$A1" || true
+        \\ sh -c 'cd "$1" && ar x "$2" 2>/dev/null; chmod 644 ./*.o 2>/dev/null' -- "$O2" "$A2" || true
+        \\SDK_ROOT="{s}"
+        \\xcrun clang -target arm64-apple-ios12.0 \
+        \\  -isysroot "$SDK_ROOT" \
+        \\  -o "$APP/Oayao" \
+        \\  "$O1"/*.o "$O2"/*.o \
+        \\  -framework UIKit \
+        \\  -framework Metal \
+        \\  -framework QuartzCore \
+        \\  -framework Foundation \
+        \\  -framework CoreGraphics \
+        \\  -framework AudioToolbox \
+        \\  -framework AVFoundation \
+        \\  -fobjc-arc
+        \\
+        \\cp "$3" "$APP/Info.plist"
+        \\cp "$4" "$APP/LaunchScreen.storyboard"
+        \\cp "$5" "$APP/PrivacyInfo.xcprivacy"
         \\ACTOOL="/Applications/Xcode.app/Contents/Developer/usr/bin/actool"
         \\PLISTBUDDY="/usr/libexec/PlistBuddy"
         \\PARTIAL="/tmp/oayao_partial.plist"
-        \\"$ACTOOL" "$5" --compile "$APP" --platform {s} --minimum-deployment-target 12.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
+        \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 12.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
         \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
         \\rm -f "$PARTIAL"
         \\echo "Created Oayao.app bundle at zig-out/Oayao.app"
-    , .{platform});
+    , .{ sdk_root, platform });
 
     const cmd = b.addSystemCommand(&.{ "sh", "-c" });
     cmd.addArg(script);
     cmd.addArg("sh"); // $0
-    cmd.addArtifactArg(exe); // $1
-    cmd.addFileArg(b.path("ios/Info.plist")); // $2
-    cmd.addFileArg(b.path("ios/Oayao/LaunchScreen.storyboard")); // $3
-    cmd.addFileArg(b.path("ios/Oayao/PrivacyInfo.xcprivacy")); // $4
-    cmd.addDirectoryArg(b.path("ios/Oayao/Assets.xcassets")); // $5
+    cmd.addArtifactArg(lib); // $1 — liboayao.a
+    cmd.addArtifactArg(lib_sokol); // $2 — libsokol_clib.a
+    cmd.addFileArg(b.path("ios/Info.plist")); // $3
+    cmd.addFileArg(b.path("ios/Oayao/LaunchScreen.storyboard")); // $4
+    cmd.addFileArg(b.path("ios/Oayao/PrivacyInfo.xcprivacy")); // $5
+    cmd.addDirectoryArg(b.path("ios/Oayao/Assets.xcassets")); // $6
 
     return &cmd.step;
 }
