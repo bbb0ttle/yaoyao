@@ -5,6 +5,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
+# Use release Xcode for App Store submissions (beta Xcode builds are rejected).
+# Set DEVELOPER_DIR before building, or export it in .env.
+# Example: export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+if [ -z "$DEVELOPER_DIR" ]; then
+    DEFAULT_XCODE="/Applications/Xcode.app/Contents/Developer"
+    if [ -d "$DEFAULT_XCODE" ]; then
+        export DEVELOPER_DIR="$DEFAULT_XCODE"
+        echo "==> Using Xcode at $DEVELOPER_DIR"
+        echo "    (set DEVELOPER_DIR in .env to override)"
+    fi
+fi
+
 # Load .env file if present
 if [ -f "$PROJECT_DIR/.env" ]; then
     set -a
@@ -44,6 +56,24 @@ PROVISIONING_PROFILE="${PROVISIONING_PROFILE:-$HOME/Library/MobileDevice/Provisi
 ENTITLEMENTS="$PROJECT_DIR/ios/Oayao.entitlements"
 
 # ============================================================
+# Version & Build Number
+# ============================================================
+# APP_VERSION          — marketing version (e.g., "1.2.0"). Defaults to
+#                        CFBundleShortVersionString in Info.plist.
+# APP_BUILD_NUMBER     — integer build number. Defaults to auto-increment
+#                        via git commit count.
+
+# Default: read current version from Info.plist (before build overwrites it).
+CURRENT_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PROJECT_DIR/ios/Info.plist" 2>/dev/null || echo "1.1.0")"
+APP_VERSION="${APP_VERSION:-$CURRENT_VERSION}"
+
+if [ -z "$APP_BUILD_NUMBER" ]; then
+    APP_BUILD_NUMBER="$(git -C "$PROJECT_DIR" rev-list --count HEAD 2>/dev/null || echo "1")"
+    echo "==> Auto-incremented build number: $APP_BUILD_NUMBER"
+fi
+echo "==> Version: $APP_VERSION ($APP_BUILD_NUMBER)"
+
+# ============================================================
 # Build
 # ============================================================
 
@@ -57,6 +87,14 @@ if [ ! -d "zig-out/Oayao.app" ]; then
     echo "Error: Oayao.app bundle was not created."
     exit 1
 fi
+
+# ============================================================
+# Stamp version into the built .app
+# ============================================================
+
+echo "==> Stamping version $APP_VERSION ($APP_BUILD_NUMBER) into Info.plist..."
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" zig-out/Oayao.app/Info.plist
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_BUILD_NUMBER" zig-out/Oayao.app/Info.plist
 
 # ============================================================
 # Code Signing

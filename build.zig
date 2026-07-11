@@ -236,6 +236,13 @@ fn emSdkEnsureStep(b: *Build, emsdk: *Build.Dependency) *Build.Step {
 }
 
 fn xcodeDeveloperDir(b: *Build) []const u8 {
+    // Respect DEVELOPER_DIR env var (standard macOS convention) first,
+    // then fall back to xcode-select, then hardcoded default.
+    if (std.c.getenv("DEVELOPER_DIR")) |ptr| {
+        const slice = std.mem.sliceTo(ptr, 0);
+        return b.allocator.dupe(u8, slice) catch @panic("OOM");
+    }
+
     var exit_code: u8 = undefined;
     const result = b.runAllowFail(
         &.{ "xcode-select", "-p" },
