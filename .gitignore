@@ -3,6 +3,7 @@ zig-out/
 zig-cache/
 zig-pkg/
 .zig-cache/
+.env
 dist/
 .DS_store
 
@@ -11,3 +12,5 @@ ios/build/
 ios/Oayao.xcframework
 ios/Oayao.xcodeproj/xcuserdata
 ios/Oayao.xcodeproj/project.xcworkspace/xcuserdata
+
+.vite

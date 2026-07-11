@@ -5,8 +5,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
+# Load .env file if present
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a
+    source "$PROJECT_DIR/.env"
+    set +a
+fi
+
 # ============================================================
-# Configuration — set these via environment variables
+# Configuration — set these via .env or environment variables
 # ============================================================
 # Required:
 #   APP_STORE_KEY_ID     — App Store Connect API Key ID
