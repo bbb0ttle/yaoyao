@@ -5,7 +5,10 @@ zig-pkg/
 .zig-cache/
 .env
 dist/
-.DS_store
+.DS_Store
+
+.vite
+node_modules/
 
 # iOS build artifacts
 ios/build/

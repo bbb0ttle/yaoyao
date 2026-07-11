@@ -23,5 +23,6 @@
         "src",
         "src/shaders",
         "web",
+        "ios",
     },
 }

@@ -58,7 +58,7 @@ pub fn build(b: *Build) !void {
 
     // Add iOS SDK paths to the app module (needed for framework resolution at link time)
     if (target.result.os.tag == .ios) {
-        const sdk_root = iosSdkRoot(target);
+        const sdk_root = iosSdkRoot(b, target);
         const sdk_usr = b.fmt("{s}/usr", .{sdk_root});
         const sdk_fw = b.fmt("{s}/System/Library/Frameworks", .{sdk_root});
         const sdk_subfw = b.fmt("{s}/System/Library/SubFrameworks", .{sdk_root});
@@ -125,6 +125,36 @@ pub fn build(b: *Build) !void {
         const run_web = b.step("run-web", "Run oayao in browser");
         run_web.dependOn(&emrun.step);
     }
+
+    // --- Tests ---
+    const test_step = b.step("test", "Run unit tests");
+
+    const business_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/business.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const business_tests = b.addTest(.{ .root_module = business_mod });
+    const run_business_tests = b.addRunArtifact(business_tests);
+    test_step.dependOn(&run_business_tests.step);
+
+    const random_mod = b.createModule(.{
+        .root_source_file = b.path("src/random.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const random_tests = b.addTest(.{ .root_module = random_mod });
+    const run_random_tests = b.addRunArtifact(random_tests);
+    test_step.dependOn(&run_random_tests.step);
+
+    const particle_mod = b.createModule(.{
+        .root_source_file = b.path("src/Particle.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const particle_tests = b.addTest(.{ .root_module = particle_mod });
+    const run_particle_tests = b.addRunArtifact(particle_tests);
+    test_step.dependOn(&run_particle_tests.step);
 }
 
 fn buildSokolLib(
@@ -168,7 +198,7 @@ fn buildSokolLib(
         lib.step.dependOn(emsdk_install_step);
         mod.addSystemIncludePath(dep_emsdk.path("upstream/emscripten/cache/sysroot/include"));
     } else if (target.result.os.tag == .ios) {
-        const sdk_root = iosSdkRoot(target);
+        const sdk_root = iosSdkRoot(b, target);
         const sdk_usr = b.fmt("{s}/usr", .{sdk_root});
         const sdk_fw = b.fmt("{s}/System/Library/Frameworks", .{sdk_root});
         const sdk_subfw = b.fmt("{s}/System/Library/SubFrameworks", .{sdk_root});
@@ -205,12 +235,22 @@ fn emSdkEnsureStep(b: *Build, emsdk: *Build.Dependency) *Build.Step {
     return sokol_build.emSdkInstallStep(b, emsdk, .{});
 }
 
-fn iosSdkRoot(target: Build.ResolvedTarget) []const u8 {
-    const developer = "/Applications/Xcode.app/Contents/Developer";
+fn xcodeDeveloperDir(b: *Build) []const u8 {
+    var exit_code: u8 = undefined;
+    const result = b.runAllowFail(
+        &.{ "xcode-select", "-p" },
+        &exit_code,
+        .ignore,
+    ) catch return "/Applications/Xcode.app/Contents/Developer";
+    return std.mem.trimEnd(u8, result, "\n");
+}
+
+fn iosSdkRoot(b: *Build, target: Build.ResolvedTarget) []const u8 {
+    const developer = xcodeDeveloperDir(b);
     if (target.result.abi == .simulator) {
-        return developer ++ "/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk";
+        return b.fmt("{s}/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk", .{developer});
     } else {
-        return developer ++ "/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk";
+        return b.fmt("{s}/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk", .{developer});
     }
 }
 
@@ -221,7 +261,20 @@ fn createIosAppBundle(
     target: Build.ResolvedTarget,
 ) !*Build.Step {
     const platform = if (target.result.abi == .simulator) "iphonesimulator" else "iphoneos";
-    const sdk_root = iosSdkRoot(target);
+    const sdk_root = iosSdkRoot(b, target);
+    const developer_dir = xcodeDeveloperDir(b);
+
+    // Dynamically construct clang target triple from resolved target.
+    const clang_arch: []const u8 = if (target.result.cpu.arch == .aarch64) "arm64" else @tagName(target.result.cpu.arch);
+    const ver = target.result.os.version_range.semver.min;
+    const min_ver = if (ver.major == 0 and ver.minor == 0 and ver.patch == 0)
+        std.SemanticVersion{ .major = 12, .minor = 0, .patch = 0 }
+    else
+        ver;
+    const clang_target = if (target.result.abi == .simulator)
+        b.fmt("{s}-apple-ios{d}.{d}.{d}-simulator", .{ clang_arch, min_ver.major, min_ver.minor, min_ver.patch })
+    else
+        b.fmt("{s}-apple-ios{d}.{d}.{d}", .{ clang_arch, min_ver.major, min_ver.minor, min_ver.patch });
 
     const script = b.fmt(
         \\set -e
@@ -240,7 +293,7 @@ fn createIosAppBundle(
         \\ sh -c 'cd "$1" && ar x "$2" 2>/dev/null; chmod 644 ./*.o 2>/dev/null' -- "$O1" "$A1" || true
         \\ sh -c 'cd "$1" && ar x "$2" 2>/dev/null; chmod 644 ./*.o 2>/dev/null' -- "$O2" "$A2" || true
         \\SDK_ROOT="{s}"
-        \\xcrun clang -target arm64-apple-ios12.0 \
+        \\xcrun clang -target {s} \
         \\  -isysroot "$SDK_ROOT" \
         \\  -o "$APP/Oayao" \
         \\  "$O1"/*.o "$O2"/*.o \
@@ -256,14 +309,14 @@ fn createIosAppBundle(
         \\cp "$3" "$APP/Info.plist"
         \\cp "$4" "$APP/LaunchScreen.storyboard"
         \\cp "$5" "$APP/PrivacyInfo.xcprivacy"
-        \\ACTOOL="/Applications/Xcode.app/Contents/Developer/usr/bin/actool"
+        \\ACTOOL="{s}/usr/bin/actool"
         \\PLISTBUDDY="/usr/libexec/PlistBuddy"
         \\PARTIAL="/tmp/oayao_partial.plist"
         \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 12.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
         \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
         \\rm -f "$PARTIAL"
         \\echo "Created Oayao.app bundle at zig-out/Oayao.app"
-    , .{ sdk_root, platform });
+    , .{ sdk_root, clang_target, developer_dir, platform });
 
     const cmd = b.addSystemCommand(&.{ "sh", "-c" });
     cmd.addArg(script);

@@ -114,3 +114,80 @@ pub fn charIndex(c: u8) usize {
         else => 22,
     };
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+const testing = std.testing;
+
+test "Vec2.add" {
+    const a = Vec2{ .x = 1.0, .y = 2.0 };
+    const b = Vec2{ .x = 3.0, .y = -1.0 };
+    const r = a.add(b);
+    try testing.expectApproxEqAbs(4.0, r.x, 1e-6);
+    try testing.expectApproxEqAbs(1.0, r.y, 1e-6);
+}
+
+test "Vec2.copy" {
+    var a = Vec2{ .x = 5.0, .y = 7.0 };
+    const b = a.copy();
+    a.x = 99.0;
+    try testing.expectApproxEqAbs(5.0, b.x, 1e-6);
+    try testing.expectApproxEqAbs(7.0, b.y, 1e-6);
+}
+
+test "createHeartPos at t=0" {
+    const p = createHeartPos(0.0);
+    try testing.expectApproxEqAbs(0.0, p.x, 1e-6);
+    try testing.expectApproxEqAbs(-0.625, p.y, 1e-6);
+}
+
+test "createHeartPos at t=pi" {
+    const p = createHeartPos(std.math.pi);
+    try testing.expectApproxEqAbs(0.0, p.x, 1e-4);
+    try testing.expect(p.y > 0.0);
+}
+
+test "breath within bounds" {
+    for (0..100) |i| {
+        const t = @as(f32, @floatFromInt(i)) * 0.01;
+        const v = breath(t, 10.0, 20.0);
+        try testing.expect(v >= 10.0);
+        try testing.expect(v <= 20.0);
+    }
+}
+
+test "scale linear" {
+    try testing.expectApproxEqAbs(50.0, scale(100.0, 200.0, 100.0), 1e-6);
+    try testing.expectApproxEqAbs(0.0, scale(0.0, 200.0, 100.0), 1e-6);
+    try testing.expectApproxEqAbs(75.0, scale(150.0, 200.0, 100.0), 1e-6);
+}
+
+test "charIndex digits" {
+    for (0..10) |i| {
+        try testing.expectEqual(i, charIndex(@as(u8, @intCast('0' + i))));
+    }
+}
+
+test "charIndex special chars" {
+    try testing.expectEqual(@as(usize, 10), charIndex('.'));
+    try testing.expectEqual(@as(usize, 11), charIndex(' '));
+    try testing.expectEqual(@as(usize, 22), charIndex('?'));
+}
+
+test "font glyphs are 3-bit valid" {
+    for (FONT_3X5, 0..) |glyph, gi| {
+        for (glyph) |row| {
+            try testing.expect(row <= 0b111);
+        }
+        _ = gi;
+    }
+}
+
+test "sortVerticesByY ordering" {
+    const sorted = sortVerticesByY(.{ 0, 10 }, .{ 0, 5 }, .{ 0, 0 });
+    try testing.expectEqual(@as(i32, 0), sorted[0][1]);
+    try testing.expectEqual(@as(i32, 5), sorted[1][1]);
+    try testing.expectEqual(@as(i32, 10), sorted[2][1]);
+}

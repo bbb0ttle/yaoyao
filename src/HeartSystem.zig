@@ -99,5 +99,4 @@ pub const HeartSystem = struct {
             p.update(elapsed, dpr);
         }
     }
-
 };
