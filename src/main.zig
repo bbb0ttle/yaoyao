@@ -11,6 +11,7 @@ const particle = @import("Particle.zig");
 const HeartSystem = @import("HeartSystem.zig");
 const MeteorSystem = @import("MeteorSystem.zig");
 const Rgba = business.Rgba;
+const random = @import("random.zig");
 
 const MAX_PARTICLES = 5000;
 const MAX_INSTANCES = MAX_PARTICLES * 2; // stroke + fill per particle
@@ -415,11 +416,13 @@ export fn event(ev: [*c]const sapp.Event) void {
             if (gs.meteor_ready and gs.heart_ready) {
                 const t = ev.*.touches[0];
                 meteorFromHeart(t.pos_x, t.pos_y);
+                spawnBurst(t.pos_x, t.pos_y);
             }
         },
         .MOUSE_DOWN => {
             if (gs.meteor_ready and gs.heart_ready) {
                 meteorFromHeart(ev.*.mouse_x, ev.*.mouse_y);
+                spawnBurst(ev.*.mouse_x, ev.*.mouse_y);
             }
         },
         .RESIZED => {
@@ -436,6 +439,24 @@ fn meteorFromHeart(target_x: f32, target_y: f32) void {
         spawns[i] = cp.immortal.pos;
     }
     gs.meteor.falling(target_x, target_y, gs.heart.cx, gs.heart.cy, spawns[0..]);
+}
+
+fn spawnBurst(x: f32, y: f32) void {
+    const dpr = gs.dpr;
+    const count: usize = @intFromFloat(random.randomRange(25.0, 45.0));
+
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        const p = particle.allocParticle(
+            business.Vec2{ .x = x, .y = y },
+            0,
+            .{ .size = random.randomRange(5.0, 10.0) * dpr },
+        );
+        p.vel.x = random.randomRange(-1.0, 1.0) * dpr;
+        p.vel.y = random.randomRange(-1.5, 2.5) * dpr;
+        p.acc.y = 0.2;
+        p.lifespan = random.randomRange(80.0, 120.0);
+    }
 }
 
 pub fn main() void {
