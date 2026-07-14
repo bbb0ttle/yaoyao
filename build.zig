@@ -129,32 +129,14 @@ pub fn build(b: *Build) !void {
     // --- Tests ---
     const test_step = b.step("test", "Run unit tests");
 
-    const business_mod = b.createModule(.{
-        .root_source_file = b.path("src/core/business.zig"),
+    const tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const business_tests = b.addTest(.{ .root_module = business_mod });
-    const run_business_tests = b.addRunArtifact(business_tests);
-    test_step.dependOn(&run_business_tests.step);
-
-    const random_mod = b.createModule(.{
-        .root_source_file = b.path("src/random.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const random_tests = b.addTest(.{ .root_module = random_mod });
-    const run_random_tests = b.addRunArtifact(random_tests);
-    test_step.dependOn(&run_random_tests.step);
-
-    const particle_mod = b.createModule(.{
-        .root_source_file = b.path("src/Particle.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const particle_tests = b.addTest(.{ .root_module = particle_mod });
-    const run_particle_tests = b.addRunArtifact(particle_tests);
-    test_step.dependOn(&run_particle_tests.step);
+    const tests = b.addTest(.{ .root_module = tests_mod });
+    const run_tests = b.addRunArtifact(tests);
+    test_step.dependOn(&run_tests.step);
 }
 
 fn buildSokolLib(

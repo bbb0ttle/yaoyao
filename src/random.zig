@@ -1,16 +1,22 @@
-var rng_state: u64 = 12345;
+pub const Rng = struct {
+    state: u64,
 
-pub fn randomRange(lo: f32, hi: f32) f32 {
-    rng_state = rng_state *% 6364136223846793005 +% 1442695040888963407;
-    const r = @as(f32, @floatFromInt((rng_state >> 33) & 0x7FFFFFFF)) / @as(f32, @floatFromInt(0x7FFFFFFF));
-    return lo + (hi - lo) * r;
-}
+    pub fn init(seed: u64) Rng {
+        return Rng{ .state = seed };
+    }
 
-pub fn randomIndex(n: usize) usize {
-    rng_state = rng_state *% 6364136223846793005 +% 1442695040888963407;
-    const r = (rng_state >> 33) & 0x7FFFFFFF;
-    return @intCast(r % n);
-}
+    pub fn random_range(self: *Rng, lo: f32, hi: f32) f32 {
+        self.state = self.state *% 6364136223846793005 +% 1442695040888963407;
+        const r = @as(f32, @floatFromInt((self.state >> 33) & 0x7FFFFFFF)) / @as(f32, @floatFromInt(0x7FFFFFFF));
+        return lo + (hi - lo) * r;
+    }
+
+    pub fn random_index(self: *Rng, n: usize) usize {
+        self.state = self.state *% 6364136223846793005 +% 1442695040888963407;
+        const r = (self.state >> 33) & 0x7FFFFFFF;
+        return @intCast(r % n);
+    }
+};
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -18,27 +24,27 @@ pub fn randomIndex(n: usize) usize {
 
 const testing = @import("std").testing;
 
-test "randomRange within bounds" {
-    const lo: f32 = 10.0;
-    const hi: f32 = 20.0;
+test "random_range within bounds" {
+    var rng = Rng.init(12345);
     for (0..100) |_| {
-        const v = randomRange(lo, hi);
-        try testing.expect(v >= lo);
-        try testing.expect(v < hi);
+        const v = rng.random_range(10.0, 20.0);
+        try testing.expect(v >= 10.0);
+        try testing.expect(v < 20.0);
     }
 }
 
-test "randomIndex within bounds" {
+test "random_index within bounds" {
+    var rng = Rng.init(12345);
     for (0..50) |_| {
-        const v = randomIndex(7);
+        const v = rng.random_index(7);
         try testing.expect(v < 7);
     }
 }
 
 test "random deterministic sequence" {
-    rng_state = 12345;
-    const a = randomRange(0.0, 1.0);
-    rng_state = 12345;
-    const b = randomRange(0.0, 1.0);
+    var a_rng = Rng.init(12345);
+    const a = a_rng.random_range(0.0, 1.0);
+    var b_rng = Rng.init(12345);
+    const b = b_rng.random_range(0.0, 1.0);
     try testing.expectApproxEqAbs(a, b, 1e-6);
 }
