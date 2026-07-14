@@ -21,7 +21,7 @@ jobs:
 
       - uses: mlugg/setup-zig@v1
         with:
-          version: 0.14.0
+          version: 0.17.0-dev.1099+7db2ef610
 
       - name: setup pnpm
         uses: pnpm/action-setup@v4
@@ -36,19 +36,6 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install --no-frozen-lockfile
-        shell: bash
-
-      - name: Fetch Zig dependencies (expected to fail on sokol)
-        run: zig build web -Dtarget=wasm32-emscripten || true
-
-      - name: Patch sokol for Zig 0.14 (appendBounded removed)
-        run: |
-          SOKOL_BUILD=$(find /home/runner/.cache/zig/p -name 'build.zig' -path '*sokol*' 2>/dev/null | head -1)
-          if [ -n "$SOKOL_BUILD" ]; then
-            sed -i 's/\.appendBounded(/.appendAssumeCapacity(/g' "$SOKOL_BUILD"
-            sed -i 's/try \([a-zA-Z0-9_.]*\)\.appendAssumeCapacity(/\1.appendAssumeCapacity(/g' "$SOKOL_BUILD"
-            echo "Patched $SOKOL_BUILD"
-          fi
         shell: bash
 
       - name: Build WASM
