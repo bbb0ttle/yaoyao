@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+    <title>oayao</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script>
+      var wasmReadyResolve;
+      window.wasmReady = new Promise(function(resolve) {
+        wasmReadyResolve = resolve;
+      });
+      var Module = {
+        onRuntimeInitialized: function() {
+          wasmReadyResolve(Module);
+        }
+      };
+    </script>
+    <script src="/oayao.js"></script>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="forecast"></div>
+    <script type="module" src="/main.ts"></script>
+</body>
+</html>

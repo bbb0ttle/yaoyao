@@ -10,7 +10,7 @@ const App = @import("app.zig").App;
 var g_app: ?*App = null;
 
 export fn init() void {
-    const app = App.init(std.heap.page_allocator) catch @panic("OOM");
+    const app = App.init(std.heap.c_allocator) catch @panic("OOM");
     g_app = app;
 }
 
@@ -57,6 +57,12 @@ export fn event(ev: [*c]const sapp.Event) void {
             app.handle_resize();
         },
         else => {},
+    }
+}
+
+export fn trigger_meteor_shower(x: f32, y: f32) void {
+    if (g_app) |app| {
+        app.handle_click(x, y);
     }
 }
 

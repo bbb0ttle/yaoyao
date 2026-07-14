@@ -1,0 +1,59 @@
+name: GitHub Pages
+
+on:
+  push:
+    branches:
+      - iOS
+  pull_request:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --no-frozen-lockfile
+        shell: bash
+
+      - name: Build WASM
+        run: zig build web -Dtarget=wasm32-emscripten
+
+      - name: Copy WASM artifacts
+        run: mkdir -p web/public && cp zig-out/web/oayao.js zig-out/web/oayao.wasm web/public/
+
+      - name: Build frontend
+        run: npx vite build
+
+      - name: Generate CNAME
+        run: echo "yaoyao.bbki.ng" > ./dist/CNAME
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        if: ${{ github.ref == 'refs/heads/iOS' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true

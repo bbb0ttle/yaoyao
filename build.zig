@@ -114,7 +114,7 @@ pub fn build(b: *Build) !void {
             .use_emmalloc = true,
             .use_filesystem = false,
             .shell_file_path = b.path("web/shell.html"),
-            .extra_args = &.{"-sSTACK_SIZE=512KB"},
+            .extra_args = &.{ "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower']" },
         });
 
         const web_step = b.step("web", "Build oayao for web");

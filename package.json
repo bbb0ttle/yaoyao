@@ -1,0 +1,17 @@
+{
+  "name": "oayao",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "pnpm build:zig && vite build",
+    "build:zig": "zig build web -Dtarget=wasm32-emscripten && mkdir -p web/public && cp zig-out/web/oayao.js zig-out/web/oayao.wasm web/public/",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0"
+  }
+}
