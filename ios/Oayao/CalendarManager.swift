@@ -38,17 +38,44 @@ import UIKit
 
     // MARK: - Calendar
 
+    /// Resolve a single canonical "oayao" calendar.
+    /// When multiple calendars share the title (self-created + shared subscriptions),
+    /// only one is kept — preferring a writable local calendar.
+    /// If no writable calendar exists, a new local one is created.
     private func findOrCreateCalendar(completion: @escaping (Bool) -> Void) {
+        resolveCanonicalCalendar(completion: completion)
+    }
+
+    @objc private func handleEventStoreChanged() {
+        guard hasAccess else { return }
+        resolveCanonicalCalendar { _ in }
+        syncAllEvents()
+    }
+
+    private func resolveCanonicalCalendar(completion: @escaping (Bool) -> Void) {
         let allCalendars = eventStore.calendars(for: .event).filter { $0.title == "oayao" }
 
-        if !allCalendars.isEmpty {
-            oayaoCalendars = allCalendars
-            writableCalendar = allCalendars.first(where: { calendarWritable($0) })
+        // Prefer a writable local calendar, then any writable, then any existing
+        let canonical = allCalendars.first(where: { $0.source.sourceType == .local && calendarWritable($0) })
+            ?? allCalendars.first(where: { calendarWritable($0) })
+            ?? allCalendars.first
+
+        if let canonical = canonical {
+            oayaoCalendars = [canonical]
+            writableCalendar = calendarWritable(canonical) ? canonical : nil
+            if writableCalendar == nil {
+                createLocalCalendar(completion: completion)
+                return
+            }
             syncAllEvents()
             completion(true)
             return
         }
 
+        createLocalCalendar(completion: completion)
+    }
+
+    private func createLocalCalendar(completion: @escaping (Bool) -> Void) {
         let calendar = EKCalendar(for: .event, eventStore: eventStore)
         calendar.title = "oayao"
         calendar.cgColor = UIColor.systemPink.cgColor
@@ -68,18 +95,6 @@ import UIKit
             print("[Oayao] Failed to create calendar: \(error)")
             completion(false)
         }
-    }
-
-    @objc private func handleEventStoreChanged() {
-        guard hasAccess else { return }
-        refreshCalendars()
-        syncAllEvents()
-    }
-
-    private func refreshCalendars() {
-        let allCalendars = eventStore.calendars(for: .event).filter { $0.title == "oayao" }
-        oayaoCalendars = allCalendars
-        writableCalendar = allCalendars.first(where: { calendarWritable($0) })
     }
 
     private func calendarWritable(_ calendar: EKCalendar) -> Bool {
