@@ -1,5 +1,6 @@
 // Particle instancing shader — heart/diamond SDF point sprites.
-// One shader for both stroke (drawn first) and fill (drawn second) passes.
+// Single-instance stroke+fill: stroke and fill are composited in the fragment
+// shader from one GpuInstance, avoiding the double-instance overdraw.
 
 @vs vs_particle
 layout(binding=0) uniform vs_params {
@@ -9,67 +10,91 @@ layout(binding=0) uniform vs_params {
 // Static quad corners: (0,0), (1,0), (0,1), (1,1)
 in vec2 quad_corner;
 
-// Per-instance data (see GpuInstance in main.zig):
-// x, y: world position of particle center
-// size: display radius in pixels
-// color: packed RGBA (normalized to [0,1])
-// shape: 0.0 = diamond, 1.0 = heart
+// Per-instance data (see GpuInstance in gpu_state.zig):
+// offset  0: vec2  inst_pos          — particle center in world pixels
+// offset  8: float inst_stroke_size   — outer radius (display_size + stroke_width)
+// offset 12: float inst_fill_size     — inner fill radius (display_size)
+// offset 16: float inst_stroke_a      — stroke alpha
+// offset 20: float inst_fill_a        — fill alpha
+// offset 24: float inst_shape         — 0=diamond, 1=heart, 2=square
 in vec2 inst_pos;
-in float inst_size;
-in vec4 inst_color;
+in float inst_stroke_size;
+in float inst_fill_size;
+in float inst_stroke_a;
+in float inst_fill_a;
 in float inst_shape;
 
-out vec2 v_uv;       // local quad coordinate [-1, 1]
-out vec4 v_color;    // per-instance color
-out float v_size;    // particle size for AA calculation
-out float v_shape;   // shape selector
+out vec2 v_uv;
+out float v_stroke_size;
+out float v_fill_size;
+out float v_stroke_a;
+out float v_fill_a;
+out float v_shape;
 
 void main() {
-    // quad_corner in [0,1], scale to [-1,1] for SDF evaluation
     vec2 local = (quad_corner - 0.5) * 2.0;
-    vec2 world = local * inst_size + inst_pos;
+    // Quad covers the larger stroke extent so it encloses both stroke and fill
+    vec2 world = local * inst_stroke_size + inst_pos;
     gl_Position = mvp * vec4(world, 0.0, 1.0);
-    v_uv = local;
-    v_color = inst_color;
-    v_size = inst_size;
+    v_uv = local;  // [-1, 1] in stroke-size world space
+    v_stroke_size = inst_stroke_size;
+    v_fill_size = inst_fill_size;
+    v_stroke_a = inst_stroke_a;
+    v_fill_a = inst_fill_a;
     v_shape = inst_shape;
 }
 @end
 
 @fs fs_particle
+layout(binding=1) uniform fs_params {
+    vec4 fill_color;
+    vec4 stroke_color;
+};
+
 in vec2 v_uv;
-in vec4 v_color;
-in float v_size;
+in float v_stroke_size;
+in float v_fill_size;
+in float v_stroke_a;
+in float v_fill_a;
 in float v_shape;
 out vec4 frag_color;
 
-void main() {
-    float d;
-
-    if (v_shape < 0.5) {
+float eval_sdf(vec2 uv, float shape) {
+    if (shape < 0.5) {
         // Diamond SDF: |x| + |y| <= 1
-        d = 1.0 - (abs(v_uv.x) + abs(v_uv.y));
-    } else if (v_shape < 1.5) {
-        // Heart SDF. Scale x to keep lobes inside the quad (the algebraic
-        // curve naturally reaches x ≈ ±1.12 at y ≈ 0.5).
-        // Scale y to compress vertically for a slimmer, more elegant shape
-        // closer to the Bezier-heart proportions from the main branch.
-        // y is flipped because ortho(0,w,h,0) maps local-up → screen-down.
-        float x = v_uv.x * 1.35;
-        float y = (-v_uv.y + 0.25) * 1.32;
+        return 1.0 - (abs(uv.x) + abs(uv.y));
+    } else if (shape < 1.5) {
+        // Heart SDF (algebraic curve)
+        float x = uv.x * 1.35;
+        float y = (-uv.y + 0.25) * 1.32;
         float x2 = x * x;
         float y2 = y * y;
         float h = x2 + y2 - 1.0;
-        d = -(h * h * h - x2 * y2 * y);
+        return -(h * h * h - x2 * y2 * y);
     } else {
-        // Filled square for text pixels — fully opaque, crisp edges.
-        d = 2.0;
+        // Filled square for text pixels — fully opaque
+        return 2.0;
     }
+}
 
-    // Anti-aliased edge: smoothstep over 1 pixel width
-    float edge = 1.0 / max(v_size, 0.5);
-    float alpha = smoothstep(-edge, edge, d) * v_color.a;
-    frag_color = vec4(v_color.rgb, alpha);
+void main() {
+    // Stroke SDF at stroke scale (v_uv is already in stroke-local space)
+    float d_stroke = eval_sdf(v_uv, v_shape);
+    float stroke_aa = 1.0 / max(v_stroke_size, 0.5);
+    float sa = smoothstep(-stroke_aa, stroke_aa, d_stroke) * v_stroke_a;
+
+    // Fill SDF at fill scale — scale v_uv so fill boundary aligns with unit circle
+    float fill_ratio = v_fill_size / max(v_stroke_size, 0.5);
+    vec2 fill_uv = v_uv / fill_ratio;
+    float d_fill = eval_sdf(fill_uv, v_shape);
+    float fill_aa = 1.0 / max(v_fill_size, 0.5);
+    float fa = smoothstep(-fill_aa, fill_aa, d_fill) * v_fill_a;
+
+    // Composite: fill over stroke (matches original two-pass alpha blending)
+    float combined_a = fa + sa * (1.0 - fa);
+    vec3 combined_rgb = (fill_color.rgb * fa + stroke_color.rgb * sa * (1.0 - fa))
+                      / max(combined_a, 0.001);
+    frag_color = vec4(combined_rgb, combined_a);
 }
 @end
 

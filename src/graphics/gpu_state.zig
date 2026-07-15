@@ -2,6 +2,7 @@ const sokol = @import("sokol");
 const sg = sokol.gfx;
 const shd = @import("../shaders/particle.glsl.zig");
 const backend = @import("../platform/backend.zig");
+const Rgba = @import("../core/types.zig").Rgba;
 
 pub const MAX_INSTANCES: u32 = 10000;
 pub const STROKE_WIDTH: f32 = 2.0;
@@ -9,11 +10,10 @@ pub const STROKE_WIDTH: f32 = 2.0;
 pub const GpuInstance = extern struct {
     pos_x: f32,
     pos_y: f32,
-    size: f32,
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
+    stroke_size: f32,
+    fill_size: f32,
+    stroke_a: f32,
+    fill_a: f32,
     shape: f32,
 };
 
@@ -77,9 +77,11 @@ pub const GpuState = struct {
                 l.buffers[1].step_func = .PER_INSTANCE;
                 l.buffers[1].step_rate = 1;
                 l.attrs[shd.ATTR_particle_inst_pos] = .{ .format = .FLOAT2, .offset = 0, .buffer_index = 1 };
-                l.attrs[shd.ATTR_particle_inst_size] = .{ .format = .FLOAT, .offset = 8, .buffer_index = 1 };
-                l.attrs[shd.ATTR_particle_inst_color] = .{ .format = .FLOAT4, .offset = 12, .buffer_index = 1 };
-                l.attrs[shd.ATTR_particle_inst_shape] = .{ .format = .FLOAT, .offset = 28, .buffer_index = 1 };
+                l.attrs[shd.ATTR_particle_inst_stroke_size] = .{ .format = .FLOAT, .offset = 8, .buffer_index = 1 };
+                l.attrs[shd.ATTR_particle_inst_fill_size] = .{ .format = .FLOAT, .offset = 12, .buffer_index = 1 };
+                l.attrs[shd.ATTR_particle_inst_stroke_a] = .{ .format = .FLOAT, .offset = 16, .buffer_index = 1 };
+                l.attrs[shd.ATTR_particle_inst_fill_a] = .{ .format = .FLOAT, .offset = 20, .buffer_index = 1 };
+                l.attrs[shd.ATTR_particle_inst_shape] = .{ .format = .FLOAT, .offset = 24, .buffer_index = 1 };
                 break :init l;
             },
             .index_type = .UINT16,
@@ -121,6 +123,20 @@ pub const GpuState = struct {
     pub fn render(self: *GpuState, w: f32, h: f32) void {
         const mvp = _ortho(0, w, h, 0);
         const vs_params = shd.VsParams{ .mvp = mvp };
+        const fs_params = shd.FsParams{
+            .fill_color = [_]f32{
+                @as(f32, @floatFromInt(Rgba.heart_fill.r)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.heart_fill.g)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.heart_fill.b)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.heart_fill.a)) / 255.0,
+            },
+            .stroke_color = [_]f32{
+                @as(f32, @floatFromInt(Rgba.heart_stroke.r)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.heart_stroke.g)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.heart_stroke.b)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.heart_stroke.a)) / 255.0,
+            },
+        };
 
         const sglue = @import("sokol").glue;
         sg.beginPass(.{ .action = self.pass_action, .swapchain = sglue.swapchain() });
@@ -128,6 +144,7 @@ pub const GpuState = struct {
             sg.applyPipeline(self.pip);
             sg.applyBindings(self.bind);
             sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
             sg.draw(0, 6, @intCast(self.instance_count));
         }
         sg.endPass();

@@ -3,8 +3,6 @@ const GpuState = @import("gpu_state.zig").GpuState;
 const MAX_INSTANCES = @import("gpu_state.zig").MAX_INSTANCES;
 const STROKE_WIDTH = @import("gpu_state.zig").STROKE_WIDTH;
 
-const Vec2 = @import("../core/types.zig").Vec2;
-const Rgba = @import("../core/types.zig").Rgba;
 const math = @import("../core/math.zig");
 const font = @import("../core/font.zig");
 const ParticlePool = @import("../particles/pool.zig").ParticlePool;
@@ -45,11 +43,6 @@ pub fn fill_text_instances(
 
     var inst_count = start_inst;
 
-    const color = Rgba.white;
-    const r: f32 = @as(f32, @floatFromInt(color.r)) / 255.0;
-    const g: f32 = @as(f32, @floatFromInt(color.g)) / 255.0;
-    const b: f32 = @as(f32, @floatFromInt(color.b)) / 255.0;
-
     for (days_text_buf[0..days_text_len], 0..) |ch, ci| {
         const char_idx = font.char_index(ch);
         if (char_idx >= font.FONT_3X5.len) continue;
@@ -70,11 +63,10 @@ pub fn fill_text_instances(
                 gpu.write_instance(inst_count, .{
                     .pos_x = cx + @as(f32, @floatFromInt(col)) * pixel_size * 2.0 + pixel_size,
                     .pos_y = text_y + @as(f32, @floatFromInt(row)) * pixel_size * 2.0 + pixel_size,
-                    .size = pixel_size,
-                    .r = r,
-                    .g = g,
-                    .b = b,
-                    .a = 1.0,
+                    .stroke_size = pixel_size,
+                    .fill_size = pixel_size,
+                    .stroke_a = 0.0,
+                    .fill_a = 1.0,
                     .shape = 2.0,
                 });
                 inst_count += 1;
@@ -110,43 +102,22 @@ pub fn fill_particle_instances(
         if (p.pos.x + radius < 0.0 or p.pos.x - radius >= w or
             p.pos.y + radius < 0.0 or p.pos.y - radius >= h) continue;
 
-        const fill_radius = display_size;
+        if (inst_count >= cap) continue;
+
         const fill_alpha = max_alpha * t;
-        const stroke_radius = display_size + stroke_width;
         const stroke_alpha = @min(1.0, p.lifespan / 255.0) * t;
+        const shape: f32 = if (display_size + stroke_width < 8.0) 0.0 else 1.0;
 
-        const fill_shape: f32 = if (display_size < 8.0) 0.0 else 1.0;
-        const stroke_shape: f32 = if (display_size + stroke_width < 8.0) 0.0 else 1.0;
-
-        if (stroke_alpha > 10.0 / 255.0 and inst_count < cap) {
-            const sc = Rgba.heart_stroke;
-            gpu.write_instance(inst_count, .{
-                .pos_x = p.pos.x,
-                .pos_y = p.pos.y,
-                .size = stroke_radius,
-                .r = @as(f32, @floatFromInt(sc.r)) / 255.0,
-                .g = @as(f32, @floatFromInt(sc.g)) / 255.0,
-                .b = @as(f32, @floatFromInt(sc.b)) / 255.0,
-                .a = stroke_alpha,
-                .shape = stroke_shape,
-            });
-            inst_count += 1;
-        }
-
-        if (fill_alpha > 0.0 and inst_count < cap) {
-            const fc = Rgba.heart_fill;
-            gpu.write_instance(inst_count, .{
-                .pos_x = p.pos.x,
-                .pos_y = p.pos.y,
-                .size = fill_radius,
-                .r = @as(f32, @floatFromInt(fc.r)) / 255.0,
-                .g = @as(f32, @floatFromInt(fc.g)) / 255.0,
-                .b = @as(f32, @floatFromInt(fc.b)) / 255.0,
-                .a = fill_alpha,
-                .shape = fill_shape,
-            });
-            inst_count += 1;
-        }
+        gpu.write_instance(inst_count, .{
+            .pos_x = p.pos.x,
+            .pos_y = p.pos.y,
+            .stroke_size = display_size + stroke_width,
+            .fill_size = display_size,
+            .stroke_a = if (stroke_alpha > 10.0 / 255.0) stroke_alpha else 0.0,
+            .fill_a = if (fill_alpha > 0.0) fill_alpha else 0.0,
+            .shape = shape,
+        });
+        inst_count += 1;
     }
 
     return inst_count;

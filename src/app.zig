@@ -10,7 +10,7 @@ const MeteorSystem = @import("systems/meteor_system.zig").MeteorSystem;
 const Rng = @import("random.zig").Rng;
 const Vec2 = @import("core/types.zig").Vec2;
 
-const POOL_CAPACITY: usize = 5000;
+const POOL_CAPACITY: usize = 10000;
 
 pub const App = struct {
     gpu: GpuState,
