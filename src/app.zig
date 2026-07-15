@@ -199,15 +199,14 @@ pub const App = struct {
         const dest_x = self.rng.random_range(w * 0.3, w * 0.7);
         const dest_y = self.rng.random_range(h * 0.55, h * 0.65);
 
-        const start_x = w + 40.0 * dpr;
-        const start_y = -20.0 * dpr;
-
-        const dx = dest_x - start_x;
-        const dy = dest_y - start_y;
-        const len = @sqrt(dx * dx + dy * dy);
         const speed = meteor_sys.METEOR_SPEED * dpr;
-        const vx = dx / len * speed;
-        const vy = dy / len * speed;
+        const angle = std.math.atan2(h, w);
+        const vx = -@cos(angle) * speed;
+        const vy = @sin(angle) * speed;
+
+        const start_x = w + 40.0 * dpr;
+        const t = (start_x - dest_x) / (-vx);
+        const start_y = dest_y - vy * t;
 
         const particle = self.pool.alloc_particle(
             Vec2{ .x = start_x, .y = start_y },

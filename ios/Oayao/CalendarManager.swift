@@ -86,14 +86,14 @@ import UIKit
 
     private func syncAllEvents() {
         guard let calendar = oayaoCalendar else { return }
-        let start = Date.distantPast
-        let end = Date.distantFuture
+        let today = Date()
+        let startOfDay = Calendar.current.startOfDay(for: today)
+        let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)!
         let predicate = eventStore.predicateForEvents(
-            withStart: start, end: end, calendars: [calendar]
+            withStart: startOfDay, end: endOfDay, calendars: [calendar]
         )
         let events = eventStore.events(matching: predicate)
 
-        // Rebuild: spawn hearts for all events
         for event in events {
             oayao_spawn_heart(event.eventIdentifier)
         }
