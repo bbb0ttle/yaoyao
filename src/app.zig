@@ -171,7 +171,10 @@ pub const App = struct {
 
     pub fn handle_click(self: *App, x: f32, y: f32) void {
         if (!self.meteor_ready or !self.heart_ready) return;
-        if (self._handle_heart_tap(x, y)) return;
+        if (self._handle_heart_tap(x, y)) {
+            self._spawn_burst(x, y);
+            return;
+        }
         self._meteor_from_heart(x, y);
         self._spawn_burst(x, y);
     }
@@ -196,8 +199,23 @@ pub const App = struct {
         @memcpy(id_dup[0..event_id.len], event_id);
         errdefer self.allocator.free(id_dup);
 
-        const dest_x = self.rng.random_range(w * 0.3, w * 0.7);
-        const dest_y = self.rng.random_range(h * 0.55, h * 0.65);
+        const min_dist = MAX_PARTICLE_SIZE * dpr * 3.0;
+        var dest_x: f32 = undefined;
+        var dest_y: f32 = undefined;
+        var attempt: usize = 0;
+        while (attempt < 20) : (attempt += 1) {
+            const dx = self.rng.random_range(w * 0.25, w * 0.75);
+            const dy = self.rng.random_range(h * 0.52, h * 0.68);
+            if (!self._overlaps_existing(dx, dy, min_dist)) {
+                dest_x = dx;
+                dest_y = dy;
+                break;
+            }
+        }
+        if (attempt >= 20) {
+            dest_x = self.rng.random_range(w * 0.25, w * 0.75);
+            dest_y = self.rng.random_range(h * 0.52, h * 0.68);
+        }
 
         const speed = meteor_sys.METEOR_SPEED * dpr;
         const angle = std.math.atan2(h, w);
@@ -208,10 +226,11 @@ pub const App = struct {
         const t = (start_x - dest_x) / (-vx);
         const start_y = dest_y - vy * t;
 
+        const meteor_size = meteor_sys.METEOR_SIZE * dpr * self.rng.random_range(0.5, 1.0);
         const particle = self.pool.alloc_particle(
             Vec2{ .x = start_x, .y = start_y },
             elapsed,
-            .{ .immortal = true, .meteor = true, .size = meteor_sys.METEOR_SIZE * dpr },
+            .{ .immortal = true, .meteor = true, .size = meteor_size },
             &self.rng,
         );
         particle.vel.x = vx;
@@ -251,6 +270,23 @@ pub const App = struct {
                 self.heart_tap_callback.?(key);
                 return true;
             }
+        }
+        return false;
+    }
+
+    fn _overlaps_existing(self: *App, x: f32, y: f32, min_dist: f32) bool {
+        var it = self.calendar_hearts.iterator();
+        while (it.next()) |entry| {
+            const p = entry.value_ptr.*;
+            if (!p.is_alive()) continue;
+            const dx = x - p.pos.x;
+            const dy = y - p.pos.y;
+            if (@sqrt(dx * dx + dy * dy) < min_dist) return true;
+        }
+        for (self.calendar_meteors.items) |cm| {
+            const dx = x - cm.target_x;
+            const dy = y - cm.target_y;
+            if (@sqrt(dx * dx + dy * dy) < min_dist) return true;
         }
         return false;
     }
@@ -385,6 +421,7 @@ pub const App = struct {
         p.flags.floating = true;
         p.flags.beat = true;
         p.set_birth_sec(elapsed);
+        p.size_scale = self.rng.random_range(0.55, 1.0);
         p.size = MAX_PARTICLE_SIZE * self.dpr;
         p.vel.x = self.rng.random_range(-0.5, 0.5) * self.dpr;
         p.vel.y = self.rng.random_range(-2.5, -1.5) * self.dpr;

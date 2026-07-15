@@ -29,6 +29,7 @@ pub const Particle = struct {
     age: f32,
     flags: ParticleFlags,
     acc: Vec2,
+    size_scale: f32,
     _storage: union {
         birth_sec: f32,
         next_free: usize,
@@ -50,6 +51,7 @@ pub const Particle = struct {
                 .meteor = opts.meteor,
             },
             ._storage = .{ .birth_sec = birth_sec },
+            .size_scale = 1.0,
         };
     }
 
@@ -73,7 +75,7 @@ pub const Particle = struct {
         if (self.flags.beat) {
             const math = @import("../core/math.zig");
             const real_age = elapsed - self._storage.birth_sec;
-            self.size = math.breath(real_age, (MAX_PARTICLE_SIZE - 3.0) * dpr, MAX_PARTICLE_SIZE * dpr);
+            self.size = math.breath(real_age, (MAX_PARTICLE_SIZE - 3.0) * dpr, MAX_PARTICLE_SIZE * dpr) * self.size_scale;
         }
 
         if (!self.flags.immortal and self.lifespan < 0.0) {
