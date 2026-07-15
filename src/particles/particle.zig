@@ -1,7 +1,7 @@
 const Vec2 = @import("../core/types.zig").Vec2;
 const Rng = @import("../random.zig").Rng;
 
-pub const MAX_LIFESPAN: f32 = 135.0;
+pub const MAX_LIFESPAN: f32 = 155.0;
 pub const MAX_PARTICLE_SIZE: f32 = 12.0;
 
 pub const ParticleOpts = struct {
