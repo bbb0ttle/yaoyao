@@ -74,7 +74,6 @@ pub fn main() void {
         .event_cb = event,
         .width = 800,
         .height = 600,
-        .icon = .{ .sokol_default = true },
         .window_title = "oayao",
         .logger = .{ .func = slog.func },
         .high_dpi = true,
