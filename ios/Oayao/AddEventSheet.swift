@@ -16,6 +16,12 @@ struct AddEventSheet: View {
                     TextField("Event name", text: $title)
                 }
 
+
+                Section("Notes (optional)") {
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 80)
+                }
+
                 Section("Date") {
                     DatePicker(
                         "Start",
@@ -23,11 +29,6 @@ struct AddEventSheet: View {
                         displayedComponents: [.date, .hourAndMinute]
                     )
                     .datePickerStyle(.graphical)
-                }
-
-                Section("Notes (optional)") {
-                    TextEditor(text: $notes)
-                        .frame(minHeight: 80)
                 }
 
                 Section {

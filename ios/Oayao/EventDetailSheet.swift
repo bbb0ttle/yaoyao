@@ -19,6 +19,13 @@ struct EventDetailSheet: View {
                                 .font(.body)
                         }
 
+                        if let notes = event.notes, !notes.isEmpty {
+                            Section("Notes") {
+                                Text(notes)
+                                    .font(.body)
+                            }
+                        }
+
                         Section("Date") {
                             Text(event.startDate, style: .date)
                                 .font(.body)
@@ -27,12 +34,6 @@ struct EventDetailSheet: View {
                                 .foregroundColor(.secondary)
                         }
 
-                        if let notes = event.notes, !notes.isEmpty {
-                            Section("Notes") {
-                                Text(notes)
-                                    .font(.body)
-                            }
-                        }
 
                         if let location = event.location, !location.isEmpty {
                             Section("Location") {
