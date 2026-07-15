@@ -27,10 +27,27 @@ func oayao_swift_bootstrap() {
         }
 
         addOverlayButtons()
+
+        // Pre-warm SwiftUI view caches after the initial Metal render completes.
+        // NavigationView + Form create UIKit backing views (UINavigationController,
+        // UITableView) whose first-time construction is expensive enough to stall
+        // the CADisplayLink-driven render loop. Forcing a layout pass now populates
+        // internal caches so the real presentation is fast.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            prewarmSheetViews()
+        }
     }
 }
 
 // MARK: - Sheet Presentation
+
+/// Forces SwiftUI to build and layout backing UIKit views so that the first
+/// real sheet presentation doesn't stall the CADisplayLink-driven render loop.
+private func prewarmSheetViews() {
+    let addVC = UIHostingController(rootView: AddEventSheet())
+    addVC.view.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+    addVC.view.layoutIfNeeded()
+}
 
 private func presentEventDetail(eventId: String) {
     guard let rootVC = rootViewController() else { return }
@@ -45,15 +62,20 @@ private func presentEventDetail(eventId: String) {
 }
 
 private func presentAddEvent() {
-    guard let rootVC = rootViewController() else { return }
-    let sheet = UIHostingController(
-        rootView: AddEventSheet()
-    )
-    if let sheet = sheet.sheetPresentationController {
-        sheet.detents = [.medium()]
-        sheet.prefersGrabberVisible = true
+    // Defer to next runloop iteration so the CADisplayLink-driven
+    // Metal render loop can finish its current frame before UIKit
+    // presentation work blocks the main thread.
+    DispatchQueue.main.async {
+        guard let rootVC = rootViewController() else { return }
+        let sheet = UIHostingController(
+            rootView: AddEventSheet()
+        )
+        if let sheet = sheet.sheetPresentationController {
+            sheet.detents = [.medium()]
+            sheet.prefersGrabberVisible = true
+        }
+        rootVC.present(sheet, animated: true)
     }
-    rootVC.present(sheet, animated: true)
 }
 
 // MARK: - Overlay Buttons

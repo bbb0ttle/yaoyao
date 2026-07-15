@@ -7,15 +7,29 @@ struct AddEventSheet: View {
     @State private var isSaving = false
     @Environment(\.dismiss) private var dismiss
 
-    private var manager: CalendarManager { .shared }
-
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .padding(.leading, 4)
+                Spacer()
+                Text("New Event")
+                    .font(.headline)
+                Spacer()
+                // Invisible placeholder keeps title centred
+                Button("Cancel") { }
+                    .padding(.trailing, 4)
+                    .opacity(0)
+                    .disabled(true)
+            }
+            .padding(.horizontal)
+            .padding(.top, 22)
+            .padding(.bottom, 10)
+
             Form {
                 Section("Title") {
                     TextField("Event name", text: $title)
                 }
-
 
                 Section("Notes (optional)") {
                     TextEditor(text: $notes)
@@ -43,19 +57,12 @@ struct AddEventSheet: View {
                 }
                 .listRowBackground(Color(red: 169/255, green: 229/255, blue: 214/255))
             }
-            .navigationTitle("New Event")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
         }
     }
 
     private func save() {
         isSaving = true
-        manager.addEvent(
+        CalendarManager.shared.addEvent(
             title: title.trimmingCharacters(in: .whitespaces),
             startDate: date,
             notes: notes.trimmingCharacters(in: .whitespaces)

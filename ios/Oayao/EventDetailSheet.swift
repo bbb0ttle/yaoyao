@@ -4,7 +4,6 @@ import EventKit
 struct EventDetailSheet: View {
     let eventId: String
     @State private var event: EKEvent?
-    @State private var showDeleteConfirmation = false
     @Environment(\.dismiss) private var dismiss
 
     private var manager: CalendarManager { .shared }
@@ -33,23 +32,25 @@ struct EventDetailSheet: View {
                             }
                         }
 
-                        Section {
-                            Button(role: .destructive) {
-                                showDeleteConfirmation = true
-                            } label: {
-                                HStack {
-                                    Spacer()
-                                    Text("Delete Event")
-                                    Spacer()
-                                }
-                            }
-                        }
                     }
                     .navigationTitle("Event")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Close") { dismiss() }
+                        }
+                        ToolbarItem(placement: .destructiveAction) {
+                            Menu {
+                                Button(role: .destructive) {
+                                    manager.deleteEvent(with: eventId) { _ in
+                                        dismiss()
+                                    }
+                                } label: {
+                                    Label("Delete Event", systemImage: "trash")
+                                }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
                         }
                     }
                 } else {
@@ -61,18 +62,6 @@ struct EventDetailSheet: View {
         }
         .onAppear {
             event = manager.event(with: eventId)
-        }
-        .confirmationDialog(
-            "Delete this event?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                manager.deleteEvent(with: eventId) { success in
-                    dismiss()
-                }
-            }
-            Button("Cancel", role: .cancel) {}
         }
     }
 }

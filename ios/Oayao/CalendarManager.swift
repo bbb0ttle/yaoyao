@@ -7,7 +7,8 @@ import UIKit
     static let shared = CalendarManager()
 
     private let eventStore = EKEventStore()
-    private var oayaoCalendar: EKCalendar?
+    private var oayaoCalendars: [EKCalendar] = []
+    private var writableCalendar: EKCalendar?
     private var hasAccess = false
 
     override private init() {
@@ -38,8 +39,11 @@ import UIKit
     // MARK: - Calendar
 
     private func findOrCreateCalendar(completion: @escaping (Bool) -> Void) {
-        if let existing = eventStore.calendars(for: .event).first(where: { $0.title == "oayao" }) {
-            oayaoCalendar = existing
+        let allCalendars = eventStore.calendars(for: .event).filter { $0.title == "oayao" }
+
+        if !allCalendars.isEmpty {
+            oayaoCalendars = allCalendars
+            writableCalendar = allCalendars.first(where: { calendarWritable($0) })
             syncAllEvents()
             completion(true)
             return
@@ -56,7 +60,8 @@ import UIKit
 
         do {
             try eventStore.saveCalendar(calendar, commit: true)
-            oayaoCalendar = calendar
+            oayaoCalendars = [calendar]
+            writableCalendar = calendar
             syncAllEvents()
             completion(true)
         } catch {
@@ -66,17 +71,20 @@ import UIKit
     }
 
     @objc private func handleEventStoreChanged() {
-        guard hasAccess, let calendar = oayaoCalendar else { return }
-        if calendarAllowed(calendar) {
-            syncAllEvents()
-        }
+        guard hasAccess else { return }
+        refreshCalendars()
+        syncAllEvents()
     }
 
-    private func calendarAllowed(_ calendar: EKCalendar) -> Bool {
+    private func refreshCalendars() {
+        let allCalendars = eventStore.calendars(for: .event).filter { $0.title == "oayao" }
+        oayaoCalendars = allCalendars
+        writableCalendar = allCalendars.first(where: { calendarWritable($0) })
+    }
+
+    private func calendarWritable(_ calendar: EKCalendar) -> Bool {
         if calendar.allowsContentModifications { return true }
-        // If we lost write access, try to re-fetch
         if let refreshed = eventStore.calendar(withIdentifier: calendar.calendarIdentifier) {
-            oayaoCalendar = refreshed
             return refreshed.allowsContentModifications
         }
         return false
@@ -85,17 +93,19 @@ import UIKit
     // MARK: - Sync
 
     private func syncAllEvents() {
-        guard let calendar = oayaoCalendar else { return }
+        guard !oayaoCalendars.isEmpty else { return }
         let today = Date()
         let startOfDay = Calendar.current.startOfDay(for: today)
-        let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)!
-        let predicate = eventStore.predicateForEvents(
-            withStart: startOfDay, end: endOfDay, calendars: [calendar]
-        )
-        let events = eventStore.events(matching: predicate)
+        guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) else { return }
 
-        for event in events {
-            oayao_spawn_heart(event.eventIdentifier)
+        for calendar in oayaoCalendars {
+            let predicate = eventStore.predicateForEvents(
+                withStart: startOfDay, end: endOfDay, calendars: [calendar]
+            )
+            let events = eventStore.events(matching: predicate)
+            for event in events {
+                oayao_spawn_heart(event.eventIdentifier)
+            }
         }
     }
 
@@ -107,7 +117,7 @@ import UIKit
         notes: String?,
         completion: @escaping (Bool) -> Void
     ) {
-        guard hasAccess, let calendar = oayaoCalendar else {
+        guard hasAccess, let calendar = writableCalendar else {
             completion(false)
             return
         }
@@ -134,8 +144,8 @@ import UIKit
     func deleteEvent(with identifier: String, completion: @escaping (Bool) -> Void) {
         guard hasAccess,
               let event = eventStore.event(withIdentifier: identifier),
-              let calendar = oayaoCalendar,
-              event.calendar.calendarIdentifier == calendar.calendarIdentifier
+              oayaoCalendars.contains(where: { $0.calendarIdentifier == event.calendar.calendarIdentifier }),
+              calendarWritable(event.calendar)
         else {
             completion(false)
             return
@@ -160,8 +170,8 @@ import UIKit
     ) {
         guard hasAccess,
               let event = eventStore.event(withIdentifier: identifier),
-              let calendar = oayaoCalendar,
-              event.calendar.calendarIdentifier == calendar.calendarIdentifier
+              oayaoCalendars.contains(where: { $0.calendarIdentifier == event.calendar.calendarIdentifier }),
+              calendarWritable(event.calendar)
         else {
             completion(false)
             return
@@ -188,9 +198,7 @@ import UIKit
     }
 
     func shareCalendar(completion: @escaping (URL?) -> Void) {
-        // iCloud calendar sharing via system share sheet.
-        // For now, open the system Calendar sharing UI.
-        guard let calendar = oayaoCalendar,
+        guard let calendar = writableCalendar,
               let url = URL(string: "calshow:\(calendar.calendarIdentifier)")
         else {
             completion(nil)
