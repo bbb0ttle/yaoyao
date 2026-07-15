@@ -23,12 +23,12 @@ struct AddEventSheet: View {
                 }
 
                 Section("Date") {
-                    DatePicker(
-                        "Start",
-                        selection: $date,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    .datePickerStyle(.graphical)
+                    HStack {
+                        DatePicker("Date", selection: $date, displayedComponents: [.date])
+                            .labelsHidden()
+                        DatePicker("Time", selection: $date, displayedComponents: [.hourAndMinute])
+                            .labelsHidden()
+                    }
                 }
 
                 Section {

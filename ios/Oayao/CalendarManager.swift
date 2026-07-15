@@ -151,6 +151,38 @@ import UIKit
         }
     }
 
+    func updateEvent(
+        with identifier: String,
+        title: String?,
+        startDate: Date?,
+        notes: String?,
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard hasAccess,
+              let event = eventStore.event(withIdentifier: identifier),
+              let calendar = oayaoCalendar,
+              event.calendar.calendarIdentifier == calendar.calendarIdentifier
+        else {
+            completion(false)
+            return
+        }
+
+        if let title = title { event.title = title }
+        if let startDate = startDate {
+            event.startDate = startDate
+            event.endDate = startDate.addingTimeInterval(3600)
+        }
+        if let notes = notes { event.notes = notes }
+
+        do {
+            try eventStore.save(event, span: .thisEvent, commit: true)
+            completion(true)
+        } catch {
+            print("[Oayao] Failed to update event: \(error)")
+            completion(false)
+        }
+    }
+
     func event(with identifier: String) -> EKEvent? {
         return eventStore.event(withIdentifier: identifier)
     }

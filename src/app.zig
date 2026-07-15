@@ -199,13 +199,13 @@ pub const App = struct {
         @memcpy(id_dup[0..event_id.len], event_id);
         errdefer self.allocator.free(id_dup);
 
-        const min_dist = MAX_PARTICLE_SIZE * dpr * 3.0;
+        const min_dist = MAX_PARTICLE_SIZE * dpr * 4.0;
         var dest_x: f32 = undefined;
         var dest_y: f32 = undefined;
         var attempt: usize = 0;
-        while (attempt < 20) : (attempt += 1) {
-            const dx = self.rng.random_range(w * 0.25, w * 0.75);
-            const dy = self.rng.random_range(h * 0.52, h * 0.68);
+        while (attempt < 30) : (attempt += 1) {
+            const dx = self.rng.random_range(w * 0.12, w * 0.88);
+            const dy = self.rng.random_range(h * 0.68, h * 0.76);
             if (!self._overlaps_existing(dx, dy, min_dist)) {
                 dest_x = dx;
                 dest_y = dy;
@@ -213,8 +213,8 @@ pub const App = struct {
             }
         }
         if (attempt >= 20) {
-            dest_x = self.rng.random_range(w * 0.25, w * 0.75);
-            dest_y = self.rng.random_range(h * 0.52, h * 0.68);
+            dest_x = self.rng.random_range(w * 0.12, w * 0.88);
+            dest_y = self.rng.random_range(h * 0.68, h * 0.76);
         }
 
         const speed = meteor_sys.METEOR_SPEED * dpr;
@@ -417,9 +417,11 @@ pub const App = struct {
 
         p.pos.x = cm.target_x;
         p.pos.y = cm.target_y;
+        p.flags.immortal = false;
         p.flags.meteor = false;
         p.flags.floating = true;
         p.flags.beat = true;
+        p.lifespan = self.rng.random_range(75.0, 110.0);
         p.set_birth_sec(elapsed);
         p.size_scale = self.rng.random_range(0.55, 1.0);
         p.size = MAX_PARTICLE_SIZE * self.dpr;

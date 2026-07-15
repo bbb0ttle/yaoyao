@@ -61,18 +61,43 @@ private func presentAddEvent() {
 private var addButton: UIButton?
 private var settingsButton: UIButton?
 
+// SwiftUI glass add button for iOS 26+, fallback for older versions
+private struct GlassAddButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(.white)
+                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                .frame(width: 56, height: 56)
+        }
+        .modifier(GlassModifier())
+    }
+}
+
+private struct GlassModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.clear, in: .rect(cornerRadius: 28))
+        } else {
+            content
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
+        }
+    }
+}
+
 private func addOverlayButtons() {
     guard let window = keyWindow() else { return }
 
-    let addBtn = UIButton(type: .system)
-    addBtn.setImage(UIImage(systemName: "plus.circle.fill"), for: .normal)
-    addBtn.tintColor = .systemPink
-    addBtn.contentVerticalAlignment = .fill
-    addBtn.contentHorizontalAlignment = .fill
-    addBtn.translatesAutoresizingMaskIntoConstraints = false
-    addBtn.addTarget(OverlayTarget.shared, action: #selector(OverlayTarget.addTapped), for: .touchUpInside)
-    window.addSubview(addBtn)
-    addButton = addBtn
+    let glassHost = UIHostingController(rootView: GlassAddButton {
+        presentAddEvent()
+    })
+    glassHost.view.backgroundColor = .clear
+    glassHost.view.translatesAutoresizingMaskIntoConstraints = false
+    window.addSubview(glassHost.view)
 
     let settingsBtn = UIButton(type: .system)
     settingsBtn.setImage(UIImage(systemName: "gearshape.circle.fill"), for: .normal)
@@ -80,15 +105,15 @@ private func addOverlayButtons() {
     settingsBtn.contentVerticalAlignment = .fill
     settingsBtn.contentHorizontalAlignment = .fill
     settingsBtn.translatesAutoresizingMaskIntoConstraints = false
-    settingsBtn.addTarget(OverlayTarget.shared, action: #selector(OverlayTarget.settingsTapped), for: .touchUpInside)
+    settingsBtn.isHidden = true
     window.addSubview(settingsBtn)
     settingsButton = settingsBtn
 
     NSLayoutConstraint.activate([
-        addBtn.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-        addBtn.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-        addBtn.widthAnchor.constraint(equalToConstant: 56),
-        addBtn.heightAnchor.constraint(equalToConstant: 56),
+        glassHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+        glassHost.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+        glassHost.view.widthAnchor.constraint(equalToConstant: 56),
+        glassHost.view.heightAnchor.constraint(equalToConstant: 56),
 
         settingsBtn.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor, constant: 16),
         settingsBtn.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor, constant: 8),

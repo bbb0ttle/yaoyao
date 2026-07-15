@@ -4,6 +4,7 @@ import EventKit
 struct EventDetailSheet: View {
     let eventId: String
     @State private var event: EKEvent?
+    @State private var editDate: Date = Date()
     @State private var showDeleteConfirmation = false
     @Environment(\.dismiss) private var dismiss
 
@@ -27,11 +28,22 @@ struct EventDetailSheet: View {
                         }
 
                         Section("Date") {
-                            Text(event.startDate, style: .date)
-                                .font(.body)
-                            Text(event.startDate, style: .time)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                            HStack {
+                                DatePicker("Date", selection: $editDate, displayedComponents: [.date])
+                                    .labelsHidden()
+                                DatePicker("Time", selection: $editDate, displayedComponents: [.hourAndMinute])
+                                    .labelsHidden()
+                            }
+                            .onChange(of: editDate) { newDate in
+                                manager.updateEvent(
+                                    with: eventId,
+                                    title: nil,
+                                    startDate: newDate,
+                                    notes: nil
+                                ) { _ in
+                                    self.event = manager.event(with: eventId)
+                                }
+                            }
                         }
 
 
@@ -69,7 +81,10 @@ struct EventDetailSheet: View {
             }
         }
         .onAppear {
-            event = manager.event(with: eventId)
+            if let e = manager.event(with: eventId) {
+                event = e
+                editDate = e.startDate
+            }
         }
         .confirmationDialog(
             "Delete this event?",
