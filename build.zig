@@ -13,7 +13,7 @@ pub fn build(b: *Build) !void {
     // Must re-resolve the query so the version range is correctly embedded in the binary.
     if (target.result.os.tag == .ios) {
         var query = target.query;
-        query.os_version_min = .{ .semver = .{ .major = 12, .minor = 0, .patch = 0 } };
+        query.os_version_min = .{ .semver = .{ .major = 15, .minor = 0, .patch = 0 } };
         query.os_version_max = .{ .semver = .{ .major = 26, .minor = 5, .patch = 0 } };
         target = b.resolveTargetQuery(query);
     }
@@ -253,43 +253,65 @@ fn createIosAppBundle(
     const developer_dir = xcodeDeveloperDir(b);
 
     // Construct clang target triple from resolved target.
-    // Keep the deployment target at 12.0 (set at the top of build()) for
-    // maximum device compatibility. Only the architecture varies.
     const clang_arch: []const u8 = if (target.result.cpu.arch == .aarch64) "arm64" else @tagName(target.result.cpu.arch);
     const clang_target = if (target.result.abi == .simulator)
-        b.fmt("{s}-apple-ios12.0-simulator", .{clang_arch})
+        b.fmt("{s}-apple-ios15.0-simulator", .{clang_arch})
     else
-        b.fmt("{s}-apple-ios12.0", .{clang_arch});
+        b.fmt("{s}-apple-ios15.0", .{clang_arch});
+
+    const swift_target = if (target.result.abi == .simulator)
+        b.fmt("{s}-apple-ios15.0-simulator", .{clang_arch})
+    else
+        b.fmt("{s}-apple-ios15.0", .{clang_arch});
 
     const script = b.fmt(
         \\set -e
-        \\APP="zig-out/Oayao.app"
+        \\ROOT="$(pwd)"
+        \\APP="$ROOT/zig-out/Oayao.app"
         \\rm -rf "$APP"
         \\mkdir -p "$APP"
+        \\
+        \\# Resolve artifact absolute paths before any directory change.
+        \\A1="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+        \\A2="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+        \\
+        \\# Compile Swift files into object files.
+        \\SDK_ROOT="{s}"
+        \\SWIFT_DIR="$(mktemp -d /tmp/oayao_swift.XXXXXX)"
+        \\trap 'rm -rf "$SWIFT_DIR"' EXIT
+        \\cd "$SWIFT_DIR"
+        \\swiftc -c \
+        \\  -sdk "$SDK_ROOT" \
+        \\  -target "{s}" \
+        \\  -import-objc-header "$7"/Bridge.h \
+        \\  -Xcc -I"$SDK_ROOT/usr/include" \
+        \\  "$7"/CallbackBridge.swift \
+        \\  "$7"/CalendarManager.swift \
+        \\  "$7"/EventDetailSheet.swift \
+        \\  "$7"/AddEventSheet.swift
         \\
         \\# Link with Apple's ld64 via xcrun clang — produces correct LC_ENCRYPTION_INFO,
         \\# segment alignment, SDK version, and PIE that App Store Connect requires.
         \\# Zig's .a archives have misaligned Mach-O members; extract to temp .o files first.
-        \\A1="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-        \\A2="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
         \\O1="$(mktemp -d /tmp/oayao_o1.XXXXXX)"
         \\O2="$(mktemp -d /tmp/oayao_o2.XXXXXX)"
-        \\trap 'rm -rf "$O1" "$O2"' EXIT
+        \\trap 'rm -rf "$O1" "$O2" "$SWIFT_DIR"' EXIT
         \\ sh -c 'cd "$1" && ar x "$2" 2>/dev/null; chmod 644 ./*.o 2>/dev/null' -- "$O1" "$A1" || true
         \\ sh -c 'cd "$1" && ar x "$2" 2>/dev/null; chmod 644 ./*.o 2>/dev/null' -- "$O2" "$A2" || true
-        \\SDK_ROOT="{s}"
-        \\xcrun clang -target {s} \
-        \\  -isysroot "$SDK_ROOT" \
+        \\
+        \\# Use swiftc for linking — it auto-adds Swift runtime libraries.
+        \\xcrun --sdk {s} swiftc -target "{s}" \
+        \\  -emit-executable \
         \\  -o "$APP/Oayao" \
-        \\  "$O1"/*.o "$O2"/*.o \
-        \\  -framework UIKit \
-        \\  -framework Metal \
-        \\  -framework QuartzCore \
-        \\  -framework Foundation \
-        \\  -framework CoreGraphics \
-        \\  -framework AudioToolbox \
-        \\  -framework AVFoundation \
-        \\  -fobjc-arc
+        \\  "$O1"/*.o "$O2"/*.o "$SWIFT_DIR"/*.o \
+        \\  -Xlinker -framework -Xlinker UIKit \
+        \\  -Xlinker -framework -Xlinker Metal \
+        \\  -Xlinker -framework -Xlinker QuartzCore \
+        \\  -Xlinker -framework -Xlinker Foundation \
+        \\  -Xlinker -framework -Xlinker CoreGraphics \
+        \\  -Xlinker -framework -Xlinker AudioToolbox \
+        \\  -Xlinker -framework -Xlinker AVFoundation \
+        \\  -Xlinker -framework -Xlinker EventKit
         \\
         \\cp "$3" "$APP/Info.plist"
         \\cp "$4" "$APP/LaunchScreen.storyboard"
@@ -297,11 +319,11 @@ fn createIosAppBundle(
         \\ACTOOL="{s}/usr/bin/actool"
         \\PLISTBUDDY="/usr/libexec/PlistBuddy"
         \\PARTIAL="/tmp/oayao_partial.plist"
-        \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 12.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
+        \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 15.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
         \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
         \\rm -f "$PARTIAL"
         \\echo "Created Oayao.app bundle at zig-out/Oayao.app"
-    , .{ sdk_root, clang_target, developer_dir, platform });
+    , .{ sdk_root, swift_target, platform, clang_target, developer_dir, platform });
 
     const cmd = b.addSystemCommand(&.{ "sh", "-c" });
     cmd.addArg(script);
@@ -312,6 +334,7 @@ fn createIosAppBundle(
     cmd.addFileArg(b.path("ios/Oayao/LaunchScreen.storyboard")); // $4
     cmd.addFileArg(b.path("ios/Oayao/PrivacyInfo.xcprivacy")); // $5
     cmd.addDirectoryArg(b.path("ios/Oayao/Assets.xcassets")); // $6
+    cmd.addDirectoryArg(b.path("ios/Oayao")); // $7 — Swift source directory
 
     return &cmd.step;
 }

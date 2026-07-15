@@ -7,10 +7,14 @@ const text_renderer = @import("graphics/text_renderer.zig");
 const ParticlePool = @import("particles/pool.zig").ParticlePool;
 const HeartSystem = @import("systems/heart_system.zig").HeartSystem;
 const MeteorSystem = @import("systems/meteor_system.zig").MeteorSystem;
+const Particle = @import("particles/particle.zig").Particle;
+const MAX_PARTICLE_SIZE = @import("particles/particle.zig").MAX_PARTICLE_SIZE;
 const Rng = @import("random.zig").Rng;
 const Vec2 = @import("core/types.zig").Vec2;
 
 const POOL_CAPACITY: usize = 5000;
+
+pub const HeartTapCallback = ?*const fn (event_id: [*:0]const u8) callconv(.c) void;
 
 pub const App = struct {
     gpu: GpuState,
@@ -29,6 +33,9 @@ pub const App = struct {
 
     days_text_buf: [32]u8,
     days_text_len: usize,
+
+    calendar_hearts: std.StringHashMap(*Particle),
+    heart_tap_callback: HeartTapCallback,
 
     pub fn init(allocator: std.mem.Allocator) !*App {
         const gpu = try GpuState.init(allocator);
@@ -51,11 +58,14 @@ pub const App = struct {
             .start_time = @floatCast(sapp.frameDuration()),
             .days_text_buf = undefined,
             .days_text_len = 0,
+            .calendar_hearts = std.StringHashMap(*Particle).init(allocator),
+            .heart_tap_callback = null,
         };
         return self;
     }
 
     pub fn deinit(self: *App) void {
+        self.calendar_hearts.deinit();
         self.pool.deinit();
         self.gpu.deinit();
         self.allocator.destroy(self);
@@ -146,6 +156,7 @@ pub const App = struct {
 
     pub fn handle_click(self: *App, x: f32, y: f32) void {
         if (!self.meteor_ready or !self.heart_ready) return;
+        if (self._handle_heart_tap(x, y)) return;
         self._meteor_from_heart(x, y);
         self._spawn_burst(x, y);
     }
@@ -153,6 +164,62 @@ pub const App = struct {
     pub fn handle_resize(self: *App) void {
         self.resize_cooldown = 30;
         self.heart_ready = false;
+    }
+
+    pub fn spawn_calendar_heart(self: *App, event_id: []const u8, elapsed: f32) !void {
+        const dpr = self.dpr;
+        const w = sapp.widthf();
+        const h = sapp.heightf();
+
+        if (self.calendar_hearts.contains(event_id)) return;
+
+        const id_dup = try self.allocator.allocSentinel(u8, event_id.len, 0);
+        @memcpy(id_dup[0..event_id.len], event_id);
+        errdefer self.allocator.free(id_dup);
+
+        const px = self.rng.random_range(w * 0.1, w * 0.9);
+        const py = h - self.rng.random_range(40.0, 120.0) * dpr;
+
+        const particle = self.pool.alloc_particle(
+            Vec2{ .x = px, .y = py },
+            elapsed,
+            .{ .immortal = true, .floating = true, .beat = true, .size = MAX_PARTICLE_SIZE * dpr },
+            &self.rng,
+        );
+        particle.vel.x = self.rng.random_range(-0.5, 0.5) * dpr;
+        particle.vel.y = self.rng.random_range(-2.5, -1.5) * dpr;
+
+        try self.calendar_hearts.put(id_dup, particle);
+    }
+
+    pub fn remove_calendar_heart(self: *App, event_id: []const u8) void {
+        if (self.calendar_hearts.fetchRemove(event_id)) |kv| {
+            kv.value.set_alive(false);
+            self.allocator.free(kv.key);
+        }
+    }
+
+    pub fn set_heart_tap_callback(self: *App, cb: HeartTapCallback) void {
+        self.heart_tap_callback = cb;
+    }
+
+    fn _handle_heart_tap(self: *App, x: f32, y: f32) bool {
+        if (self.heart_tap_callback == null) return false;
+
+        var it = self.calendar_hearts.iterator();
+        while (it.next()) |entry| {
+            const p = entry.value_ptr.*;
+            if (!p.is_alive()) continue;
+            const dx = x - p.pos.x;
+            const dy = y - p.pos.y;
+            const dist = @sqrt(dx * dx + dy * dy);
+            if (dist < p.size * 2.0) {
+                const key: [*:0]const u8 = @ptrCast(entry.key_ptr.ptr);
+                self.heart_tap_callback.?(key);
+                return true;
+            }
+        }
+        return false;
     }
 
     fn _update_day_counter(self: *App) void {
