@@ -70,10 +70,20 @@ private struct GlassAddButton: View {
             Image(systemName: "plus")
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundColor(.white)
-                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                 .frame(width: 56, height: 56)
+                .modifier(GlassModifier())
         }
-        .modifier(GlassModifier())
+        .buttonStyle(ScaleButtonStyle())
+    }
+}
+
+private struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.93 : 1.0)
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
@@ -81,10 +91,14 @@ private struct GlassModifier: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.clear, in: .rect(cornerRadius: 28))
+                .glassEffect()
         } else {
             content
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28)
+                        .stroke(.white.opacity(0.15), lineWidth: 0.5)
+                }
         }
     }
 }

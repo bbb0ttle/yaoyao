@@ -39,15 +39,18 @@ struct AddEventSheet: View {
                             Spacer()
                             if isSaving {
                                 ProgressView()
+                                    .tint(.white)
                             } else {
                                 Text("Save Event")
                                     .bold()
+                                    .foregroundColor(.white)
                             }
                             Spacer()
                         }
                     }
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
                 }
+                .listRowBackground(Color(red: 169/255, green: 229/255, blue: 214/255))
             }
             .navigationTitle("New Event")
             .navigationBarTitleDisplayMode(.inline)
