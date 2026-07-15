@@ -6,10 +6,10 @@ const Rng = @import("../random.zig").Rng;
 
 const MAX_HEADS: usize = 60;
 const CLICK_COOLDOWN_FRAMES: u32 = 12;
-const METEOR_SIZE: f32 = 8.0;
-const TRAIL_SIZE: f32 = 16.0;
-const TRAIL_LIFESPAN: f32 = 60.0;
-const METEOR_SPEED: f32 = 8.0;
+pub const METEOR_SIZE: f32 = 8.0;
+pub const TRAIL_SIZE: f32 = 16.0;
+pub const TRAIL_LIFESPAN: f32 = 60.0;
+pub const METEOR_SPEED: f32 = 8.0;
 const FADE_MARGIN: f32 = 100.0;
 
 const MeteorHead = struct {
