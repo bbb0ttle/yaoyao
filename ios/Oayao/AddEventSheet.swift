@@ -22,15 +22,6 @@ struct AddEventSheet: View {
                         .frame(minHeight: 80)
                 }
 
-                Section("Date") {
-                    HStack {
-                        DatePicker("Date", selection: $date, displayedComponents: [.date])
-                            .labelsHidden()
-                        DatePicker("Time", selection: $date, displayedComponents: [.hourAndMinute])
-                            .labelsHidden()
-                    }
-                }
-
                 Section {
                     Button {
                         save()
@@ -43,11 +34,11 @@ struct AddEventSheet: View {
                             } else {
                                 Text("Save Event")
                                     .bold()
-                                    .foregroundColor(.white)
                             }
                             Spacer()
                         }
                     }
+                    .tint(.white)
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
                 }
                 .listRowBackground(Color(red: 169/255, green: 229/255, blue: 214/255))

@@ -97,7 +97,7 @@ private struct GlassModifier: ViewModifier {
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
                 .overlay {
                     RoundedRectangle(cornerRadius: 28)
-                        .stroke(.white.opacity(0.15), lineWidth: 0.5)
+                        .stroke(.white.opacity(0.35), lineWidth: 0.5)
                 }
         }
     }
