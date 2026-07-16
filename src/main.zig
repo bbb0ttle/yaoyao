@@ -88,6 +88,13 @@ export fn oayao_remove_heart(event_id: [*:0]const u8) void {
     }
 }
 
+export fn oayao_sync_calendar_hearts(active_ids: [*:0]const u8) void {
+    if (g_app) |app| {
+        const slice: [:0]const u8 = std.mem.span(active_ids);
+        app.sync_calendar_hearts(slice);
+    }
+}
+
 export fn oayao_set_heart_tap_callback(cb: ?*const fn ([*:0]const u8) callconv(.c) void) void {
     if (g_app) |app| {
         app.set_heart_tap_callback(cb);

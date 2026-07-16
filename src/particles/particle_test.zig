@@ -31,3 +31,25 @@ test "immortal particle does not die" {
     p.update(0.0, 1.0);
     try testing.expect(p.is_alive());
 }
+
+test "fading_out floating particle decrements lifespan and dies" {
+    var rng = Rng.init(12345);
+    var p = Particle.init(Vec2{ .x = 0, .y = 0 }, 0.0, .{ .floating = true }, &rng);
+    p.set_fading_out(true);
+    const initial_lifespan = p.get_lifespan();
+    p.update(0.0, 1.0);
+    try testing.expect(p.get_lifespan() < initial_lifespan);
+    try testing.expect(p.is_alive());
+
+    p.set_lifespan(-1.0);
+    p.update(0.0, 1.0);
+    try testing.expect(!p.is_alive());
+}
+
+test "floating particle without fading_out keeps constant lifespan" {
+    var rng = Rng.init(12345);
+    var p = Particle.init(Vec2{ .x = 0, .y = 0 }, 0.0, .{ .floating = true }, &rng);
+    const initial_lifespan = p.get_lifespan();
+    p.update(0.0, 1.0);
+    try testing.expectApproxEqAbs(initial_lifespan, p.get_lifespan(), 1e-6);
+}

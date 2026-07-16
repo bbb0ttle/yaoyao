@@ -113,15 +113,20 @@ import UIKit
         let startOfDay = Calendar.current.startOfDay(for: today)
         guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) else { return }
 
+        var activeIds: [String] = []
         for calendar in oayaoCalendars {
             let predicate = eventStore.predicateForEvents(
                 withStart: startOfDay, end: endOfDay, calendars: [calendar]
             )
             let events = eventStore.events(matching: predicate)
             for event in events {
+                activeIds.append(event.eventIdentifier)
                 oayao_spawn_heart(event.eventIdentifier)
             }
         }
+
+        let joined = activeIds.joined(separator: "\n")
+        oayao_sync_calendar_hearts(joined)
     }
 
     // MARK: - CRUD

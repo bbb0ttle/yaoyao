@@ -18,7 +18,8 @@ const ParticleFlags = packed struct(u8) {
     floating: bool,
     beat: bool,
     meteor: bool,
-    _pad: u3 = 0,
+    fading_out: bool,
+    _pad: u2 = 0,
 };
 
 pub const Particle = struct {
@@ -49,6 +50,7 @@ pub const Particle = struct {
                 .floating = opts.floating,
                 .beat = opts.beat,
                 .meteor = opts.meteor,
+                .fading_out = false,
             },
             ._storage = .{ .birth_sec = birth_sec },
             .size_scale = 1.0,
@@ -60,8 +62,10 @@ pub const Particle = struct {
         if (self.flags.meteor) return;
         self.age += 0.2;
 
-        if (!self.flags.immortal and !self.flags.floating) {
-            self.vel = self.vel.add(self.acc);
+        if (!self.flags.immortal and (!self.flags.floating or self.flags.fading_out)) {
+            if (!self.flags.floating) {
+                self.vel = self.vel.add(self.acc);
+            }
             self.lifespan -= 2.0;
         }
 
@@ -176,6 +180,14 @@ pub const Particle = struct {
 
     pub fn set_meteor(self: *Particle, v: bool) void {
         self.flags.meteor = v;
+    }
+
+    pub fn is_fading_out(self: Particle) bool {
+        return self.flags.fading_out;
+    }
+
+    pub fn set_fading_out(self: *Particle, v: bool) void {
+        self.flags.fading_out = v;
     }
 
     pub fn set_birth_sec(self: *Particle, sec: f32) void {

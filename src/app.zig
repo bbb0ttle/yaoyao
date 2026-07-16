@@ -245,8 +245,46 @@ pub const App = struct {
 
     pub fn remove_calendar_heart(self: *App, event_id: []const u8) void {
         if (self.calendar_hearts.fetchRemove(event_id)) |kv| {
-            kv.value.set_alive(false);
+            kv.value.set_fading_out(true);
             self.allocator.free(kv.key);
+        }
+    }
+
+    pub fn sync_calendar_hearts(self: *App, active_ids: [:0]const u8) void {
+        var active_set = std.StringHashMap(void).init(self.allocator);
+        defer active_set.deinit();
+
+        var split_iter = std.mem.splitScalar(u8, active_ids, '\n');
+        while (split_iter.next()) |id| {
+            if (id.len > 0) {
+                active_set.put(id, {}) catch continue;
+            }
+        }
+
+        var stale_ids: std.ArrayList([]const u8) = .empty;
+        defer stale_ids.deinit(self.allocator);
+
+        var heart_it = self.calendar_hearts.iterator();
+        while (heart_it.next()) |entry| {
+            if (!active_set.contains(entry.key_ptr.*)) {
+                stale_ids.append(self.allocator, entry.key_ptr.*) catch continue;
+            }
+        }
+
+        for (stale_ids.items) |id| {
+            self.remove_calendar_heart(id);
+        }
+
+        var mi: usize = 0;
+        while (mi < self.calendar_meteors.items.len) {
+            const cm = self.calendar_meteors.items[mi];
+            if (!active_set.contains(cm.event_id)) {
+                cm.particle.set_alive(false);
+                self.allocator.free(cm.event_id);
+                _ = self.calendar_meteors.swapRemove(mi);
+            } else {
+                mi += 1;
+            }
         }
     }
 
