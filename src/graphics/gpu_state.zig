@@ -49,6 +49,59 @@ pub const GpuState = struct {
             .clear_value = .{ .r = 169.0 / 255.0, .g = 229.0 / 255.0, .b = 214.0 / 255.0, .a = 1.0 },
         };
 
+        self._init_buffers();
+        self.pip = _build_pipeline();
+
+        return self;
+    }
+
+    pub fn deinit(self: *GpuState) void {
+        self.allocator.free(self.instance_buffer);
+        sg.shutdown();
+    }
+
+    pub fn write_instance(self: *GpuState, idx: u32, inst: GpuInstance) void {
+        if (idx < MAX_INSTANCES) {
+            self.instance_buffer[idx] = inst;
+        }
+    }
+
+    pub fn upload_instances(self: *GpuState) void {
+        sg.updateBuffer(self.bind.vertex_buffers[1], sg.asRange(self.instance_buffer[0..self.instance_count]));
+    }
+
+    pub fn render(self: *GpuState, w: f32, h: f32) void {
+        const mvp = _ortho(0, w, h, 0);
+        const vs_params = shd.VsParams{ .mvp = mvp };
+        const fs_params = shd.FsParams{
+            .fill_color = [_]f32{
+                @as(f32, @floatFromInt(Rgba.HEART_FILL.r)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.HEART_FILL.g)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.HEART_FILL.b)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.HEART_FILL.a)) / 255.0,
+            },
+            .stroke_color = [_]f32{
+                @as(f32, @floatFromInt(Rgba.HEART_STROKE.r)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.HEART_STROKE.g)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.HEART_STROKE.b)) / 255.0,
+                @as(f32, @floatFromInt(Rgba.HEART_STROKE.a)) / 255.0,
+            },
+        };
+
+        const sglue = @import("sokol").glue;
+        sg.beginPass(.{ .action = self.pass_action, .swapchain = sglue.swapchain() });
+        if (self.instance_count > 0) {
+            sg.applyPipeline(self.pip);
+            sg.applyBindings(self.bind);
+            sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
+            sg.draw(0, 6, @intCast(self.instance_count));
+        }
+        sg.endPass();
+        sg.commit();
+    }
+
+    fn _init_buffers(self: *GpuState) void {
         self.bind.vertex_buffers[0] = sg.makeBuffer(.{
             .data = sg.asRange(&[_]f32{
                 0.0, 0.0,
@@ -67,9 +120,11 @@ pub const GpuState = struct {
             .usage = .{ .stream_update = true },
             .size = MAX_INSTANCES * @sizeOf(GpuInstance),
         });
+    }
 
+    fn _build_pipeline() sg.Pipeline {
         const gpu_backend = backend.detect_gpu_backend();
-        self.pip = sg.makePipeline(.{
+        return sg.makePipeline(.{
             .shader = sg.makeShader(shd.particleShaderDesc(gpu_backend)),
             .layout = init: {
                 var l = sg.VertexLayoutState{};
@@ -101,54 +156,6 @@ pub const GpuState = struct {
                 break :init c;
             },
         });
-
-        return self;
-    }
-
-    pub fn deinit(self: *GpuState) void {
-        self.allocator.free(self.instance_buffer);
-        sg.shutdown();
-    }
-
-    pub fn write_instance(self: *GpuState, idx: u32, inst: GpuInstance) void {
-        if (idx < MAX_INSTANCES) {
-            self.instance_buffer[idx] = inst;
-        }
-    }
-
-    pub fn upload_instances(self: *GpuState) void {
-        sg.updateBuffer(self.bind.vertex_buffers[1], sg.asRange(self.instance_buffer[0..self.instance_count]));
-    }
-
-    pub fn render(self: *GpuState, w: f32, h: f32) void {
-        const mvp = _ortho(0, w, h, 0);
-        const vs_params = shd.VsParams{ .mvp = mvp };
-        const fs_params = shd.FsParams{
-            .fill_color = [_]f32{
-                @as(f32, @floatFromInt(Rgba.heart_fill.r)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.heart_fill.g)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.heart_fill.b)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.heart_fill.a)) / 255.0,
-            },
-            .stroke_color = [_]f32{
-                @as(f32, @floatFromInt(Rgba.heart_stroke.r)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.heart_stroke.g)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.heart_stroke.b)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.heart_stroke.a)) / 255.0,
-            },
-        };
-
-        const sglue = @import("sokol").glue;
-        sg.beginPass(.{ .action = self.pass_action, .swapchain = sglue.swapchain() });
-        if (self.instance_count > 0) {
-            sg.applyPipeline(self.pip);
-            sg.applyBindings(self.bind);
-            sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
-            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
-            sg.draw(0, 6, @intCast(self.instance_count));
-        }
-        sg.endPass();
-        sg.commit();
     }
 };
 

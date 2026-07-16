@@ -1,24 +1,22 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const sokol = @import("sokol");
 const sapp = sokol.app;
 const slog = sokol.log;
 
 const App = @import("app.zig").App;
+const bootstrap = @import("platform/bootstrap.zig");
+
+// Named allocator constant — replace with debugging allocator as needed.
+const APP_ALLOCATOR = std.heap.c_allocator;
 
 // Global app pointer — the minimum necessary global for sokol's C ABI
 // callbacks which provide no userdata parameter.
 var g_app: ?*App = null;
 
-extern fn oayao_swift_bootstrap() void;
-
 export fn init() void {
-    const app = App.init(std.heap.c_allocator) catch @panic("OOM");
+    const app = App.init(APP_ALLOCATOR) catch @panic("OOM");
     g_app = app;
-
-    if (builtin.os.tag == .ios) {
-        oayao_swift_bootstrap();
-    }
+    bootstrap.bootstrap();
 }
 
 export fn frame() void {
@@ -77,7 +75,9 @@ export fn oayao_spawn_heart(event_id: [*:0]const u8) void {
     if (g_app) |app| {
         const len = std.mem.sliceTo(event_id, 0).len;
         const elapsed: f32 = @floatCast(sapp.frameDuration());
-        app.spawn_calendar_heart(event_id[0..len], elapsed) catch return;
+        app.spawn_calendar_heart(event_id[0..len], elapsed) catch |err| {
+            std.log.warn("spawn_calendar_heart failed: {}", .{err});
+        };
     }
 }
 

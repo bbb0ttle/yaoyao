@@ -1,6 +1,7 @@
 const Vec2 = @import("../core/types.zig").Vec2;
 const Particle = @import("../particles/particle.zig").Particle;
 const ParticleOpts = @import("../particles/particle.zig").ParticleOpts;
+const MAX_LIFESPAN = @import("../particles/particle.zig").MAX_LIFESPAN;
 const ParticlePool = @import("../particles/pool.zig").ParticlePool;
 const Rng = @import("../random.zig").Rng;
 
@@ -88,7 +89,7 @@ pub const MeteorSystem = struct {
                 .size = METEOR_SIZE * dpr,
             }, rng);
             const speed_var = rng.random_range(0.7, 1.3);
-            p.vel = Vec2{ .x = base_vx * speed_var, .y = base_vy * speed_var };
+            p.set_vel(base_vx * speed_var, base_vy * speed_var);
 
             self.heads[self.head_count] = MeteorHead{ .particle = p };
             self.head_count += 1;
@@ -104,16 +105,14 @@ pub const MeteorSystem = struct {
             const p = self.heads[i].particle;
             if (!p.is_alive()) continue;
 
-            p.pos.x += p.vel.x;
-            p.pos.y += p.vel.y;
+            const trail_x = p.pos_x();
+            const trail_y = p.pos_y();
+            p.translate_by_vel();
 
-            const trail_x = p.pos.x - p.vel.x;
-            const trail_y = p.pos.y - p.vel.y;
-
-            const dist_left = p.pos.x;
-            const dist_right = self.canvas_w - p.pos.x;
-            const dist_top = p.pos.y;
-            const dist_bottom = self.canvas_h - p.pos.y;
+            const dist_left = p.pos_x();
+            const dist_right = self.canvas_w - p.pos_x();
+            const dist_top = p.pos_y();
+            const dist_bottom = self.canvas_h - p.pos_y();
             const min_dist = @min(@min(dist_left, dist_right), @min(dist_top, dist_bottom));
 
             if (min_dist <= 0) {
@@ -129,15 +128,15 @@ pub const MeteorSystem = struct {
                     continue;
                 }
                 p.set_immortal(false);
-                p.lifespan = head_fade * @import("../particles/particle.zig").MAX_LIFESPAN;
-                p.size = METEOR_SIZE * dpr * head_fade;
+                p.set_lifespan(head_fade * MAX_LIFESPAN);
+                p.set_size(METEOR_SIZE * dpr * head_fade);
             }
 
             const trail = pool.alloc_particle(Vec2{ .x = trail_x, .y = trail_y }, 0, .{
                 .size = TRAIL_SIZE * dpr,
             }, rng);
-            trail.vel = Vec2{ .x = 0, .y = 0 };
-            trail.acc = Vec2{ .x = 0, .y = 0 };
+            trail.set_vel(0, 0);
+            trail.set_acc(0, 0);
 
             const tdl = trail_x;
             const tdr = self.canvas_w - trail_x;
@@ -145,7 +144,7 @@ pub const MeteorSystem = struct {
             const tdb = self.canvas_h - trail_y;
             const trail_min = @min(@min(tdl, tdr), @min(tdt, tdb));
             const trail_edge_fade: f32 = if (trail_min <= 0) 0.0 else if (trail_min < fade_zone) trail_min / fade_zone else 1.0;
-            trail.lifespan = @min(head_fade, trail_edge_fade) * TRAIL_LIFESPAN;
+            trail.set_lifespan(@min(head_fade, trail_edge_fade) * TRAIL_LIFESPAN);
         }
 
         if (self.cooldown > 0) self.cooldown -= 1;

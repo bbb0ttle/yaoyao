@@ -1,8 +1,8 @@
 test {
-    _ = @import("core/types.zig");
-    _ = @import("core/math.zig");
-    _ = @import("core/font.zig");
-    _ = @import("random.zig");
-    _ = @import("particles/particle.zig");
-    _ = @import("particles/pool.zig");
+    _ = @import("core/types_test.zig");
+    _ = @import("core/math_test.zig");
+    _ = @import("core/font_test.zig");
+    _ = @import("random_test.zig");
+    _ = @import("particles/particle_test.zig");
+    _ = @import("particles/pool_test.zig");
 }

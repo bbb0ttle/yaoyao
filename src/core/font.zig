@@ -41,30 +41,3 @@ pub fn char_index(c: u8) usize {
         else => 22,
     };
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-const testing = @import("std").testing;
-
-test "char_index digits" {
-    for (0..10) |i| {
-        try testing.expectEqual(i, char_index(@as(u8, @intCast('0' + i))));
-    }
-}
-
-test "char_index special chars" {
-    try testing.expectEqual(@as(usize, 10), char_index('.'));
-    try testing.expectEqual(@as(usize, 11), char_index(' '));
-    try testing.expectEqual(@as(usize, 22), char_index('?'));
-}
-
-test "font glyphs are 3-bit valid" {
-    for (FONT_3X5, 0..) |glyph, gi| {
-        for (glyph) |row| {
-            try testing.expect(row <= 0b111);
-        }
-        _ = gi;
-    }
-}

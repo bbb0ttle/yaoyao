@@ -32,11 +32,11 @@ pub fn fill_text_instances(
 
     const left_h = heart.float_pair_left();
     const right_h = heart.float_pair_right();
-    const dx: f32 = (group_left + max_hr) - left_h.pos.x;
-    left_h.pos.x += dx;
-    right_h.pos.x += dx;
-    left_h.pos.y = h - 80.0 * dpr;
-    right_h.pos.y = h - 80.0 * dpr - 2.0 * dpr;
+    const dx: f32 = (group_left + max_hr) - left_h.pos_x();
+    left_h.set_pos(left_h.pos_x() + dx, left_h.pos_y());
+    right_h.set_pos(right_h.pos_x() + dx, right_h.pos_y());
+    left_h.set_pos(left_h.pos_x(), h - 80.0 * dpr);
+    right_h.set_pos(right_h.pos_x(), h - 80.0 * dpr - 2.0 * dpr);
 
     const text_x: f32 = group_left + hearts_area_w + gap;
     const text_y: f32 = h - 83.0 * dpr;
@@ -95,22 +95,22 @@ pub fn fill_particle_instances(
     for (alive) |idx| {
         const p = pool.get_particle(idx);
 
-        const max_alpha: f32 = if (p.is_immortal()) 1.0 else math.scale(p.lifespan, MAX_LIFESPAN, 200.0) / 255.0;
-        const display_size: f32 = math.scale(p.lifespan, MAX_LIFESPAN, p.size);
+        const max_alpha: f32 = if (p.is_immortal()) 1.0 else math.scale(p.get_lifespan(), MAX_LIFESPAN, 200.0) / 255.0;
+        const display_size: f32 = math.scale(p.get_lifespan(), MAX_LIFESPAN, p.get_size());
 
         const radius: f32 = display_size + radius_margin;
-        if (p.pos.x + radius < 0.0 or p.pos.x - radius >= w or
-            p.pos.y + radius < 0.0 or p.pos.y - radius >= h) continue;
+        if (p.pos_x() + radius < 0.0 or p.pos_x() - radius >= w or
+            p.pos_y() + radius < 0.0 or p.pos_y() - radius >= h) continue;
 
         if (inst_count >= cap) continue;
 
         const fill_alpha = max_alpha * t;
-        const stroke_alpha = @min(1.0, p.lifespan / 255.0) * t;
+        const stroke_alpha = @min(1.0, p.get_lifespan() / 255.0) * t;
         const shape: f32 = if (display_size + stroke_width < 8.0) 0.0 else 1.0;
 
         gpu.write_instance(inst_count, .{
-            .pos_x = p.pos.x,
-            .pos_y = p.pos.y,
+            .pos_x = p.pos_x(),
+            .pos_y = p.pos_y(),
             .stroke_size = display_size + stroke_width,
             .fill_size = display_size,
             .stroke_a = if (stroke_alpha > 10.0 / 255.0) stroke_alpha else 0.0,

@@ -61,11 +61,12 @@ pub const HeartSystem = struct {
             t += step;
         }) {
             const hp = math.create_heart_pos(t);
-            const pos = Vec2{ .x = hp.x * hscale + hscale + cx, .y = hp.y * hscale + hscale + cy };
+            const px = hp.x * hscale + hscale + cx;
+            const py = hp.y * hscale + hscale + cy;
             self.contour[i] = ContourPoint{
                 .base_x = hp.x,
                 .base_y = hp.y,
-                .immortal = pool.alloc_particle(pos, elapsed, .{ .immortal = true, .size = MAX_PARTICLE_SIZE * dpr }, rng),
+                .immortal = pool.alloc_particle(Vec2{ .x = px, .y = py }, elapsed, .{ .immortal = true, .size = MAX_PARTICLE_SIZE * dpr }, rng),
             };
         }
 
@@ -94,19 +95,21 @@ pub const HeartSystem = struct {
         const spawn_frame = self.spawn_counter % 2 == 0;
 
         for (&self.contour) |*cp| {
-            cp.immortal.pos.x = cp.base_x * scale_val + 50.0 * dpr + self.cx;
-            cp.immortal.pos.y = cp.base_y * scale_val + 50.0 * dpr + self.cy - 5.0 * dpr;
-            cp.immortal.size = size_val;
+            cp.immortal.set_pos(
+                cp.base_x * scale_val + 50.0 * dpr + self.cx,
+                cp.base_y * scale_val + 50.0 * dpr + self.cy - 5.0 * dpr,
+            );
+            cp.immortal.set_size(size_val);
 
             if (spawn_frame) {
-                _ = pool.alloc_particle(cp.immortal.pos, elapsed, .{ .size = MAX_PARTICLE_SIZE * dpr }, rng);
+                _ = pool.alloc_particle(cp.immortal.get_pos(), elapsed, .{ .size = MAX_PARTICLE_SIZE * dpr }, rng);
             }
         }
     }
 
     pub fn fill_contour_positions(self: *const HeartSystem, buf: []Vec2) void {
         for (&self.contour, 0..) |*cp, i| {
-            buf[i] = cp.immortal.pos;
+            buf[i] = Vec2{ .x = cp.immortal.pos_x(), .y = cp.immortal.pos_y() };
         }
     }
 

@@ -83,57 +83,124 @@ pub const Particle = struct {
         }
     }
 
-    pub fn is_alive(self: Particle) bool {
-        return self.flags.alive;
+    pub fn get_pos(self: Particle) Vec2 {
+        return self.pos;
     }
 
-    pub fn is_immortal(self: Particle) bool {
-        return self.flags.immortal;
+    pub fn pos_x(self: Particle) f32 {
+        return self.pos.x;
+    }
+
+    pub fn pos_y(self: Particle) f32 {
+        return self.pos.y;
+    }
+
+    pub fn set_pos(self: *Particle, x: f32, y: f32) void {
+        self.pos.x = x;
+        self.pos.y = y;
+    }
+
+    pub fn vel_x(self: Particle) f32 {
+        return self.vel.x;
+    }
+
+    pub fn vel_y(self: Particle) f32 {
+        return self.vel.y;
+    }
+
+    pub fn set_vel(self: *Particle, x: f32, y: f32) void {
+        self.vel.x = x;
+        self.vel.y = y;
+    }
+
+    pub fn set_acc(self: *Particle, x: f32, y: f32) void {
+        self.acc.x = x;
+        self.acc.y = y;
+    }
+
+    pub fn get_lifespan(self: Particle) f32 {
+        return self.lifespan;
+    }
+
+    pub fn set_lifespan(self: *Particle, l: f32) void {
+        self.lifespan = l;
+    }
+
+    pub fn get_size(self: Particle) f32 {
+        return self.size;
+    }
+
+    pub fn set_size(self: *Particle, s: f32) void {
+        self.size = s;
+    }
+
+    pub fn set_size_scale(self: *Particle, s: f32) void {
+        self.size_scale = s;
+    }
+
+    pub fn is_alive(self: Particle) bool {
+        return self.flags.alive;
     }
 
     pub fn set_alive(self: *Particle, alive: bool) void {
         self.flags.alive = alive;
     }
 
+    pub fn is_immortal(self: Particle) bool {
+        return self.flags.immortal;
+    }
+
     pub fn set_immortal(self: *Particle, immortal: bool) void {
         self.flags.immortal = immortal;
+    }
+
+    pub fn is_floating(self: Particle) bool {
+        return self.flags.floating;
+    }
+
+    pub fn set_floating(self: *Particle, v: bool) void {
+        self.flags.floating = v;
+    }
+
+    pub fn is_beat(self: Particle) bool {
+        return self.flags.beat;
+    }
+
+    pub fn set_beat(self: *Particle, v: bool) void {
+        self.flags.beat = v;
+    }
+
+    pub fn is_meteor(self: Particle) bool {
+        return self.flags.meteor;
+    }
+
+    pub fn set_meteor(self: *Particle, v: bool) void {
+        self.flags.meteor = v;
     }
 
     pub fn set_birth_sec(self: *Particle, sec: f32) void {
         self._storage = .{ .birth_sec = sec };
     }
+
+    pub fn get_birth_sec(self: Particle) f32 {
+        return self._storage.birth_sec;
+    }
+
+    pub fn get_next_free(self: Particle) usize {
+        return self._storage.next_free;
+    }
+
+    pub fn set_next_free(self: *Particle, n: usize) void {
+        self._storage = .{ .next_free = n };
+    }
+
+    pub fn translate(self: *Particle, dx: f32, dy: f32) void {
+        self.pos.x += dx;
+        self.pos.y += dy;
+    }
+
+    pub fn translate_by_vel(self: *Particle) void {
+        self.pos.x += self.vel.x;
+        self.pos.y += self.vel.y;
+    }
 };
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-const testing = @import("std").testing;
-
-test "Particle.init sets fields" {
-    var rng = Rng.init(12345);
-    const pos = Vec2{ .x = 10.0, .y = 20.0 };
-    const p = Particle.init(pos, 100.0, .{ .immortal = true, .size = 12.0 }, &rng);
-    try testing.expectApproxEqAbs(10.0, p.pos.x, 1e-6);
-    try testing.expectApproxEqAbs(20.0, p.pos.y, 1e-6);
-    try testing.expect(p.flags.immortal);
-    try testing.expect(p.flags.alive);
-    try testing.expectApproxEqAbs(MAX_LIFESPAN, p.lifespan, 1e-6);
-    try testing.expectApproxEqAbs(12.0, p.size, 1e-6);
-}
-
-test "Particle death on lifespan exhausted" {
-    var rng = Rng.init(12345);
-    var p = Particle.init(Vec2{ .x = 0, .y = 0 }, 0.0, .{}, &rng);
-    p.lifespan = -1.0;
-    p.update(0.0, 1.0);
-    try testing.expect(!p.flags.alive);
-}
-
-test "immortal particle does not die" {
-    var rng = Rng.init(12345);
-    var p = Particle.init(Vec2{ .x = 0, .y = 0 }, 0.0, .{ .immortal = true }, &rng);
-    p.lifespan = -1.0;
-    p.update(0.0, 1.0);
-    try testing.expect(p.flags.alive);
-}

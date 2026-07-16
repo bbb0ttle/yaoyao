@@ -233,8 +233,7 @@ pub const App = struct {
             .{ .immortal = true, .meteor = true, .size = meteor_size },
             &self.rng,
         );
-        particle.vel.x = vx;
-        particle.vel.y = vy;
+        particle.set_vel(vx, vy);
 
         try self.calendar_meteors.append(self.allocator, .{
             .particle = particle,
@@ -262,10 +261,10 @@ pub const App = struct {
         while (it.next()) |entry| {
             const p = entry.value_ptr.*;
             if (!p.is_alive()) continue;
-            const dx = x - p.pos.x;
-            const dy = y - p.pos.y;
+            const dx = x - p.pos_x();
+            const dy = y - p.pos_y();
             const dist = @sqrt(dx * dx + dy * dy);
-            if (dist < p.size * 2.0) {
+            if (dist < p.get_size() * 2.0) {
                 const key: [*:0]const u8 = @ptrCast(entry.key_ptr.ptr);
                 self.heart_tap_callback.?(key);
                 return true;
@@ -279,8 +278,8 @@ pub const App = struct {
         while (it.next()) |entry| {
             const p = entry.value_ptr.*;
             if (!p.is_alive()) continue;
-            const dx = x - p.pos.x;
-            const dy = y - p.pos.y;
+            const dx = x - p.pos_x();
+            const dy = y - p.pos_y();
             if (@sqrt(dx * dx + dy * dy) < min_dist) return true;
         }
         for (self.calendar_meteors.items) |cm| {
@@ -359,10 +358,12 @@ pub const App = struct {
                 .{ .size = self.rng.random_range(5.0, 10.0) * dpr },
                 &self.rng,
             );
-            p.vel.x = self.rng.random_range(-1.0, 1.0) * dpr;
-            p.vel.y = self.rng.random_range(-1.5, 2.5) * dpr;
-            p.acc.y = 0.2;
-            p.lifespan = self.rng.random_range(80.0, 120.0);
+            p.set_vel(
+                self.rng.random_range(-1.0, 1.0) * dpr,
+                self.rng.random_range(-1.5, 2.5) * dpr,
+            );
+            p.set_acc(0, 0.2);
+            p.set_lifespan(self.rng.random_range(80.0, 120.0));
         }
     }
 
@@ -377,10 +378,9 @@ pub const App = struct {
                 continue;
             }
 
-            const prev_x = p.pos.x;
-            const prev_y = p.pos.y;
-            p.pos.x += p.vel.x;
-            p.pos.y += p.vel.y;
+            const prev_x = p.pos_x();
+            const prev_y = p.pos_y();
+            p.translate_by_vel();
 
             const trail = self.pool.alloc_particle(
                 Vec2{ .x = prev_x, .y = prev_y },
@@ -388,18 +388,16 @@ pub const App = struct {
                 .{ .size = meteor_sys.TRAIL_SIZE * dpr },
                 &self.rng,
             );
-            trail.vel.x = 0;
-            trail.vel.y = 0;
-            trail.acc.x = 0;
-            trail.acc.y = 0;
-            trail.lifespan = meteor_sys.TRAIL_LIFESPAN;
+            trail.set_vel(0, 0);
+            trail.set_acc(0, 0);
+            trail.set_lifespan(meteor_sys.TRAIL_LIFESPAN);
 
             const tx = self.calendar_meteors.items[i].target_x;
             const ty = self.calendar_meteors.items[i].target_y;
-            const adx = tx - p.pos.x;
-            const ady = ty - p.pos.y;
+            const adx = tx - p.pos_x();
+            const ady = ty - p.pos_y();
             const dist = @sqrt(adx * adx + ady * ady);
-            const past_target = (p.vel.x * adx + p.vel.y * ady) < 0;
+            const past_target = (p.vel_x() * adx + p.vel_y() * ady) < 0;
 
             if (dist < 20.0 * dpr or past_target) {
                 self._transition_calendar_meteor(i, elapsed);
@@ -415,20 +413,22 @@ pub const App = struct {
         const p = cm.particle;
         const event_id = cm.event_id;
 
-        p.pos.x = cm.target_x;
-        p.pos.y = cm.target_y;
-        p.flags.immortal = false;
-        p.flags.meteor = false;
-        p.flags.floating = true;
-        p.flags.beat = true;
-        p.lifespan = self.rng.random_range(75.0, 110.0);
+        p.set_pos(cm.target_x, cm.target_y);
+        p.set_immortal(false);
+        p.set_meteor(false);
+        p.set_floating(true);
+        p.set_beat(true);
+        p.set_lifespan(self.rng.random_range(75.0, 110.0));
         p.set_birth_sec(elapsed);
-        p.size_scale = self.rng.random_range(0.55, 1.0);
-        p.size = MAX_PARTICLE_SIZE * self.dpr;
-        p.vel.x = self.rng.random_range(-0.5, 0.5) * self.dpr;
-        p.vel.y = self.rng.random_range(-2.5, -1.5) * self.dpr;
+        p.set_size_scale(self.rng.random_range(0.55, 1.0));
+        p.set_size(MAX_PARTICLE_SIZE * self.dpr);
+        p.set_vel(
+            self.rng.random_range(-0.5, 0.5) * self.dpr,
+            self.rng.random_range(-2.5, -1.5) * self.dpr,
+        );
 
         self.calendar_hearts.put(event_id, p) catch {
+            std.log.warn("calendar_hearts.put failed, discarding heart for event_id", .{});
             self.allocator.free(event_id);
             p.set_alive(false);
         };
