@@ -20,7 +20,7 @@
 - 添加事件:右下角玻璃质感悬浮按钮弹出添加表单
 - 事件详情:点击画布中的爱心弹出详情表单,可编辑、删除
 - 设置:配置日历名称与天数计数器起始日期
-- 天数计数器锚定:通过名为 "counter start" 的全天标记事件记录起始日,删除标记则回退到内置默认值
+- 天数计数器锚定:起始日期持久化在 UserDefaults(`SettingsStore`),未设置时回退到内置默认值
 
 ### Web(Vite + TypeScript)
 
@@ -218,14 +218,14 @@ Zig 渲染层与 Swift 宿主层通过 C ABI 双向通信。
 | `oayao_sync_hearts(active_ids)` | 按换行分隔的事件 ID 列表同步;不在列表中的爱心开始淡出 |
 | `oayao_set_heart_tap_callback(cb)` | 注册爱心点击回调,回调参数为事件 ID |
 | `oayao_set_days_counter_start_ms(ms)` | 设置天数计数器起始时间戳(Unix epoch 毫秒) |
-| `oayao_days_counter_default_start_ms()` | 内置默认起始时间戳(无标记事件时回退使用) |
+| `oayao_days_counter_default_start_ms()` | 内置默认起始时间戳(未设置起始日期时回退使用) |
 
 **CalendarManager**(`ios/Oayao/CalendarManager.swift`):
 
 - 按 `SettingsStore.calendarName` 解析规范日历:优先本地可写日历,其次任意可写日历,均不存在则创建本地日历
-- 同步当天事件:每个非标记事件调用 `oayao_spawn_heart`,随后以全部活跃 ID 调用 `oayao_sync_hearts`
+- 同步当天事件:每个事件调用 `oayao_spawn_heart`,随后以全部活跃 ID 调用 `oayao_sync_hearts`
 - 监听 `EKEventStoreChanged`,日历内容变化时自动重新解析并同步
-- 天数计数器锚定:读取/写入名为 "counter start" 的全天事件,将其日期推送到渲染层
+- 天数计数器锚定:将 `SettingsStore.counterStartMs` 推送到渲染层(本地持久化,不创建日历事件)
 - 提供事件 CRUD 与 `calshow:` 链接分享
 
 **UI 层**:点击画布爱心 → `EventDetailSheet`(medium/large detent);右下角悬浮按钮 → `AddEventSheet` / `SettingsSheet`(iOS 26+ 使用玻璃效果,旧版本回退为 ultraThinMaterial)。

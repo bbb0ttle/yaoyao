@@ -43,7 +43,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Days Counter")
                 } footer: {
-                    Text("Saved as a \"counter start\" event in the calendar. Deleting that event restores the default date.")
+                    Text("Stored on this device.")
                 }
             }
             .navigationTitle("Settings")
@@ -117,13 +117,13 @@ private struct CounterStartSettingsView: View {
                 )
                 .datePickerStyle(.graphical)
             } footer: {
-                Text("Creates or moves the \"counter start\" event in the calendar.")
+                Text("Changes apply immediately.")
             }
         }
         .navigationTitle("Start Date")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: counterStart) { newValue in
-            CalendarManager.shared.setCounterStart(date: newValue) { _ in }
+            CalendarManager.shared.setCounterStart(date: newValue)
         }
     }
 }
