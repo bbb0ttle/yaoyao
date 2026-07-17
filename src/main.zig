@@ -1,4 +1,10 @@
+//! Application entry point and sokol C ABI callbacks.
+
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.oayao);
+
 const sokol = @import("sokol");
 const sapp = sokol.app;
 const slog = sokol.log;
@@ -76,7 +82,7 @@ export fn oayao_spawn_heart(event_id: [*:0]const u8) void {
         const len = std.mem.sliceTo(event_id, 0).len;
         const elapsed: f32 = @floatCast(sapp.frameDuration());
         app.spawn_heart(event_id[0..len], elapsed) catch |err| {
-            std.log.warn("spawn_heart failed: {}", .{err});
+            log.warn("spawn_heart failed: {}", .{err});
         };
     }
 }

@@ -1,6 +1,13 @@
+//! Heart curve parametric equations and breathing animation math.
+
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.math);
+
 const Vec2 = @import("types.zig").Vec2;
 
+/// Parametric heart curve: returns a Vec2 on the heart contour at parameter t.
 pub fn create_heart_pos(t: f32) Vec2 {
     const s = @sin(t);
     const x = 2.0 * s * s * s;
@@ -8,6 +15,7 @@ pub fn create_heart_pos(t: f32) Vec2 {
     return Vec2{ .x = x, .y = y };
 }
 
+/// Smooth breathing oscillation between min and max over time.
 pub fn breath(sec: f32, min: f32, max: f32) f32 {
     const e = std.math.e;
     const a = 1.0 / e;

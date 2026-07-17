@@ -1,4 +1,10 @@
+//! ParticlePool with free-list allocation and alive-index tracking.
+
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.pool);
+
 const Particle = @import("particle.zig").Particle;
 const ParticleOpts = @import("particle.zig").ParticleOpts;
 const Vec2 = @import("../core/types.zig").Vec2;
@@ -6,7 +12,10 @@ const Rng = @import("../random.zig").Rng;
 
 const SENTINEL: usize = std.math.maxInt(usize);
 
+/// Object pool for particles with free-list reuse and alive-index tracking.
 pub const ParticlePool = struct {
+    const Self = @This();
+
     particles: []Particle,
     alive_indices: []usize,
     alive_count: usize,
@@ -14,10 +23,11 @@ pub const ParticlePool = struct {
     free_head: usize,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, capacity: usize) !ParticlePool {
+    pub fn init(allocator: std.mem.Allocator, capacity: usize) !Self {
         const particles = try allocator.alloc(Particle, capacity);
+        errdefer allocator.free(particles);
         const alive_indices = try allocator.alloc(usize, capacity);
-        return ParticlePool{
+        return Self{
             .particles = particles,
             .alive_indices = alive_indices,
             .alive_count = 0,
@@ -27,18 +37,19 @@ pub const ParticlePool = struct {
         };
     }
 
-    pub fn deinit(self: *ParticlePool) void {
+    pub fn deinit(self: *Self) void {
         self.allocator.free(self.particles);
         self.allocator.free(self.alive_indices);
+        self.* = undefined;
     }
 
-    pub fn reset(self: *ParticlePool) void {
+    pub fn reset(self: *Self) void {
         self.len = 0;
         self.free_head = SENTINEL;
         self.alive_count = 0;
     }
 
-    pub fn collect_alive(self: *ParticlePool) void {
+    pub fn collect_alive(self: *Self) void {
         self.alive_count = 0;
         self.free_head = SENTINEL;
         for (0..self.len) |i| {
@@ -52,7 +63,7 @@ pub const ParticlePool = struct {
         }
     }
 
-    pub fn alloc_particle(self: *ParticlePool, pos: Vec2, elapsed: f32, opts: ParticleOpts, rng: *Rng) *Particle {
+    pub fn alloc_particle(self: *Self, pos: Vec2, elapsed: f32, opts: ParticleOpts, rng: *Rng) *Particle {
         if (self.free_head < SENTINEL) {
             const idx = self.free_head;
             self.free_head = self.particles[idx].get_next_free();
@@ -69,19 +80,19 @@ pub const ParticlePool = struct {
         return &self.particles[0];
     }
 
-    pub fn alive_slice(self: *const ParticlePool) []usize {
+    pub fn alive_slice(self: *const Self) []usize {
         return self.alive_indices[0..self.alive_count];
     }
 
-    pub fn get_particle(self: *ParticlePool, idx: usize) *Particle {
+    pub fn get_particle(self: *Self, idx: usize) *Particle {
         return &self.particles[idx];
     }
 
-    pub fn get_len(self: *const ParticlePool) usize {
+    pub fn get_len(self: *const Self) usize {
         return self.len;
     }
 
-    pub fn get_alive_count(self: *const ParticlePool) usize {
+    pub fn get_alive_count(self: *const Self) usize {
         return self.alive_count;
     }
 };

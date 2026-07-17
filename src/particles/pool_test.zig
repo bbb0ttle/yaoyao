@@ -1,14 +1,15 @@
-const testing = @import("std").testing;
+const std = @import("std");
+const testing = std.testing;
 const ParticlePool = @import("pool.zig").ParticlePool;
 const Vec2 = @import("../core/types.zig").Vec2;
 const Rng = @import("../random.zig").Rng;
 
-fn _test_pool() !ParticlePool {
+fn test_pool() !ParticlePool {
     return ParticlePool.init(testing.allocator, 100);
 }
 
 test "alloc_particle from empty pool" {
-    var pool = try _test_pool();
+    var pool = try test_pool();
     defer pool.deinit();
     var rng = Rng.init(12345);
     const pos = Vec2{ .x = 1.0, .y = 2.0 };
@@ -19,7 +20,7 @@ test "alloc_particle from empty pool" {
 }
 
 test "alloc_particle reuses freed slot" {
-    var pool = try _test_pool();
+    var pool = try test_pool();
     defer pool.deinit();
     var rng = Rng.init(12345);
     const p0 = pool.alloc_particle(Vec2{ .x = 0, .y = 0 }, 0.0, .{}, &rng);
@@ -31,7 +32,7 @@ test "alloc_particle reuses freed slot" {
 }
 
 test "collect_alive counts correctly" {
-    var pool = try _test_pool();
+    var pool = try test_pool();
     defer pool.deinit();
     var rng = Rng.init(12345);
     _ = pool.alloc_particle(Vec2{ .x = 0, .y = 0 }, 0.0, .{ .immortal = true }, &rng);

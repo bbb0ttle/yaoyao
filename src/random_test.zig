@@ -1,4 +1,5 @@
-const testing = @import("std").testing;
+const std = @import("std");
+const testing = std.testing;
 const Rng = @import("random.zig").Rng;
 
 test "random_range within bounds" {

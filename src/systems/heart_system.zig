@@ -1,4 +1,10 @@
+//! Heart contour rendering system with floating pair animation.
+
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.heart_system);
+
 const Vec2 = @import("../core/types.zig").Vec2;
 const math = @import("../core/math.zig");
 const Particle = @import("../particles/particle.zig").Particle;
@@ -15,7 +21,10 @@ const ContourPoint = struct {
     immortal: *Particle,
 };
 
+/// Heart contour with 30 immortal contour points and two floating pair particles.
 pub const HeartSystem = struct {
+    const Self = @This();
+
     contour: [CONTOUR_COUNT]ContourPoint,
     float_pair: [2]*Particle,
     birth_sec: f32,
@@ -35,10 +44,10 @@ pub const HeartSystem = struct {
         fp_x: f32,
         fp_y: f32,
         dpr: f32,
-    ) HeartSystem {
+    ) Self {
         pool.reset();
 
-        var self = HeartSystem{
+        var self = Self{
             .contour = undefined,
             .float_pair = undefined,
             .birth_sec = elapsed,
@@ -86,7 +95,7 @@ pub const HeartSystem = struct {
         return self;
     }
 
-    pub fn update(self: *HeartSystem, elapsed: f32, pool: *ParticlePool, rng: *Rng) void {
+    pub fn update(self: *Self, elapsed: f32, pool: *ParticlePool, rng: *Rng) void {
         const dpr = self.dpr;
         const scale_val = math.breath(elapsed - self.birth_sec, 50.0 * dpr, 60.0 * dpr);
         const size_val = math.breath(elapsed - self.birth_sec, 10.0 * dpr, 15.0 * dpr);
@@ -107,25 +116,25 @@ pub const HeartSystem = struct {
         }
     }
 
-    pub fn fill_contour_positions(self: *const HeartSystem, buf: []Vec2) void {
+    pub fn fill_contour_positions(self: *const Self, buf: []Vec2) void {
         for (&self.contour, 0..) |*cp, i| {
             buf[i] = Vec2{ .x = cp.immortal.pos_x(), .y = cp.immortal.pos_y() };
         }
     }
 
-    pub fn center_x(self: *const HeartSystem) f32 {
+    pub fn center_x(self: *const Self) f32 {
         return self.cx;
     }
 
-    pub fn center_y(self: *const HeartSystem) f32 {
+    pub fn center_y(self: *const Self) f32 {
         return self.cy;
     }
 
-    pub fn float_pair_left(self: *HeartSystem) *Particle {
+    pub fn float_pair_left(self: *Self) *Particle {
         return self.float_pair[0];
     }
 
-    pub fn float_pair_right(self: *HeartSystem) *Particle {
+    pub fn float_pair_right(self: *Self) *Particle {
         return self.float_pair[1];
     }
 };

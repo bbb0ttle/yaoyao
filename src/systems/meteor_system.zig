@@ -1,3 +1,10 @@
+//! Meteor shower effect with edge-fade, trail particles, and head compaction.
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.meteor_system);
+
 const Vec2 = @import("../core/types.zig").Vec2;
 const Particle = @import("../particles/particle.zig").Particle;
 const ParticleOpts = @import("../particles/particle.zig").ParticleOpts;
@@ -17,7 +24,10 @@ const MeteorHead = struct {
     particle: *Particle,
 };
 
+/// Meteor shower system with head compaction, edge fading, and trail particles.
 pub const MeteorSystem = struct {
+    const Self = @This();
+
     heads: [MAX_HEADS]MeteorHead,
     head_count: usize,
     cooldown: u32,
@@ -25,8 +35,8 @@ pub const MeteorSystem = struct {
     canvas_h: f32,
     dpr: f32,
 
-    pub fn init(canvas_w: f32, canvas_h: f32, dpr: f32) MeteorSystem {
-        return MeteorSystem{
+    pub fn init(canvas_w: f32, canvas_h: f32, dpr: f32) Self {
+        return Self{
             .heads = undefined,
             .head_count = 0,
             .cooldown = 0,
@@ -37,7 +47,7 @@ pub const MeteorSystem = struct {
     }
 
     pub fn falling(
-        self: *MeteorSystem,
+        self: *Self,
         pool: *ParticlePool,
         rng: *Rng,
         x: f32,
@@ -60,7 +70,7 @@ pub const MeteorSystem = struct {
 
         const count: usize = 20;
 
-        self._compact();
+        self.compact();
         const need = (self.head_count + count) -| MAX_HEADS;
         if (need > 0) {
             var freed: usize = 0;
@@ -71,7 +81,7 @@ pub const MeteorSystem = struct {
                     freed += 1;
                 }
             }
-            self._compact();
+            self.compact();
         }
 
         var i: usize = 0;
@@ -96,7 +106,7 @@ pub const MeteorSystem = struct {
         }
     }
 
-    pub fn update(self: *MeteorSystem, pool: *ParticlePool, rng: *Rng) void {
+    pub fn update(self: *Self, pool: *ParticlePool, rng: *Rng) void {
         const dpr = self.dpr;
         const fade_zone = FADE_MARGIN * dpr;
 
@@ -148,10 +158,10 @@ pub const MeteorSystem = struct {
         }
 
         if (self.cooldown > 0) self.cooldown -= 1;
-        self._compact();
+        self.compact();
     }
 
-    fn _compact(self: *MeteorSystem) void {
+    fn compact(self: *Self) void {
         var write: usize = 0;
         var read: usize = 0;
         while (read < self.head_count) : (read += 1) {

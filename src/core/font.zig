@@ -1,3 +1,11 @@
+//! 3x5 bitmap font data and character lookup.
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.font);
+
+/// 3x5 pixel bitmap font with 22 glyphs (0-9, ., space, brackets, days/Days).
 pub const FONT_3X5: [22][5]u8 = .{
     .{ 0b111, 0b101, 0b101, 0b101, 0b111 }, // 0
     .{ 0b010, 0b110, 0b010, 0b010, 0b111 }, // 1
@@ -23,6 +31,7 @@ pub const FONT_3X5: [22][5]u8 = .{
     .{ 0b011, 0b100, 0b010, 0b001, 0b110 }, // S
 };
 
+/// Maps an ASCII character to its glyph index in FONT_3X5.
 pub fn char_index(c: u8) usize {
     return switch (c) {
         '0'...'9' => c - '0',

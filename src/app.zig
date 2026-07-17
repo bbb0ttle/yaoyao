@@ -1,4 +1,10 @@
+//! Core application state, lifecycle, and heart event orchestration.
+
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.app);
+
 const sokol = @import("sokol");
 const sapp = sokol.app;
 
@@ -23,9 +29,13 @@ const IncomingHeart = struct {
     target_y: f32,
 };
 
+/// C ABI callback invoked when a tagged heart is tapped.
 pub const HeartTapCallback = ?*const fn (event_id: [*:0]const u8) callconv(.c) void;
 
+/// Core application: owns GPU state, particle pool, heart/meteor systems, and tagged heart map.
 pub const App = struct {
+    const Self = @This();
+
     gpu: GpuState,
     pool: ParticlePool,
     heart: HeartSystem,
@@ -33,8 +43,8 @@ pub const App = struct {
     rng: Rng,
     allocator: std.mem.Allocator,
 
-    heart_ready: bool,
-    meteor_ready: bool,
+    is_heart_ready: bool,
+    is_meteor_ready: bool,
     transition_start: f32,
     resize_cooldown: u32,
     dpr: f32,
@@ -48,12 +58,14 @@ pub const App = struct {
     days_counter_start_ms: f64,
     heart_tap_callback: HeartTapCallback,
 
-    pub fn init(allocator: std.mem.Allocator) !*App {
-        const gpu = try GpuState.init(allocator);
-        const pool = try ParticlePool.init(allocator, POOL_CAPACITY);
+    pub fn init(allocator: std.mem.Allocator) !*Self {
+        var gpu = try GpuState.init(allocator);
+        errdefer gpu.deinit();
+        var pool = try ParticlePool.init(allocator, POOL_CAPACITY);
+        errdefer pool.deinit();
         const rng = Rng.init(12345);
 
-        const self = try allocator.create(App);
+        const self = try allocator.create(Self);
         self.* = .{
             .gpu = gpu,
             .pool = pool,
@@ -61,8 +73,8 @@ pub const App = struct {
             .meteor = undefined,
             .rng = rng,
             .allocator = allocator,
-            .heart_ready = false,
-            .meteor_ready = false,
+            .is_heart_ready = false,
+            .is_meteor_ready = false,
             .transition_start = 0.0,
             .resize_cooldown = 0,
             .dpr = sapp.dpiScale(),
@@ -77,7 +89,7 @@ pub const App = struct {
         return self;
     }
 
-    pub fn deinit(self: *App) void {
+    pub fn deinit(self: *Self) void {
         for (self.incoming_hearts.items) |cm| {
             self.allocator.free(cm.event_id);
         }
@@ -86,33 +98,34 @@ pub const App = struct {
         self.pool.deinit();
         self.gpu.deinit();
         self.allocator.destroy(self);
+        self.* = undefined;
     }
 
-    pub fn tick_elapsed(self: *App) f32 {
+    pub fn tick_elapsed(self: *Self) f32 {
         const elapsed = self.start_time;
         self.start_time += @as(f32, @floatCast(sapp.frameDuration()));
         return elapsed;
     }
 
-    pub fn cooldown_tick(self: *App) void {
+    pub fn cooldown_tick(self: *Self) void {
         if (self.resize_cooldown > 0) {
             self.resize_cooldown -= 1;
         }
     }
 
-    pub fn needs_system_init(self: *App) bool {
-        return self.resize_cooldown == 0 and !self.heart_ready;
+    pub fn needs_system_init(self: *Self) bool {
+        return self.resize_cooldown == 0 and !self.is_heart_ready;
     }
 
-    pub fn can_render(self: *App) bool {
-        return self.heart_ready and self.resize_cooldown == 0;
+    pub fn can_render(self: *Self) bool {
+        return self.is_heart_ready and self.resize_cooldown == 0;
     }
 
-    pub fn gpu_mut(self: *App) *GpuState {
+    pub fn gpu_mut(self: *Self) *GpuState {
         return &self.gpu;
     }
 
-    pub fn init_systems(self: *App, w: f32, h: f32, elapsed: f32) void {
+    pub fn init_systems(self: *Self, w: f32, h: f32, elapsed: f32) void {
         self.dpr = sapp.dpiScale();
         const dpr = self.dpr;
         const hx: f32 = w / 2.0 - 50.0 * dpr;
@@ -121,25 +134,25 @@ pub const App = struct {
         const fp_y: f32 = h - 80.0 * dpr;
 
         self.heart = HeartSystem.init(&self.pool, &self.rng, elapsed, hx, hy, h, fp_x, fp_y, dpr);
-        self.heart_ready = true;
+        self.is_heart_ready = true;
         self.transition_start = elapsed;
 
-        if (!self.meteor_ready) {
+        if (!self.is_meteor_ready) {
             self.meteor = MeteorSystem.init(w, h, dpr);
-            self.meteor_ready = true;
+            self.is_meteor_ready = true;
         }
     }
 
-    pub fn update_and_fill_buffers(self: *App, w: f32, h: f32, elapsed: f32, dpr: f32) void {
+    pub fn update_and_fill_buffers(self: *Self, w: f32, h: f32, elapsed: f32, dpr: f32) void {
         const t: f32 = @min(1.0, (elapsed - self.transition_start) / 3.0);
 
-        self._update_day_counter();
+        self.update_day_counter();
 
         self.heart.update(elapsed, &self.pool, &self.rng);
-        if (self.meteor_ready) {
+        if (self.is_meteor_ready) {
             self.meteor.update(&self.pool, &self.rng);
         }
-        self._update_incoming_hearts(elapsed);
+        self.update_incoming_hearts(elapsed);
         self.pool.collect_alive();
 
         for (self.pool.alive_slice()) |idx| {
@@ -169,25 +182,25 @@ pub const App = struct {
             );
         }
 
-        self.gpu.instance_count = inst_count;
+        self.gpu.set_instance_count(inst_count);
     }
 
-    pub fn handle_click(self: *App, x: f32, y: f32) void {
-        if (!self.meteor_ready or !self.heart_ready) return;
-        if (self._handle_heart_tap(x, y)) {
-            self._spawn_burst(x, y);
+    pub fn handle_click(self: *Self, x: f32, y: f32) void {
+        if (!self.is_meteor_ready or !self.is_heart_ready) return;
+        if (self.handle_heart_tap(x, y)) {
+            self.spawn_burst(x, y);
             return;
         }
-        self._meteor_from_heart(x, y);
-        self._spawn_burst(x, y);
+        self.meteor_from_heart(x, y);
+        self.spawn_burst(x, y);
     }
 
-    pub fn handle_resize(self: *App) void {
+    pub fn handle_resize(self: *Self) void {
         self.resize_cooldown = 30;
-        self.heart_ready = false;
+        self.is_heart_ready = false;
     }
 
-    pub fn spawn_heart(self: *App, event_id: []const u8, elapsed: f32) !void {
+    pub fn spawn_heart(self: *Self, event_id: []const u8, elapsed: f32) !void {
         const dpr = self.dpr;
         const w = sapp.widthf();
         const h = sapp.heightf();
@@ -209,7 +222,7 @@ pub const App = struct {
         while (attempt < 30) : (attempt += 1) {
             const dx = self.rng.random_range(w * 0.12, w * 0.88);
             const dy = self.rng.random_range(h * 0.68, h * 0.76);
-            if (!self._overlaps_existing(dx, dy, min_dist)) {
+            if (!self.overlaps_existing(dx, dy, min_dist)) {
                 dest_x = dx;
                 dest_y = dy;
                 break;
@@ -246,14 +259,14 @@ pub const App = struct {
         });
     }
 
-    pub fn remove_heart(self: *App, event_id: []const u8) void {
+    pub fn remove_heart(self: *Self, event_id: []const u8) void {
         if (self.tagged_hearts.fetchRemove(event_id)) |kv| {
             kv.value.set_fading_out(true);
             self.allocator.free(kv.key);
         }
     }
 
-    pub fn sync_hearts(self: *App, active_ids: [:0]const u8) void {
+    pub fn sync_hearts(self: *Self, active_ids: [:0]const u8) void {
         var active_set = std.StringHashMap(void).init(self.allocator);
         defer active_set.deinit();
 
@@ -291,15 +304,15 @@ pub const App = struct {
         }
     }
 
-    pub fn set_heart_tap_callback(self: *App, cb: HeartTapCallback) void {
+    pub fn set_heart_tap_callback(self: *Self, cb: HeartTapCallback) void {
         self.heart_tap_callback = cb;
     }
 
-    pub fn set_days_counter_start_ms(self: *App, ms: f64) void {
+    pub fn set_days_counter_start_ms(self: *Self, ms: f64) void {
         self.days_counter_start_ms = ms;
     }
 
-    fn _handle_heart_tap(self: *App, x: f32, y: f32) bool {
+    fn handle_heart_tap(self: *Self, x: f32, y: f32) bool {
         if (self.heart_tap_callback == null) return false;
 
         var it = self.tagged_hearts.iterator();
@@ -318,7 +331,7 @@ pub const App = struct {
         return false;
     }
 
-    fn _overlaps_existing(self: *App, x: f32, y: f32, min_dist: f32) bool {
+    fn overlaps_existing(self: *Self, x: f32, y: f32, min_dist: f32) bool {
         var it = self.tagged_hearts.iterator();
         while (it.next()) |entry| {
             const p = entry.value_ptr.*;
@@ -335,7 +348,7 @@ pub const App = struct {
         return false;
     }
 
-    fn _update_day_counter(self: *App) void {
+    fn update_day_counter(self: *Self) void {
         var ts: std.c.timespec = undefined;
         _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
         const unix_ms: f64 = @as(f64, @floatFromInt(ts.sec)) * 1000.0 + @as(f64, @floatFromInt(ts.nsec)) / 1_000_000.0;
@@ -345,7 +358,7 @@ pub const App = struct {
         const frac: f64 = diff_days - @floor(diff_days);
 
         self.days_text_len = 0;
-        _format_uint(&self.days_text_buf, &self.days_text_len, int_part);
+        format_uint(&self.days_text_buf, &self.days_text_len, int_part);
 
         if (self.days_text_len < self.days_text_buf.len) {
             self.days_text_buf[self.days_text_len] = '.';
@@ -377,7 +390,7 @@ pub const App = struct {
         }
     }
 
-    fn _meteor_from_heart(self: *App, target_x: f32, target_y: f32) void {
+    fn meteor_from_heart(self: *Self, target_x: f32, target_y: f32) void {
         var spawns: [30]Vec2 = undefined;
         self.heart.fill_contour_positions(&spawns);
         self.meteor.falling(
@@ -391,7 +404,7 @@ pub const App = struct {
         );
     }
 
-    fn _spawn_burst(self: *App, x: f32, y: f32) void {
+    fn spawn_burst(self: *Self, x: f32, y: f32) void {
         const dpr = self.dpr;
         const count: usize = @intFromFloat(self.rng.random_range(25.0, 45.0));
 
@@ -412,7 +425,7 @@ pub const App = struct {
         }
     }
 
-    fn _update_incoming_hearts(self: *App, elapsed: f32) void {
+    fn update_incoming_hearts(self: *Self, elapsed: f32) void {
         const dpr = self.dpr;
         var i: usize = 0;
         while (i < self.incoming_hearts.items.len) {
@@ -445,7 +458,7 @@ pub const App = struct {
             const past_target = (p.vel_x() * adx + p.vel_y() * ady) < 0;
 
             if (dist < 20.0 * dpr or past_target) {
-                self._transition_incoming_heart(i, elapsed);
+                self.transition_incoming_heart(i, elapsed);
                 continue;
             }
 
@@ -453,7 +466,7 @@ pub const App = struct {
         }
     }
 
-    fn _transition_incoming_heart(self: *App, index: usize, elapsed: f32) void {
+    fn transition_incoming_heart(self: *Self, index: usize, elapsed: f32) void {
         const cm = self.incoming_hearts.items[index];
         const p = cm.particle;
         const event_id = cm.event_id;
@@ -473,7 +486,7 @@ pub const App = struct {
         );
 
         self.tagged_hearts.put(event_id, p) catch {
-            std.log.warn("tagged_hearts.put failed, discarding heart for event_id", .{});
+            log.warn("tagged_hearts.put failed, discarding heart for event_id", .{});
             self.allocator.free(event_id);
             p.set_alive(false);
         };
@@ -482,7 +495,7 @@ pub const App = struct {
     }
 };
 
-fn _format_uint(buf: []u8, len: *usize, n: u64) void {
+fn format_uint(buf: []u8, len: *usize, n: u64) void {
     if (n == 0) {
         if (len.* < buf.len) {
             buf[len.*] = '0';

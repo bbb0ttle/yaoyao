@@ -1,4 +1,5 @@
-const testing = @import("std").testing;
+const std = @import("std");
+const testing = std.testing;
 const Vec2 = @import("types.zig").Vec2;
 
 test "Vec2.add" {

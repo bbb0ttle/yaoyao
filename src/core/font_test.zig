@@ -1,4 +1,5 @@
-const testing = @import("std").testing;
+const std = @import("std");
+const testing = std.testing;
 const font = @import("font.zig");
 
 test "char_index digits" {

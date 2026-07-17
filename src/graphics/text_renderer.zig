@@ -1,3 +1,10 @@
+//! Text and particle instance buffer filling for GPU upload.
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.text_renderer);
+
 const GpuInstance = @import("gpu_state.zig").GpuInstance;
 const GpuState = @import("gpu_state.zig").GpuState;
 const MAX_INSTANCES = @import("gpu_state.zig").MAX_INSTANCES;
@@ -10,6 +17,7 @@ const HeartSystem = @import("../systems/heart_system.zig").HeartSystem;
 const MAX_PARTICLE_SIZE = @import("../particles/particle.zig").MAX_PARTICLE_SIZE;
 const MAX_LIFESPAN = @import("../particles/particle.zig").MAX_LIFESPAN;
 
+/// Fill GPU instance buffer with 3x5 bitmap text glyph instances.
 pub fn fill_text_instances(
     gpu: *GpuState,
     w: f32,
@@ -77,6 +85,7 @@ pub fn fill_text_instances(
     return inst_count;
 }
 
+/// Fill GPU instance buffer from alive particles with culling and alpha.
 pub fn fill_particle_instances(
     gpu: *GpuState,
     pool: *ParticlePool,

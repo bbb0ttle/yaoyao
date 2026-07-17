@@ -1,4 +1,14 @@
+//! Shared primitive types: color, 2D vector.
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.types);
+
+/// 8-bit RGBA color with named palette constants.
 pub const Rgba = struct {
+    const Self = @This();
+
     r: u8,
     g: u8,
     b: u8,
@@ -12,11 +22,14 @@ pub const Rgba = struct {
     pub const TIMER_TEXT = WHITE;
 };
 
+/// 2D vector with floating-point components.
 pub const Vec2 = struct {
+    const Self = @This();
+
     x: f32,
     y: f32,
 
-    pub fn add(self: Vec2, other: Vec2) Vec2 {
-        return Vec2{ .x = self.x + other.x, .y = self.y + other.y };
+    pub fn add(self: Self, other: Self) Self {
+        return Self{ .x = self.x + other.x, .y = self.y + other.y };
     }
 };

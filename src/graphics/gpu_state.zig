@@ -1,3 +1,10 @@
+//! GPU state management: pipeline, buffers, instanced rendering.
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const log = std.log.scoped(.gpu_state);
+
 const sokol = @import("sokol");
 const sg = sokol.gfx;
 const shd = @import("../shaders/particle.glsl.zig");
@@ -7,6 +14,7 @@ const Rgba = @import("../core/types.zig").Rgba;
 pub const MAX_INSTANCES: u32 = 10000;
 pub const STROKE_WIDTH: f32 = 2.0;
 
+/// GPU instance data: position, sizes, alpha, and shape selector.
 pub const GpuInstance = extern struct {
     pos_x: f32,
     pos_y: f32,
@@ -17,7 +25,10 @@ pub const GpuInstance = extern struct {
     shape: f32,
 };
 
+/// GPU pipeline, buffers, and instanced drawing state for sokol.
 pub const GpuState = struct {
+    const Self = @This();
+
     pass_action: sg.PassAction,
     pip: sg.Pipeline,
     bind: sg.Bindings,
@@ -25,9 +36,7 @@ pub const GpuState = struct {
     instance_count: u32,
     allocator: std.mem.Allocator,
 
-    const std = @import("std");
-
-    pub fn init(allocator: std.mem.Allocator) !GpuState {
+    pub fn init(allocator: std.mem.Allocator) !Self {
         const instance_buffer = try allocator.alloc(GpuInstance, MAX_INSTANCES);
 
         sg.setup(.{
@@ -35,7 +44,7 @@ pub const GpuState = struct {
             .logger = .{ .func = @import("sokol").log.func },
         });
 
-        var self = GpuState{
+        var self = Self{
             .pass_action = .{},
             .pip = .{},
             .bind = .{},
@@ -49,29 +58,34 @@ pub const GpuState = struct {
             .clear_value = .{ .r = 169.0 / 255.0, .g = 229.0 / 255.0, .b = 214.0 / 255.0, .a = 1.0 },
         };
 
-        self._init_buffers();
-        self.pip = _build_pipeline();
+        self.init_buffers();
+        self.pip = build_pipeline();
 
         return self;
     }
 
-    pub fn deinit(self: *GpuState) void {
+    pub fn deinit(self: *Self) void {
         self.allocator.free(self.instance_buffer);
         sg.shutdown();
+        self.* = undefined;
     }
 
-    pub fn write_instance(self: *GpuState, idx: u32, inst: GpuInstance) void {
+    pub fn set_instance_count(self: *Self, count: u32) void {
+        self.instance_count = count;
+    }
+
+    pub fn write_instance(self: *Self, idx: u32, inst: GpuInstance) void {
         if (idx < MAX_INSTANCES) {
             self.instance_buffer[idx] = inst;
         }
     }
 
-    pub fn upload_instances(self: *GpuState) void {
+    pub fn upload_instances(self: *Self) void {
         sg.updateBuffer(self.bind.vertex_buffers[1], sg.asRange(self.instance_buffer[0..self.instance_count]));
     }
 
-    pub fn render(self: *GpuState, w: f32, h: f32) void {
-        const mvp = _ortho(0, w, h, 0);
+    pub fn render(self: *Self, w: f32, h: f32) void {
+        const mvp = ortho(0, w, h, 0);
         const vs_params = shd.VsParams{ .mvp = mvp };
         const fs_params = shd.FsParams{
             .fill_color = [_]f32{
@@ -101,7 +115,7 @@ pub const GpuState = struct {
         sg.commit();
     }
 
-    fn _init_buffers(self: *GpuState) void {
+    fn init_buffers(self: *Self) void {
         self.bind.vertex_buffers[0] = sg.makeBuffer(.{
             .data = sg.asRange(&[_]f32{
                 0.0, 0.0,
@@ -122,7 +136,7 @@ pub const GpuState = struct {
         });
     }
 
-    fn _build_pipeline() sg.Pipeline {
+    fn build_pipeline() sg.Pipeline {
         const gpu_backend = backend.detect_gpu_backend();
         return sg.makePipeline(.{
             .shader = sg.makeShader(shd.particleShaderDesc(gpu_backend)),
@@ -159,7 +173,7 @@ pub const GpuState = struct {
     }
 };
 
-fn _ortho(left: f32, right: f32, bottom: f32, top: f32) [16]f32 {
+fn ortho(left: f32, right: f32, bottom: f32, top: f32) [16]f32 {
     return .{
         2.0 / (right - left),             0.0,                              0.0,  0.0,
         0.0,                              2.0 / (top - bottom),             0.0,  0.0,

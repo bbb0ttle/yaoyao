@@ -1,4 +1,5 @@
-const testing = @import("std").testing;
+const std = @import("std");
+const testing = std.testing;
 const Particle = @import("particle.zig").Particle;
 const MAX_LIFESPAN = @import("particle.zig").MAX_LIFESPAN;
 const Vec2 = @import("../core/types.zig").Vec2;
