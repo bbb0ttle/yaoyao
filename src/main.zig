@@ -113,6 +113,10 @@ export fn oayao_set_days_counter_start_ms(ms: f64) void {
     }
 }
 
+export fn oayao_days_counter_default_start_ms() f64 {
+    return @import("app.zig").DAYS_COUNTER_DEFAULT_START_MS;
+}
+
 pub fn main() void {
     sapp.run(.{
         .init_cb = init,

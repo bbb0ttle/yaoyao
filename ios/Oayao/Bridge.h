@@ -25,6 +25,10 @@ void oayao_set_heart_tap_callback(oayao_heart_tap_callback_t callback);
 // Set the start timestamp (Unix epoch ms) for the day counter display.
 void oayao_set_days_counter_start_ms(double ms);
 
+// Built-in default start timestamp (Unix epoch ms) for the day counter,
+// applied when no calendar event anchors the counter.
+double oayao_days_counter_default_start_ms(void);
+
 #ifdef __cplusplus
 }
 #endif

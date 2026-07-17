@@ -1,10 +1,13 @@
 import EventKit
 import UIKit
 
-/// Wraps EventKit operations for the oayao calendar.
+/// Wraps EventKit operations for the configured calendar.
 /// Each calendar event maps to a floating heart in the Metal canvas.
 @objc final class CalendarManager: NSObject, @unchecked Sendable {
     static let shared = CalendarManager()
+
+    /// Title of the all-day marker event anchoring the day counter.
+    private let counterStartTitle = "counter start"
 
     private let eventStore = EKEventStore()
     private var oayaoCalendars: [EKCalendar] = []
@@ -38,7 +41,13 @@ import UIKit
 
     // MARK: - Calendar
 
-    /// Resolve a single canonical "oayao" calendar.
+    /// Re-resolve the canonical calendar after the configured name changed.
+    func calendarNameDidChange() {
+        guard hasAccess else { return }
+        resolveCanonicalCalendar { _ in }
+    }
+
+    /// Resolve a single canonical calendar matching the configured name.
     /// When multiple calendars share the title (self-created + shared subscriptions),
     /// only one is kept — preferring a writable local calendar.
     /// If no writable calendar exists, a new local one is created.
@@ -53,7 +62,7 @@ import UIKit
     }
 
     private func resolveCanonicalCalendar(completion: @escaping (Bool) -> Void) {
-        let allCalendars = eventStore.calendars(for: .event).filter { $0.title == "oayao" }
+        let allCalendars = eventStore.calendars(for: .event).filter { $0.title == SettingsStore.calendarName }
 
         // Prefer a writable local calendar, then any writable, then any existing
         let canonical = allCalendars.first(where: { $0.source.sourceType == .local && calendarWritable($0) })
@@ -77,7 +86,7 @@ import UIKit
 
     private func createLocalCalendar(completion: @escaping (Bool) -> Void) {
         let calendar = EKCalendar(for: .event, eventStore: eventStore)
-        calendar.title = "oayao"
+        calendar.title = SettingsStore.calendarName
         calendar.cgColor = UIColor.systemPink.cgColor
         if let source = eventStore.defaultCalendarForNewEvents?.source {
             calendar.source = source
@@ -108,6 +117,7 @@ import UIKit
     // MARK: - Sync
 
     private func syncAllEvents() {
+        syncDaysCounter()
         guard !oayaoCalendars.isEmpty else { return }
         let today = Date()
         let startOfDay = Calendar.current.startOfDay(for: today)
@@ -119,7 +129,7 @@ import UIKit
                 withStart: startOfDay, end: endOfDay, calendars: [calendar]
             )
             let events = eventStore.events(matching: predicate)
-            for event in events {
+            for event in events where !isCounterStartEvent(event) {
                 activeIds.append(event.eventIdentifier)
                 oayao_spawn_heart(event.eventIdentifier)
             }
@@ -127,6 +137,71 @@ import UIKit
 
         let joined = activeIds.joined(separator: "\n")
         oayao_sync_hearts(joined)
+    }
+
+    // MARK: - Days Counter
+
+    /// The date the day counter currently starts from: the marker event's
+    /// date when present, otherwise the built-in default.
+    func counterStartDate() -> Date {
+        if let startDate = counterStartEvent()?.startDate {
+            return startDate
+        }
+        return Date(timeIntervalSince1970: oayao_days_counter_default_start_ms() / 1000)
+    }
+
+    /// Create the marker event anchoring the day counter, or move an existing
+    /// one to the given date. Stored as an all-day event titled "counter start".
+    func setCounterStart(date: Date, completion: @escaping (Bool) -> Void) {
+        guard hasAccess, let calendar = writableCalendar else {
+            completion(false)
+            return
+        }
+
+        let startOfDay = Calendar.current.startOfDay(for: date)
+        let event = counterStartEvent() ?? EKEvent(eventStore: eventStore)
+        event.title = counterStartTitle
+        event.calendar = calendar
+        event.isAllDay = true
+        event.startDate = startOfDay
+        event.endDate = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)
+
+        do {
+            try eventStore.save(event, span: .thisEvent, commit: true)
+            syncDaysCounter()
+            completion(true)
+        } catch {
+            print("[Oayao] Failed to save counter start event: \(error)")
+            completion(false)
+        }
+    }
+
+    /// Push the effective counter start to the renderer: the marker event's
+    /// start date, or the built-in default when the event was deleted.
+    private func syncDaysCounter() {
+        let startMs: Double
+        if let startDate = counterStartEvent()?.startDate {
+            startMs = startDate.timeIntervalSince1970 * 1000
+        } else {
+            startMs = oayao_days_counter_default_start_ms()
+        }
+        oayao_set_days_counter_start_ms(startMs)
+    }
+
+    private func counterStartEvent() -> EKEvent? {
+        guard !oayaoCalendars.isEmpty else { return nil }
+        let now = Date()
+        guard let start = Calendar.current.date(byAdding: .year, value: -100, to: now),
+              let end = Calendar.current.date(byAdding: .year, value: 100, to: now)
+        else { return nil }
+        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: oayaoCalendars)
+        return eventStore.events(matching: predicate).first(where: { isCounterStartEvent($0) })
+    }
+
+    private func isCounterStartEvent(_ event: EKEvent) -> Bool {
+        guard let title = event.title else { return false }
+        return title.trimmingCharacters(in: .whitespaces)
+            .caseInsensitiveCompare(counterStartTitle) == .orderedSame
     }
 
     // MARK: - CRUD

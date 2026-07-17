@@ -20,7 +20,7 @@ const Rng = @import("random.zig").Rng;
 const Vec2 = @import("core/types.zig").Vec2;
 
 const POOL_CAPACITY: usize = 5000;
-const DAYS_COUNTER_DEFAULT_START_MS: f64 = 1660694400000.0;
+pub const DAYS_COUNTER_DEFAULT_START_MS: f64 = 1660694400000.0;
 
 const IncomingHeart = struct {
     particle: *Particle,

@@ -288,7 +288,9 @@ fn createIosAppBundle(
         \\  "$7"/CallbackBridge.swift \
         \\  "$7"/CalendarManager.swift \
         \\  "$7"/EventDetailSheet.swift \
-        \\  "$7"/AddEventSheet.swift
+        \\  "$7"/AddEventSheet.swift \
+        \\  "$7"/SettingsStore.swift \
+        \\  "$7"/SettingsSheet.swift
         \\
         \\# Link with Apple's ld64 via xcrun clang — produces correct LC_ENCRYPTION_INFO,
         \\# segment alignment, SDK version, and PIE that App Store Connect requires.

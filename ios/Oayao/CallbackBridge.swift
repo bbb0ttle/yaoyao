@@ -47,6 +47,10 @@ private func prewarmSheetViews() {
     let addVC = UIHostingController(rootView: AddEventSheet())
     addVC.view.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
     addVC.view.layoutIfNeeded()
+
+    let settingsVC = UIHostingController(rootView: SettingsSheet())
+    settingsVC.view.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+    settingsVC.view.layoutIfNeeded()
 }
 
 private func presentEventDetail(eventId: String) {
@@ -72,6 +76,20 @@ private func presentAddEvent() {
         )
         if let sheet = sheet.sheetPresentationController {
             sheet.detents = [.medium()]
+            sheet.prefersGrabberVisible = true
+        }
+        rootVC.present(sheet, animated: true)
+    }
+}
+
+private func presentSettings() {
+    DispatchQueue.main.async {
+        guard let rootVC = rootViewController() else { return }
+        let sheet = UIHostingController(
+            rootView: SettingsSheet()
+        )
+        if let sheet = sheet.sheetPresentationController {
+            sheet.detents = [.medium(), .large()]
             sheet.prefersGrabberVisible = true
         }
         rootVC.present(sheet, animated: true)
@@ -136,12 +154,10 @@ private func addOverlayButtons() {
     window.addSubview(glassHost.view)
 
     let settingsBtn = UIButton(type: .system)
-    settingsBtn.setImage(UIImage(systemName: "gearshape.circle.fill"), for: .normal)
-    settingsBtn.tintColor = UIColor(white: 0.7, alpha: 0.8)
-    settingsBtn.contentVerticalAlignment = .fill
-    settingsBtn.contentHorizontalAlignment = .fill
+    settingsBtn.setImage(UIImage(named: "SettingsIcon"), for: .normal)
+    settingsBtn.tintColor = .white
     settingsBtn.translatesAutoresizingMaskIntoConstraints = false
-    settingsBtn.isHidden = true
+    settingsBtn.addTarget(OverlayTarget.shared, action: #selector(OverlayTarget.settingsTapped), for: .touchUpInside)
     window.addSubview(settingsBtn)
     settingsButton = settingsBtn
 
@@ -151,10 +167,10 @@ private func addOverlayButtons() {
         glassHost.view.widthAnchor.constraint(equalToConstant: 56),
         glassHost.view.heightAnchor.constraint(equalToConstant: 56),
 
-        settingsBtn.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor, constant: 16),
-        settingsBtn.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor, constant: 8),
-        settingsBtn.widthAnchor.constraint(equalToConstant: 36),
-        settingsBtn.heightAnchor.constraint(equalToConstant: 36),
+        settingsBtn.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor, constant: 8),
+        settingsBtn.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor, constant: 4),
+        settingsBtn.widthAnchor.constraint(equalToConstant: 44),
+        settingsBtn.heightAnchor.constraint(equalToConstant: 44),
     ])
 }
 
@@ -162,17 +178,8 @@ private func addOverlayButtons() {
 final class OverlayTarget: NSObject {
     static let shared = OverlayTarget()
 
-    @objc func addTapped() {
-        presentAddEvent()
-    }
-
     @objc func settingsTapped() {
-        CalendarManager.shared.shareCalendar { url in
-            guard let url = url else { return }
-            DispatchQueue.main.async {
-                UIApplication.shared.open(url)
-            }
-        }
+        presentSettings()
     }
 }
 
