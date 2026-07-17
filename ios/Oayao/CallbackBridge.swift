@@ -98,9 +98,6 @@ private func presentSettings() {
 
 // MARK: - Overlay Buttons
 
-private var addButton: UIButton?
-private var settingsButton: UIButton?
-
 // SwiftUI glass add button for iOS 26+, fallback for older versions
 private struct GlassAddButton: View {
     let action: () -> Void
@@ -112,7 +109,7 @@ private struct GlassAddButton: View {
                 .foregroundColor(.white)
                 .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                 .frame(width: 56, height: 56)
-                .modifier(GlassModifier())
+                .modifier(GlassModifier(cornerRadius: 28))
         }
         .buttonStyle(ScaleButtonStyle())
     }
@@ -128,17 +125,40 @@ private struct ScaleButtonStyle: ButtonStyle {
 }
 
 private struct GlassModifier: ViewModifier {
+    let cornerRadius: CGFloat
+
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
                 .glassEffect()
         } else {
             content
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 28)
+                    RoundedRectangle(cornerRadius: cornerRadius)
                         .stroke(.white.opacity(0.35), lineWidth: 0.5)
                 }
+        }
+    }
+}
+
+// Settings above the primary add button, centred on the same axis.
+private struct OverlayButtons: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Button(action: { presentSettings() }) {
+                Image("SettingsIcon")
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(.white)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(ScaleButtonStyle())
+
+            GlassAddButton {
+                presentAddEvent()
+            }
         }
     }
 }
@@ -146,41 +166,15 @@ private struct GlassModifier: ViewModifier {
 private func addOverlayButtons() {
     guard let window = keyWindow() else { return }
 
-    let glassHost = UIHostingController(rootView: GlassAddButton {
-        presentAddEvent()
-    })
-    glassHost.view.backgroundColor = .clear
-    glassHost.view.translatesAutoresizingMaskIntoConstraints = false
-    window.addSubview(glassHost.view)
-
-    let settingsBtn = UIButton(type: .system)
-    settingsBtn.setImage(UIImage(named: "SettingsIcon"), for: .normal)
-    settingsBtn.tintColor = .white
-    settingsBtn.translatesAutoresizingMaskIntoConstraints = false
-    settingsBtn.addTarget(OverlayTarget.shared, action: #selector(OverlayTarget.settingsTapped), for: .touchUpInside)
-    window.addSubview(settingsBtn)
-    settingsButton = settingsBtn
+    let host = UIHostingController(rootView: OverlayButtons())
+    host.view.backgroundColor = .clear
+    host.view.translatesAutoresizingMaskIntoConstraints = false
+    window.addSubview(host.view)
 
     NSLayoutConstraint.activate([
-        glassHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-        glassHost.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-        glassHost.view.widthAnchor.constraint(equalToConstant: 56),
-        glassHost.view.heightAnchor.constraint(equalToConstant: 56),
-
-        settingsBtn.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor, constant: 8),
-        settingsBtn.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor, constant: 4),
-        settingsBtn.widthAnchor.constraint(equalToConstant: 44),
-        settingsBtn.heightAnchor.constraint(equalToConstant: 44),
+        host.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+        host.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
     ])
-}
-
-// ObjC target for button actions (global functions can't use #selector directly)
-final class OverlayTarget: NSObject {
-    static let shared = OverlayTarget()
-
-    @objc func settingsTapped() {
-        presentSettings()
-    }
 }
 
 // MARK: - Helpers
