@@ -1,6 +1,8 @@
 #ifndef OAYAO_BRIDGE_H
 #define OAYAO_BRIDGE_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,6 +30,15 @@ void oayao_set_days_counter_start_ms(double ms);
 // Built-in default start timestamp (Unix epoch ms) for the day counter,
 // applied when no calendar event anchors the counter.
 double oayao_days_counter_default_start_ms(void);
+
+// Transition the canvas to a theme with an animated color fade.
+// theme_id: 0 = mint, 1 = peach, 2 = custom. Unknown ids are ignored.
+void oayao_transition_to_theme(uint32_t theme_id);
+
+// Update one color of the custom theme. If the custom theme is currently
+// active, the canvas fades to the new color.
+// role: 0 = background, 1 = heart fill, 2 = heart stroke, 3 = timer text.
+void oayao_set_custom_theme_color(uint32_t role, uint8_t r, uint8_t g, uint8_t b);
 
 #ifdef __cplusplus
 }

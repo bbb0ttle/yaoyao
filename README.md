@@ -12,6 +12,7 @@
 - 成对漂浮的永生粒子,伴随天数计数器
 - 天数计数器(`N.NNNNNNNNNN DAYS`,3x5 点阵字体逐像素实例化渲染),起始时间戳可由宿主层设置
 - 点击空白处触发流星雨与粒子爆发
+- 主题系统:内置薄荷绿(Mint)、蜜桃粉(Peach)与自定义(Custom)三套配色;自定义主题的各关键颜色(背景、爱心填充/描边、计数文字)可由用户调整,切换与调整时所有颜色以 smoothstep 缓动渐变过渡
 - 标记爱心(tagged hearts):由宿主层按事件 ID 生成,以流星形式飞入画布下部随机落位,随后进入漂浮/跳动状态;点击命中时通过回调通知宿主层;事件消失时淡出
 
 ### iOS(Swift / SwiftUI + EventKit)
@@ -19,7 +20,7 @@
 - 日历同步:按设置中的日历名解析规范日历,当天每个事件生成一颗爱心,日历变更时自动重同步
 - 添加事件:右下角玻璃质感悬浮按钮弹出添加表单
 - 事件详情:点击画布中的爱心弹出详情表单,可编辑、删除
-- 设置:配置日历名称与天数计数器起始日期
+- 设置:配置日历名称、天数计数器起始日期与画布主题
 - 日历共享:设置页提供分步引导,通过 `calshow:` 深链跳转日历 App 完成 iCloud 共享邀请;日历优先创建于 iCloud 源(本地日历无法共享)
 - 天数计数器锚定:起始日期以 `yyyy-MM-dd` 存入名为「开始的地方」的全天标记事件 notes,随 iCloud 共享同步给对方;事件本体日期保持近期并定期重拷,以避开 EventKit 4 年谓词窗口;删除该事件则回退到内置默认值,UserDefaults 仅作本地缓存
 
@@ -154,7 +155,8 @@ z-canvas/
     random.zig           # LCG 伪随机数生成器
     tests.zig            # 测试入口
     core/
-      types.zig          # Rgba 调色板、Vec2
+      types.zig          # Rgba、Vec2
+      theme.zig          # 主题配色定义与渐变过渡状态机
       math.zig           # 心形参数曲线、呼吸/缩放动画
       font.zig           # 3x5 点阵位图字体(数字与 DAYS 相关字符)
     particles/
@@ -220,6 +222,8 @@ Zig 渲染层与 Swift 宿主层通过 C ABI 双向通信。
 | `oayao_set_heart_tap_callback(cb)` | 注册爱心点击回调,回调参数为事件 ID |
 | `oayao_set_days_counter_start_ms(ms)` | 设置天数计数器起始时间戳(Unix epoch 毫秒) |
 | `oayao_days_counter_default_start_ms()` | 内置默认起始时间戳(未设置起始日期时回退使用) |
+| `oayao_transition_to_theme(theme_id)` | 切换画布主题(0=薄荷,1=蜜桃粉,2=自定义),颜色渐变过渡;未知 id 忽略 |
+| `oayao_set_custom_theme_color(role, r, g, b)` | 更新自定义主题的单个颜色(role:0=背景,1=爱心填充,2=描边,3=计数文字);自定义主题激活时即时渐变生效 |
 
 **CalendarManager**(`ios/Oayao/CalendarManager.swift`):
 

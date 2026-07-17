@@ -10,6 +10,7 @@ const sg = sokol.gfx;
 const shd = @import("../shaders/particle.glsl.zig");
 const backend = @import("../platform/backend.zig");
 const Rgba = @import("../core/types.zig").Rgba;
+const Theme = @import("../core/theme.zig").Theme;
 
 pub const MAX_INSTANCES: u32 = 10000;
 pub const STROKE_WIDTH: f32 = 2.0;
@@ -84,22 +85,19 @@ pub const GpuState = struct {
         sg.updateBuffer(self.bind.vertex_buffers[1], sg.asRange(self.instance_buffer[0..self.instance_count]));
     }
 
-    pub fn render(self: *Self, w: f32, h: f32) void {
+    pub fn render(self: *Self, w: f32, h: f32, theme: Theme) void {
         const mvp = ortho(0, w, h, 0);
         const vs_params = shd.VsParams{ .mvp = mvp };
         const fs_params = shd.FsParams{
-            .fill_color = [_]f32{
-                @as(f32, @floatFromInt(Rgba.HEART_FILL.r)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.HEART_FILL.g)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.HEART_FILL.b)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.HEART_FILL.a)) / 255.0,
-            },
-            .stroke_color = [_]f32{
-                @as(f32, @floatFromInt(Rgba.HEART_STROKE.r)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.HEART_STROKE.g)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.HEART_STROKE.b)) / 255.0,
-                @as(f32, @floatFromInt(Rgba.HEART_STROKE.a)) / 255.0,
-            },
+            .fill_color = to_f32x4(theme.heart_fill),
+            .stroke_color = to_f32x4(theme.heart_stroke),
+            .text_color = to_f32x4(theme.timer_text),
+        };
+        self.pass_action.colors[0].clear_value = .{
+            .r = @as(f32, @floatFromInt(theme.background.r)) / 255.0,
+            .g = @as(f32, @floatFromInt(theme.background.g)) / 255.0,
+            .b = @as(f32, @floatFromInt(theme.background.b)) / 255.0,
+            .a = 1.0,
         };
 
         const sglue = @import("sokol").glue;
@@ -172,6 +170,15 @@ pub const GpuState = struct {
         });
     }
 };
+
+fn to_f32x4(c: Rgba) [4]f32 {
+    return .{
+        @as(f32, @floatFromInt(c.r)) / 255.0,
+        @as(f32, @floatFromInt(c.g)) / 255.0,
+        @as(f32, @floatFromInt(c.b)) / 255.0,
+        @as(f32, @floatFromInt(c.a)) / 255.0,
+    };
+}
 
 fn ortho(left: f32, right: f32, bottom: f32, top: f32) [16]f32 {
     return .{

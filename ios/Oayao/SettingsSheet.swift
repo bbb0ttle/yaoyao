@@ -3,6 +3,7 @@ import SwiftUI
 /// Settings screen styled after the iOS system Settings app.
 struct SettingsSheet: View {
     @AppStorage(SettingsStore.calendarNameKey) private var calendarName = SettingsStore.defaultCalendarName
+    @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
     @State private var counterStart = Date()
     @Environment(\.dismiss) private var dismiss
 
@@ -46,6 +47,21 @@ struct SettingsSheet: View {
                     Text("Days Counter")
                 } footer: {
                     Text("Recorded in the calendar so it syncs to your partner when shared.")
+                }
+
+                Section {
+                    NavigationLink {
+                        ThemeSettingsView()
+                    } label: {
+                        HStack {
+                            Text("Theme")
+                            Spacer()
+                            Text(CanvasTheme(storedId: UInt32(themeId)).name)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } footer: {
+                    Text("Canvas colors fade smoothly when switching themes.")
                 }
             }
             .navigationTitle("Settings")
@@ -185,5 +201,144 @@ private struct CounterStartSettingsView: View {
         .onChange(of: counterStart) { newValue in
             CalendarManager.shared.setCounterStart(date: newValue)
         }
+    }
+}
+
+/// Canvas themes; raw values mirror the renderer's ThemeId enum in Zig.
+enum CanvasTheme: UInt32, CaseIterable, Identifiable {
+    case mint = 0
+    case peach = 1
+    case custom = 2
+
+    var id: UInt32 { rawValue }
+
+    init(storedId: UInt32) {
+        self = CanvasTheme(rawValue: storedId) ?? .mint
+    }
+
+    var name: String {
+        switch self {
+        case .mint: return "Mint"
+        case .peach: return "Peach"
+        case .custom: return "Custom"
+        }
+    }
+
+    var backgroundColor: Color {
+        switch self {
+        case .mint: return Color(packedRGB: 0xA9E5D6)
+        case .peach: return Color(packedRGB: 0xF5CDD7)
+        case .custom: return Color(packedRGB: SettingsStore.customThemeColors["background"] ?? 0xA9E5D6)
+        }
+    }
+}
+
+/// Roles of the custom theme's editable colors; raw values mirror the
+/// renderer's ColorRole enum in Zig.
+private enum CustomColorRole: UInt32, CaseIterable {
+    case background = 0
+    case heartFill = 1
+    case heartStroke = 2
+    case timerText = 3
+
+    var key: String {
+        switch self {
+        case .background: return "background"
+        case .heartFill: return "heartFill"
+        case .heartStroke: return "heartStroke"
+        case .timerText: return "timerText"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .background: return "Background"
+        case .heartFill: return "Heart Fill"
+        case .heartStroke: return "Heart Stroke"
+        case .timerText: return "Timer Text"
+        }
+    }
+}
+
+private extension Color {
+    init(packedRGB: Int) {
+        self.init(
+            red: Double((packedRGB >> 16) & 0xFF) / 255,
+            green: Double((packedRGB >> 8) & 0xFF) / 255,
+            blue: Double(packedRGB & 0xFF) / 255
+        )
+    }
+
+    var packedRGB: Int {
+        let ui = UIColor(self)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ui.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (Int(round(r * 255)) << 16) | (Int(round(g * 255)) << 8) | Int(round(b * 255))
+    }
+}
+
+/// Theme picker; selection persists and applies immediately with an animated fade.
+private struct ThemeSettingsView: View {
+    @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
+    @State private var customColors: [String: Int] = SettingsStore.customThemeColors
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(CanvasTheme.allCases) { theme in
+                    Button {
+                        themeId = Int(theme.rawValue)
+                        oayao_transition_to_theme(theme.rawValue)
+                    } label: {
+                        HStack {
+                            Circle()
+                                .fill(theme.backgroundColor)
+                                .frame(width: 22, height: 22)
+                                .overlay {
+                                    Circle().stroke(.primary.opacity(0.15), lineWidth: 0.5)
+                                }
+                            Text(theme.name)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if Int(theme.rawValue) == themeId {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if CanvasTheme(storedId: UInt32(themeId)) == .custom {
+                Section {
+                    ForEach(CustomColorRole.allCases, id: \.key) { role in
+                        ColorPicker(role.label, selection: customColorBinding(role), supportsOpacity: false)
+                    }
+                } header: {
+                    Text("Custom Colors")
+                } footer: {
+                    Text("Changes fade in immediately on the canvas.")
+                }
+            }
+        }
+        .navigationTitle("Theme")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func customColorBinding(_ role: CustomColorRole) -> Binding<Color> {
+        Binding(
+            get: { Color(packedRGB: customColors[role.key] ?? 0xFFFFFF) },
+            set: { newColor in
+                let packed = newColor.packedRGB
+                customColors[role.key] = packed
+                SettingsStore.customThemeColors = customColors
+                oayao_set_custom_theme_color(
+                    role.rawValue,
+                    UInt8((packed >> 16) & 0xFF),
+                    UInt8((packed >> 8) & 0xFF),
+                    UInt8(packed & 0xFF)
+                )
+            }
+        )
     }
 }

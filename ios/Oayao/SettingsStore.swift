@@ -4,6 +4,8 @@ import Foundation
 enum SettingsStore {
     static let calendarNameKey = "oayao.calendarName"
     static let counterStartMsKey = "oayao.counterStartMs"
+    static let themeIdKey = "oayao.themeId"
+    static let customThemeColorsKey = "oayao.customThemeColors"
     static let defaultCalendarName = "oayao"
 
     /// Name of the calendar the app reads and writes events in.
@@ -26,4 +28,35 @@ enum SettingsStore {
             UserDefaults.standard.set(newValue, forKey: counterStartMsKey)
         }
     }
+
+    /// Selected canvas theme. Values mirror the renderer's ThemeId enum.
+    static var themeId: UInt32 {
+        get {
+            let stored = UserDefaults.standard.object(forKey: themeIdKey) as? Int
+            return UInt32(stored ?? 0)
+        }
+        set {
+            UserDefaults.standard.set(Int(newValue), forKey: themeIdKey)
+        }
+    }
+
+    /// Custom theme colors as packed RGB (0xRRGGBB) keyed by role.
+    /// Defaults mirror the renderer's mint palette so the custom theme
+    /// starts as an editable copy of mint.
+    static var customThemeColors: [String: Int] {
+        get {
+            let stored = UserDefaults.standard.dictionary(forKey: customThemeColorsKey) as? [String: Int] ?? [:]
+            return defaultCustomThemeColors.merging(stored) { _, new in new }
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: customThemeColorsKey)
+        }
+    }
+
+    static let defaultCustomThemeColors: [String: Int] = [
+        "background": 0xA9E5D6,
+        "heartFill": 0xFFFFFF,
+        "heartStroke": 0xDBECE6,
+        "timerText": 0xFFFFFF,
+    ]
 }

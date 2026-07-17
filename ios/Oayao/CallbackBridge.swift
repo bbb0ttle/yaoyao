@@ -18,6 +18,18 @@ func oayao_swift_bootstrap() {
     DispatchQueue.main.async {
         oayao_set_heart_tap_callback(heartTapCallback)
 
+        let customColors = SettingsStore.customThemeColors
+        for (role, key) in [(0, "background"), (1, "heartFill"), (2, "heartStroke"), (3, "timerText")] {
+            let packed = customColors[key] ?? 0xFFFFFF
+            oayao_set_custom_theme_color(
+                UInt32(role),
+                UInt8((packed >> 16) & 0xFF),
+                UInt8((packed >> 8) & 0xFF),
+                UInt8(packed & 0xFF)
+            )
+        }
+        oayao_transition_to_theme(SettingsStore.themeId)
+
         CalendarManager.shared.requestAccess { granted in
             if granted {
                 print("[Oayao] Calendar access granted")

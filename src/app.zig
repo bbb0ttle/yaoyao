@@ -18,6 +18,9 @@ const Particle = @import("particles/particle.zig").Particle;
 const MAX_PARTICLE_SIZE = @import("particles/particle.zig").MAX_PARTICLE_SIZE;
 const Rng = @import("random.zig").Rng;
 const Vec2 = @import("core/types.zig").Vec2;
+const theme_mod = @import("core/theme.zig");
+const Theme = theme_mod.Theme;
+const ThemeTransition = theme_mod.ThemeTransition;
 
 const POOL_CAPACITY: usize = 5000;
 pub const DAYS_COUNTER_DEFAULT_START_MS: f64 = 1660694400000.0;
@@ -49,6 +52,10 @@ pub const App = struct {
     resize_cooldown: u32,
     dpr: f32,
     start_time: f32,
+    last_elapsed: f32,
+    theme: ThemeTransition,
+    theme_id: theme_mod.ThemeId,
+    custom_theme: Theme,
 
     days_text_buf: [32]u8,
     days_text_len: usize,
@@ -79,6 +86,10 @@ pub const App = struct {
             .resize_cooldown = 0,
             .dpr = sapp.dpiScale(),
             .start_time = @floatCast(sapp.frameDuration()),
+            .last_elapsed = 0.0,
+            .theme = ThemeTransition.init(theme_mod.MINT),
+            .theme_id = .mint,
+            .custom_theme = theme_mod.MINT,
             .days_text_buf = undefined,
             .days_text_len = 0,
             .tagged_hearts = std.StringHashMap(*Particle).init(allocator),
@@ -104,6 +115,7 @@ pub const App = struct {
     pub fn tick_elapsed(self: *Self) f32 {
         const elapsed = self.start_time;
         self.start_time += @as(f32, @floatCast(sapp.frameDuration()));
+        self.last_elapsed = elapsed;
         return elapsed;
     }
 
@@ -310,6 +322,30 @@ pub const App = struct {
 
     pub fn set_days_counter_start_ms(self: *Self, ms: f64) void {
         self.days_counter_start_ms = ms;
+    }
+
+    pub fn transition_to_theme(self: *Self, theme_id: u32) void {
+        const id = std.enums.fromInt(theme_mod.ThemeId, theme_id) orelse {
+            log.warn("unknown theme_id={d}, ignoring", .{theme_id});
+            return;
+        };
+        self.theme_id = id;
+        self.theme.transition_to(theme_mod.theme_for(id, self.custom_theme), self.last_elapsed);
+    }
+
+    pub fn set_custom_theme_color(self: *Self, role_id: u32, r: u8, g: u8, b: u8) void {
+        const role = std.enums.fromInt(theme_mod.ColorRole, role_id) orelse {
+            log.warn("unknown color role={d}, ignoring", .{role_id});
+            return;
+        };
+        theme_mod.set_color(&self.custom_theme, role, .{ .r = r, .g = g, .b = b, .a = 255 });
+        if (self.theme_id == .custom) {
+            self.theme.transition_to(self.custom_theme, self.last_elapsed);
+        }
+    }
+
+    pub fn current_theme(self: *Self) Theme {
+        return self.theme.current(self.last_elapsed);
     }
 
     fn handle_heart_tap(self: *Self, x: f32, y: f32) bool {

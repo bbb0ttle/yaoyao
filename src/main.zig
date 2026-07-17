@@ -44,7 +44,7 @@ export fn frame() void {
 
     const gpu = app.gpu_mut();
     gpu.upload_instances();
-    gpu.render(w, h);
+    gpu.render(w, h, app.current_theme());
 }
 
 export fn cleanup() void {
@@ -115,6 +115,18 @@ export fn oayao_set_days_counter_start_ms(ms: f64) void {
 
 export fn oayao_days_counter_default_start_ms() f64 {
     return @import("app.zig").DAYS_COUNTER_DEFAULT_START_MS;
+}
+
+export fn oayao_transition_to_theme(theme_id: u32) void {
+    if (g_app) |app| {
+        app.transition_to_theme(theme_id);
+    }
+}
+
+export fn oayao_set_custom_theme_color(role: u32, r: u8, g: u8, b: u8) void {
+    if (g_app) |app| {
+        app.set_custom_theme_color(role, r, g, b);
+    }
 }
 
 pub fn main() void {

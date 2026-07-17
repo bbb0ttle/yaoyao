@@ -49,6 +49,7 @@ void main() {
 layout(binding=1) uniform fs_params {
     vec4 fill_color;
     vec4 stroke_color;
+    vec4 text_color;
 };
 
 in vec2 v_uv;
@@ -91,8 +92,10 @@ void main() {
     float fa = smoothstep(-fill_aa, fill_aa, d_fill) * v_fill_a;
 
     // Composite: fill over stroke (matches original two-pass alpha blending)
+    // Text pixels (shape 2) take the dedicated text color instead of fill_color.
+    vec3 fill_rgb = (v_shape >= 1.5) ? text_color.rgb : fill_color.rgb;
     float combined_a = fa + sa * (1.0 - fa);
-    vec3 combined_rgb = (fill_color.rgb * fa + stroke_color.rgb * sa * (1.0 - fa))
+    vec3 combined_rgb = (fill_rgb * fa + stroke_color.rgb * sa * (1.0 - fa))
                       / max(combined_a, 0.001);
     frag_color = vec4(combined_rgb, combined_a);
 }
