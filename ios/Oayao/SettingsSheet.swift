@@ -20,13 +20,15 @@ struct SettingsSheet: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                    Button("Open in Calendar") {
-                        openInCalendarApp()
+                    NavigationLink {
+                        ShareGuideView()
+                    } label: {
+                        Text("Share with Partner")
                     }
                 } header: {
                     Text("Calendar")
                 } footer: {
-                    Text("Events in this calendar appear as floating hearts.")
+                    Text("Events in this calendar appear as floating hearts. Share it with your partner to see each other's hearts.")
                 }
 
                 Section {
@@ -43,7 +45,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Days Counter")
                 } footer: {
-                    Text("Stored on this device.")
+                    Text("Recorded in the calendar so it syncs to your partner when shared.")
                 }
             }
             .navigationTitle("Settings")
@@ -58,6 +60,45 @@ struct SettingsSheet: View {
             counterStart = CalendarManager.shared.counterStartDate()
         }
     }
+}
+
+/// Step-by-step guide for sharing the calendar with a partner via iCloud.
+/// The final step (adding a person) can only happen in the Calendar app —
+/// there is no public API to invite a sharee programmatically.
+private struct ShareGuideView: View {
+    @State private var isShareable = true
+
+    var body: some View {
+        Form {
+            Section {
+                GuideStep(number: 1, text: "Tap \"Open Calendar App\" below to jump to this calendar. If you land on the calendar list, tap the info button next to \"\(SettingsStore.calendarName)\".")
+                GuideStep(number: 2, text: "Tap \"Add Person\" under Shared With.")
+                GuideStep(number: 3, text: "Enter your partner's Apple ID email and send the invitation.")
+                GuideStep(number: 4, text: "Once they accept, their events appear as hearts on your canvas — and yours on theirs. They only need this app with the same calendar name (the default works).")
+            } header: {
+                Text("How It Works")
+            }
+
+            Section {
+                Button("Open Calendar App") {
+                    openInCalendarApp()
+                }
+                if !isShareable {
+                    Text("The current calendar is not iCloud-backed, so it can't be shared. Calendars created by this app use iCloud when it's available.")
+                        .foregroundColor(.secondary)
+                }
+            } footer: {
+                if isShareable {
+                    Text("Sharing uses iCloud — no account or sign-up needed in this app.")
+                }
+            }
+        }
+        .navigationTitle("Share with Partner")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            isShareable = CalendarManager.shared.currentCalendarIsShareable()
+        }
+    }
 
     private func openInCalendarApp() {
         CalendarManager.shared.shareCalendar { url in
@@ -66,6 +107,25 @@ struct SettingsSheet: View {
                 UIApplication.shared.open(url)
             }
         }
+    }
+}
+
+private struct GuideStep: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number, format: .number)
+                .font(.footnote.weight(.bold))
+                .foregroundColor(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.accentColor))
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 2)
     }
 }
 

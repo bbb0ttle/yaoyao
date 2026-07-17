@@ -15,7 +15,8 @@ enum SettingsStore {
     }
 
     /// Day counter start timestamp (Unix epoch milliseconds).
-    /// Falls back to the renderer's built-in default when never set.
+    /// Local cache of the date recorded in the calendar's marker event;
+    /// falls back to the renderer's built-in default when never set.
     static var counterStartMs: Double {
         get {
             let stored = UserDefaults.standard.object(forKey: counterStartMsKey) as? Double

@@ -20,7 +20,8 @@
 - 添加事件:右下角玻璃质感悬浮按钮弹出添加表单
 - 事件详情:点击画布中的爱心弹出详情表单,可编辑、删除
 - 设置:配置日历名称与天数计数器起始日期
-- 天数计数器锚定:起始日期持久化在 UserDefaults(`SettingsStore`),未设置时回退到内置默认值
+- 日历共享:设置页提供分步引导,通过 `calshow:` 深链跳转日历 App 完成 iCloud 共享邀请;日历优先创建于 iCloud 源(本地日历无法共享)
+- 天数计数器锚定:起始日期以 `yyyy-MM-dd` 存入名为「开始的地方」的全天标记事件 notes,随 iCloud 共享同步给对方;事件本体日期保持近期并定期重拷,以避开 EventKit 4 年谓词窗口;删除该事件则回退到内置默认值,UserDefaults 仅作本地缓存
 
 ### Web(Vite + TypeScript)
 
@@ -222,11 +223,11 @@ Zig 渲染层与 Swift 宿主层通过 C ABI 双向通信。
 
 **CalendarManager**(`ios/Oayao/CalendarManager.swift`):
 
-- 按 `SettingsStore.calendarName` 解析规范日历:优先本地可写日历,其次任意可写日历,均不存在则创建本地日历
-- 同步当天事件:每个事件调用 `oayao_spawn_heart`,随后以全部活跃 ID 调用 `oayao_sync_hearts`
+- 按 `SettingsStore.calendarName` 解析规范日历:优先可写 iCloud 日历,其次任意可写日历,再次只读共享日历(仍可提供爱心),均不存在则创建于 iCloud 源
+- 同步当天事件:每个非标记事件调用 `oayao_spawn_heart`,随后以全部活跃 ID 调用 `oayao_sync_hearts`
 - 监听 `EKEventStoreChanged`,日历内容变化时自动重新解析并同步
-- 天数计数器锚定:将 `SettingsStore.counterStartMs` 推送到渲染层(本地持久化,不创建日历事件)
-- 提供事件 CRUD 与 `calshow:` 链接分享
+- 天数计数器锚定:读取最新的「开始的地方」标记事件,将 notes 中的日期推送到渲染层;标记接近 4 年查询窗口边缘时按当天日期重拷一份
+- 提供事件 CRUD、`calshow:` 链接分享与日历可共享性检测
 
 **UI 层**:点击画布爱心 → `EventDetailSheet`(medium/large detent);右下角悬浮按钮 → `AddEventSheet` / `SettingsSheet`(iOS 26+ 使用玻璃效果,旧版本回退为 ultraThinMaterial)。
 
