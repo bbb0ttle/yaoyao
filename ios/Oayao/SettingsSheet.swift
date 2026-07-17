@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsSheet: View {
     @AppStorage(SettingsStore.calendarNameKey) private var calendarName = SettingsStore.defaultCalendarName
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
+    @ObservedObject private var languageManager = LanguageManager.shared
     @State private var counterStart = Date()
     @Environment(\.dismiss) private var dismiss
 
@@ -15,7 +16,7 @@ struct SettingsSheet: View {
                         CalendarNameSettingsView()
                     } label: {
                         HStack {
-                            Text("Name")
+                            Text(L10n.tr(.name))
                             Spacer()
                             Text(calendarName)
                                 .foregroundColor(.secondary)
@@ -24,12 +25,12 @@ struct SettingsSheet: View {
                     NavigationLink {
                         ShareGuideView()
                     } label: {
-                        Text("Share with Partner")
+                        Text(L10n.tr(.shareWithPartner))
                     }
                 } header: {
-                    Text("Calendar")
+                    Text(L10n.tr(.calendar))
                 } footer: {
-                    Text("Events in this calendar appear as floating hearts. Share it with your partner to see each other's hearts.")
+                    Text(L10n.tr(.calendarFooter))
                 }
 
                 Section {
@@ -37,16 +38,16 @@ struct SettingsSheet: View {
                         CounterStartSettingsView(counterStart: $counterStart)
                     } label: {
                         HStack {
-                            Text("Start Date")
+                            Text(L10n.tr(.startDate))
                             Spacer()
                             Text(counterStart, style: .date)
                                 .foregroundColor(.secondary)
                         }
                     }
                 } header: {
-                    Text("Days Counter")
+                    Text(L10n.tr(.daysCounter))
                 } footer: {
-                    Text("Recorded in the calendar so it syncs to your partner when shared.")
+                    Text(L10n.tr(.counterFooter))
                 }
 
                 Section {
@@ -54,21 +55,34 @@ struct SettingsSheet: View {
                         ThemeSettingsView()
                     } label: {
                         HStack {
-                            Text("Theme")
+                            Text(L10n.tr(.theme))
                             Spacer()
                             Text(CanvasTheme(storedId: UInt32(themeId)).name)
                                 .foregroundColor(.secondary)
                         }
                     }
                 } footer: {
-                    Text("Canvas colors fade smoothly when switching themes.")
+                    Text(L10n.tr(.themeFooter))
+                }
+
+                Section {
+                    NavigationLink {
+                        LanguageSettingsView()
+                    } label: {
+                        HStack {
+                            Text(L10n.tr(.language))
+                            Spacer()
+                            Text(languageManager.language.displayName)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle(L10n.tr(.settings))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(L10n.tr(.done)) { dismiss() }
                 }
             }
         }
@@ -78,38 +92,68 @@ struct SettingsSheet: View {
     }
 }
 
+/// Language picker; defaults to following the system locale.
+private struct LanguageSettingsView: View {
+    @ObservedObject private var languageManager = LanguageManager.shared
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(AppLanguage.allCases) { language in
+                    Button {
+                        languageManager.language = language
+                    } label: {
+                        HStack {
+                            Text(language.displayName)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if language == languageManager.language {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(L10n.tr(.language))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 /// Step-by-step guide for sharing the calendar with a partner via iCloud.
 /// The final step (adding a person) can only happen in the Calendar app —
 /// there is no public API to invite a sharee programmatically.
 private struct ShareGuideView: View {
+    @ObservedObject private var languageManager = LanguageManager.shared
     @State private var isShareable = true
 
     var body: some View {
         Form {
             Section {
-                GuideStep(number: 1, text: "Tap \"Open Calendar App\" below to jump to this calendar. If you land on the calendar list, tap the info button next to \"\(SettingsStore.calendarName)\".")
-                GuideStep(number: 2, text: "Tap \"Add Person\" under Shared With.")
-                GuideStep(number: 3, text: "Enter your partner's Apple ID email and send the invitation.")
-                GuideStep(number: 4, text: "Once they accept, their events appear as hearts on your canvas — and yours on theirs. They only need this app with the same calendar name (the default works).")
+                GuideStep(number: 1, text: L10n.tr(.guideStep1, SettingsStore.calendarName))
+                GuideStep(number: 2, text: L10n.tr(.guideStep2))
+                GuideStep(number: 3, text: L10n.tr(.guideStep3))
+                GuideStep(number: 4, text: L10n.tr(.guideStep4))
             } header: {
-                Text("How It Works")
+                Text(L10n.tr(.howItWorks))
             }
 
             Section {
-                Button("Open Calendar App") {
+                Button(L10n.tr(.openCalendarApp)) {
                     openInCalendarApp()
                 }
                 if !isShareable {
-                    Text("The current calendar is not iCloud-backed, so it can't be shared. Calendars created by this app use iCloud when it's available.")
+                    Text(L10n.tr(.calendarNotShareable))
                         .foregroundColor(.secondary)
                 }
             } footer: {
                 if isShareable {
-                    Text("Sharing uses iCloud — no account or sign-up needed in this app.")
+                    Text(L10n.tr(.sharingUsesIcloud))
                 }
             }
         }
-        .navigationTitle("Share with Partner")
+        .navigationTitle(L10n.tr(.shareWithPartner))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             isShareable = CalendarManager.shared.currentCalendarIsShareable()
@@ -148,19 +192,20 @@ private struct GuideStep: View {
 /// Edit page for the calendar the app reads and writes events in.
 private struct CalendarNameSettingsView: View {
     @AppStorage(SettingsStore.calendarNameKey) private var calendarName = SettingsStore.defaultCalendarName
+    @ObservedObject private var languageManager = LanguageManager.shared
     @State private var draft = ""
 
     var body: some View {
         Form {
             Section {
-                TextField("Calendar name", text: $draft)
+                TextField(L10n.tr(.calendarNamePlaceholder), text: $draft)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
             } footer: {
-                Text("If no calendar with this name exists, a new one is created.")
+                Text(L10n.tr(.calendarNameFooter))
             }
         }
-        .navigationTitle("Calendar Name")
+        .navigationTitle(L10n.tr(.calendarName))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             draft = calendarName
@@ -182,21 +227,22 @@ private struct CalendarNameSettingsView: View {
 /// Edit page for the day counter start date; changes apply immediately.
 private struct CounterStartSettingsView: View {
     @Binding var counterStart: Date
+    @ObservedObject private var languageManager = LanguageManager.shared
 
     var body: some View {
         Form {
             Section {
                 DatePicker(
-                    "Start Date",
+                    L10n.tr(.startDate),
                     selection: $counterStart,
                     displayedComponents: .date
                 )
                 .datePickerStyle(.graphical)
             } footer: {
-                Text("Changes apply immediately.")
+                Text(L10n.tr(.changesApplyImmediately))
             }
         }
-        .navigationTitle("Start Date")
+        .navigationTitle(L10n.tr(.startDate))
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: counterStart) { newValue in
             CalendarManager.shared.setCounterStart(date: newValue)
@@ -218,9 +264,9 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
 
     var name: String {
         switch self {
-        case .mint: return "Mint"
-        case .peach: return "Peach"
-        case .custom: return "Custom"
+        case .mint: return L10n.tr(.themeMint)
+        case .peach: return L10n.tr(.themePeach)
+        case .custom: return L10n.tr(.themeCustom)
         }
     }
 
@@ -252,10 +298,10 @@ private enum CustomColorRole: UInt32, CaseIterable {
 
     var label: String {
         switch self {
-        case .background: return "Background"
-        case .heartFill: return "Heart Fill"
-        case .heartStroke: return "Heart Stroke"
-        case .timerText: return "Timer Text"
+        case .background: return L10n.tr(.colorBackground)
+        case .heartFill: return L10n.tr(.colorHeartFill)
+        case .heartStroke: return L10n.tr(.colorHeartStroke)
+        case .timerText: return L10n.tr(.colorTimerText)
         }
     }
 }
@@ -280,6 +326,7 @@ private extension Color {
 /// Theme picker; selection persists and applies immediately with an animated fade.
 private struct ThemeSettingsView: View {
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
+    @ObservedObject private var languageManager = LanguageManager.shared
     @State private var customColors: [String: Int] = SettingsStore.customThemeColors
 
     var body: some View {
@@ -315,13 +362,13 @@ private struct ThemeSettingsView: View {
                         ColorPicker(role.label, selection: customColorBinding(role), supportsOpacity: false)
                     }
                 } header: {
-                    Text("Custom Colors")
+                    Text(L10n.tr(.customColors))
                 } footer: {
-                    Text("Changes fade in immediately on the canvas.")
+                    Text(L10n.tr(.customColorsFooter))
                 }
             }
         }
-        .navigationTitle("Theme")
+        .navigationTitle(L10n.tr(.theme))
         .navigationBarTitleDisplayMode(.inline)
     }
 

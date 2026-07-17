@@ -20,7 +20,7 @@
 - 日历同步:按设置中的日历名解析规范日历,当天每个事件生成一颗爱心,日历变更时自动重同步
 - 添加事件:右下角玻璃质感悬浮按钮弹出添加表单
 - 事件详情:点击画布中的爱心弹出详情表单,可编辑、删除
-- 设置:配置日历名称、天数计数器起始日期与画布主题
+- 设置:配置日历名称、天数计数器起始日期、画布主题与界面语言(默认跟随系统,可切换 English/中文)
 - 日历共享:设置页提供分步引导,通过 `calshow:` 深链跳转日历 App 完成 iCloud 共享邀请;日历优先创建于 iCloud 源(本地日历无法共享)
 - 天数计数器锚定:起始日期以 `yyyy-MM-dd` 存入名为「开始的地方」的全天标记事件 notes,随 iCloud 共享同步给对方;事件本体日期保持近期并定期重拷,以避开 EventKit 4 年谓词窗口;删除该事件则回退到内置默认值,UserDefaults 仅作本地缓存
 
@@ -185,6 +185,7 @@ z-canvas/
       EventDetailSheet.swift # 事件详情表单
       SettingsSheet.swift    # 设置界面
       SettingsStore.swift    # 设置持久化
+      Localization.swift     # 应用内多语言(跟随系统 / English / 中文)
       Assets.xcassets/       # AppIcon、AccentColor、SettingsIcon
       LaunchScreen.storyboard
       PrivacyInfo.xcprivacy

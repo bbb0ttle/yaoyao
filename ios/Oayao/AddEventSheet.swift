@@ -5,19 +5,20 @@ struct AddEventSheet: View {
     @State private var date = Date()
     @State private var notes = ""
     @State private var isSaving = false
+    @ObservedObject private var languageManager = LanguageManager.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }
+                Button(L10n.tr(.cancel)) { dismiss() }
                     .padding(.leading, 4)
                 Spacer()
-                Text("New Event")
+                Text(L10n.tr(.newEvent))
                     .font(.headline)
                 Spacer()
                 // Invisible placeholder keeps title centred
-                Button("Cancel") { }
+                Button(L10n.tr(.cancel)) { }
                     .padding(.trailing, 4)
                     .opacity(0)
                     .disabled(true)
@@ -27,11 +28,11 @@ struct AddEventSheet: View {
             .padding(.bottom, 10)
 
             Form {
-                Section("Title") {
-                    TextField("Event name", text: $title)
+                Section(L10n.tr(.title)) {
+                    TextField(L10n.tr(.eventName), text: $title)
                 }
 
-                Section("Notes (optional)") {
+                Section(L10n.tr(.notesOptional)) {
                     TextEditor(text: $notes)
                         .frame(minHeight: 80)
                 }
@@ -46,7 +47,7 @@ struct AddEventSheet: View {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Text("Save Event")
+                                Text(L10n.tr(.saveEvent))
                                     .bold()
                             }
                             Spacer()

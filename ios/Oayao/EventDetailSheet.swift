@@ -4,6 +4,7 @@ import EventKit
 struct EventDetailSheet: View {
     let eventId: String
     @State private var event: EKEvent?
+    @ObservedObject private var languageManager = LanguageManager.shared
     @Environment(\.dismiss) private var dismiss
 
     private var manager: CalendarManager { .shared }
@@ -13,31 +14,31 @@ struct EventDetailSheet: View {
             Group {
                 if let event = event {
                     Form {
-                        Section("Title") {
+                        Section(L10n.tr(.title)) {
                             Text(event.title)
                                 .font(.body)
                         }
 
                         if let notes = event.notes, !notes.isEmpty {
-                            Section("Notes") {
+                            Section(L10n.tr(.notes)) {
                                 Text(notes)
                                     .font(.body)
                             }
                         }
 
                         if let location = event.location, !location.isEmpty {
-                            Section("Location") {
+                            Section(L10n.tr(.location)) {
                                 Text(location)
                                     .font(.body)
                             }
                         }
 
                     }
-                    .navigationTitle("Event")
+                    .navigationTitle(L10n.tr(.event))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") { dismiss() }
+                            Button(L10n.tr(.close)) { dismiss() }
                         }
                         ToolbarItem(placement: .destructiveAction) {
                             Menu {
@@ -46,7 +47,7 @@ struct EventDetailSheet: View {
                                         dismiss()
                                     }
                                 } label: {
-                                    Label("Delete Event", systemImage: "trash")
+                                    Label(L10n.tr(.deleteEvent), systemImage: "trash")
                                 }
                             } label: {
                                 Image(systemName: "trash")
@@ -55,7 +56,7 @@ struct EventDetailSheet: View {
                     }
                 } else {
                     ProgressView()
-                        .navigationTitle("Loading...")
+                        .navigationTitle(L10n.tr(.loading))
                         .navigationBarTitleDisplayMode(.inline)
                 }
             }
