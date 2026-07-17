@@ -75,8 +75,8 @@ export fn oayao_spawn_heart(event_id: [*:0]const u8) void {
     if (g_app) |app| {
         const len = std.mem.sliceTo(event_id, 0).len;
         const elapsed: f32 = @floatCast(sapp.frameDuration());
-        app.spawn_calendar_heart(event_id[0..len], elapsed) catch |err| {
-            std.log.warn("spawn_calendar_heart failed: {}", .{err});
+        app.spawn_heart(event_id[0..len], elapsed) catch |err| {
+            std.log.warn("spawn_heart failed: {}", .{err});
         };
     }
 }
@@ -84,20 +84,26 @@ export fn oayao_spawn_heart(event_id: [*:0]const u8) void {
 export fn oayao_remove_heart(event_id: [*:0]const u8) void {
     if (g_app) |app| {
         const len = std.mem.sliceTo(event_id, 0).len;
-        app.remove_calendar_heart(event_id[0..len]);
+        app.remove_heart(event_id[0..len]);
     }
 }
 
-export fn oayao_sync_calendar_hearts(active_ids: [*:0]const u8) void {
+export fn oayao_sync_hearts(active_ids: [*:0]const u8) void {
     if (g_app) |app| {
         const slice: [:0]const u8 = std.mem.span(active_ids);
-        app.sync_calendar_hearts(slice);
+        app.sync_hearts(slice);
     }
 }
 
 export fn oayao_set_heart_tap_callback(cb: ?*const fn ([*:0]const u8) callconv(.c) void) void {
     if (g_app) |app| {
         app.set_heart_tap_callback(cb);
+    }
+}
+
+export fn oayao_set_days_counter_start_ms(ms: f64) void {
+    if (g_app) |app| {
+        app.set_days_counter_start_ms(ms);
     }
 }
 

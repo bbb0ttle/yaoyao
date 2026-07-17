@@ -14,8 +14,9 @@ const Rng = @import("random.zig").Rng;
 const Vec2 = @import("core/types.zig").Vec2;
 
 const POOL_CAPACITY: usize = 5000;
+const DAYS_COUNTER_DEFAULT_START_MS: f64 = 1660694400000.0;
 
-const CalendarMeteor = struct {
+const IncomingHeart = struct {
     particle: *Particle,
     event_id: []const u8,
     target_x: f32,
@@ -42,8 +43,9 @@ pub const App = struct {
     days_text_buf: [32]u8,
     days_text_len: usize,
 
-    calendar_hearts: std.StringHashMap(*Particle),
-    calendar_meteors: std.ArrayList(CalendarMeteor),
+    tagged_hearts: std.StringHashMap(*Particle),
+    incoming_hearts: std.ArrayList(IncomingHeart),
+    days_counter_start_ms: f64,
     heart_tap_callback: HeartTapCallback,
 
     pub fn init(allocator: std.mem.Allocator) !*App {
@@ -67,19 +69,20 @@ pub const App = struct {
             .start_time = @floatCast(sapp.frameDuration()),
             .days_text_buf = undefined,
             .days_text_len = 0,
-            .calendar_hearts = std.StringHashMap(*Particle).init(allocator),
-            .calendar_meteors = .empty,
+            .tagged_hearts = std.StringHashMap(*Particle).init(allocator),
+            .incoming_hearts = .empty,
+            .days_counter_start_ms = DAYS_COUNTER_DEFAULT_START_MS,
             .heart_tap_callback = null,
         };
         return self;
     }
 
     pub fn deinit(self: *App) void {
-        for (self.calendar_meteors.items) |cm| {
+        for (self.incoming_hearts.items) |cm| {
             self.allocator.free(cm.event_id);
         }
-        self.calendar_meteors.deinit(self.allocator);
-        self.calendar_hearts.deinit();
+        self.incoming_hearts.deinit(self.allocator);
+        self.tagged_hearts.deinit();
         self.pool.deinit();
         self.gpu.deinit();
         self.allocator.destroy(self);
@@ -136,7 +139,7 @@ pub const App = struct {
         if (self.meteor_ready) {
             self.meteor.update(&self.pool, &self.rng);
         }
-        self._update_calendar_meteors(elapsed);
+        self._update_incoming_hearts(elapsed);
         self.pool.collect_alive();
 
         for (self.pool.alive_slice()) |idx| {
@@ -184,14 +187,14 @@ pub const App = struct {
         self.heart_ready = false;
     }
 
-    pub fn spawn_calendar_heart(self: *App, event_id: []const u8, elapsed: f32) !void {
+    pub fn spawn_heart(self: *App, event_id: []const u8, elapsed: f32) !void {
         const dpr = self.dpr;
         const w = sapp.widthf();
         const h = sapp.heightf();
 
-        if (self.calendar_hearts.contains(event_id)) return;
+        if (self.tagged_hearts.contains(event_id)) return;
 
-        for (self.calendar_meteors.items) |cm| {
+        for (self.incoming_hearts.items) |cm| {
             if (std.mem.eql(u8, cm.event_id, event_id)) return;
         }
 
@@ -235,7 +238,7 @@ pub const App = struct {
         );
         particle.set_vel(vx, vy);
 
-        try self.calendar_meteors.append(self.allocator, .{
+        try self.incoming_hearts.append(self.allocator, .{
             .particle = particle,
             .event_id = id_dup,
             .target_x = dest_x,
@@ -243,14 +246,14 @@ pub const App = struct {
         });
     }
 
-    pub fn remove_calendar_heart(self: *App, event_id: []const u8) void {
-        if (self.calendar_hearts.fetchRemove(event_id)) |kv| {
+    pub fn remove_heart(self: *App, event_id: []const u8) void {
+        if (self.tagged_hearts.fetchRemove(event_id)) |kv| {
             kv.value.set_fading_out(true);
             self.allocator.free(kv.key);
         }
     }
 
-    pub fn sync_calendar_hearts(self: *App, active_ids: [:0]const u8) void {
+    pub fn sync_hearts(self: *App, active_ids: [:0]const u8) void {
         var active_set = std.StringHashMap(void).init(self.allocator);
         defer active_set.deinit();
 
@@ -264,7 +267,7 @@ pub const App = struct {
         var stale_ids: std.ArrayList([]const u8) = .empty;
         defer stale_ids.deinit(self.allocator);
 
-        var heart_it = self.calendar_hearts.iterator();
+        var heart_it = self.tagged_hearts.iterator();
         while (heart_it.next()) |entry| {
             if (!active_set.contains(entry.key_ptr.*)) {
                 stale_ids.append(self.allocator, entry.key_ptr.*) catch continue;
@@ -272,16 +275,16 @@ pub const App = struct {
         }
 
         for (stale_ids.items) |id| {
-            self.remove_calendar_heart(id);
+            self.remove_heart(id);
         }
 
         var mi: usize = 0;
-        while (mi < self.calendar_meteors.items.len) {
-            const cm = self.calendar_meteors.items[mi];
+        while (mi < self.incoming_hearts.items.len) {
+            const cm = self.incoming_hearts.items[mi];
             if (!active_set.contains(cm.event_id)) {
                 cm.particle.set_alive(false);
                 self.allocator.free(cm.event_id);
-                _ = self.calendar_meteors.swapRemove(mi);
+                _ = self.incoming_hearts.swapRemove(mi);
             } else {
                 mi += 1;
             }
@@ -292,10 +295,14 @@ pub const App = struct {
         self.heart_tap_callback = cb;
     }
 
+    pub fn set_days_counter_start_ms(self: *App, ms: f64) void {
+        self.days_counter_start_ms = ms;
+    }
+
     fn _handle_heart_tap(self: *App, x: f32, y: f32) bool {
         if (self.heart_tap_callback == null) return false;
 
-        var it = self.calendar_hearts.iterator();
+        var it = self.tagged_hearts.iterator();
         while (it.next()) |entry| {
             const p = entry.value_ptr.*;
             if (!p.is_alive()) continue;
@@ -312,7 +319,7 @@ pub const App = struct {
     }
 
     fn _overlaps_existing(self: *App, x: f32, y: f32, min_dist: f32) bool {
-        var it = self.calendar_hearts.iterator();
+        var it = self.tagged_hearts.iterator();
         while (it.next()) |entry| {
             const p = entry.value_ptr.*;
             if (!p.is_alive()) continue;
@@ -320,7 +327,7 @@ pub const App = struct {
             const dy = y - p.pos_y();
             if (@sqrt(dx * dx + dy * dy) < min_dist) return true;
         }
-        for (self.calendar_meteors.items) |cm| {
+        for (self.incoming_hearts.items) |cm| {
             const dx = x - cm.target_x;
             const dy = y - cm.target_y;
             if (@sqrt(dx * dx + dy * dy) < min_dist) return true;
@@ -332,7 +339,7 @@ pub const App = struct {
         var ts: std.c.timespec = undefined;
         _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
         const unix_ms: f64 = @as(f64, @floatFromInt(ts.sec)) * 1000.0 + @as(f64, @floatFromInt(ts.nsec)) / 1_000_000.0;
-        const start_ms: f64 = 1660694400000.0;
+        const start_ms: f64 = self.days_counter_start_ms;
         const diff_days = (unix_ms - start_ms) / (1000.0 * 60.0 * 60.0 * 24.0);
         const int_part: u64 = @intFromFloat(@floor(diff_days));
         const frac: f64 = diff_days - @floor(diff_days);
@@ -405,14 +412,14 @@ pub const App = struct {
         }
     }
 
-    fn _update_calendar_meteors(self: *App, elapsed: f32) void {
+    fn _update_incoming_hearts(self: *App, elapsed: f32) void {
         const dpr = self.dpr;
         var i: usize = 0;
-        while (i < self.calendar_meteors.items.len) {
-            const p = self.calendar_meteors.items[i].particle;
+        while (i < self.incoming_hearts.items.len) {
+            const p = self.incoming_hearts.items[i].particle;
             if (!p.is_alive()) {
-                self.allocator.free(self.calendar_meteors.items[i].event_id);
-                _ = self.calendar_meteors.swapRemove(i);
+                self.allocator.free(self.incoming_hearts.items[i].event_id);
+                _ = self.incoming_hearts.swapRemove(i);
                 continue;
             }
 
@@ -430,15 +437,15 @@ pub const App = struct {
             trail.set_acc(0, 0);
             trail.set_lifespan(meteor_sys.TRAIL_LIFESPAN);
 
-            const tx = self.calendar_meteors.items[i].target_x;
-            const ty = self.calendar_meteors.items[i].target_y;
+            const tx = self.incoming_hearts.items[i].target_x;
+            const ty = self.incoming_hearts.items[i].target_y;
             const adx = tx - p.pos_x();
             const ady = ty - p.pos_y();
             const dist = @sqrt(adx * adx + ady * ady);
             const past_target = (p.vel_x() * adx + p.vel_y() * ady) < 0;
 
             if (dist < 20.0 * dpr or past_target) {
-                self._transition_calendar_meteor(i, elapsed);
+                self._transition_incoming_heart(i, elapsed);
                 continue;
             }
 
@@ -446,8 +453,8 @@ pub const App = struct {
         }
     }
 
-    fn _transition_calendar_meteor(self: *App, index: usize, elapsed: f32) void {
-        const cm = self.calendar_meteors.items[index];
+    fn _transition_incoming_heart(self: *App, index: usize, elapsed: f32) void {
+        const cm = self.incoming_hearts.items[index];
         const p = cm.particle;
         const event_id = cm.event_id;
 
@@ -465,13 +472,13 @@ pub const App = struct {
             self.rng.random_range(-2.5, -1.5) * self.dpr,
         );
 
-        self.calendar_hearts.put(event_id, p) catch {
-            std.log.warn("calendar_hearts.put failed, discarding heart for event_id", .{});
+        self.tagged_hearts.put(event_id, p) catch {
+            std.log.warn("tagged_hearts.put failed, discarding heart for event_id", .{});
             self.allocator.free(event_id);
             p.set_alive(false);
         };
 
-        _ = self.calendar_meteors.swapRemove(index);
+        _ = self.incoming_hearts.swapRemove(index);
     }
 };
 

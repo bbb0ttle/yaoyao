@@ -126,7 +126,7 @@ import UIKit
         }
 
         let joined = activeIds.joined(separator: "\n")
-        oayao_sync_calendar_hearts(joined)
+        oayao_sync_hearts(joined)
     }
 
     // MARK: - CRUD
