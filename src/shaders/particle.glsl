@@ -65,13 +65,20 @@ float eval_sdf(vec2 uv, float shape) {
         // Diamond SDF: |x| + |y| <= 1
         return 1.0 - (abs(uv.x) + abs(uv.y));
     } else if (shape < 1.5) {
-        // Heart SDF (algebraic curve)
-        float x = uv.x * 1.35;
-        float y = (-uv.y + 0.25) * 1.32;
-        float x2 = x * x;
-        float y2 = y * y;
-        float h = x2 + y2 - 1.0;
-        return -(h * h * h - x2 * y2 * y);
+        // Heart: exact distance field (two arcs + straight tip edge), so the
+        // AA band is uniform and the stroke ring never breaks. uv is y-down
+        // in [-1,1]; heart coords are y-up with the tip at the origin.
+        vec2 p = vec2(uv.x, 0.87 - uv.y) / 1.2;
+        p.x = abs(p.x);
+        float d;
+        if (p.y + p.x > 1.0) {
+            d = length(p - vec2(0.25, 0.75)) - 0.353553;
+        } else {
+            vec2 m = vec2(0.5 * max(p.x + p.y, 0.0));
+            d = sqrt(min(dot(p - vec2(0.0, 1.0), p - vec2(0.0, 1.0)),
+                         dot(p - m, p - m))) * sign(p.x - p.y);
+        }
+        return -d * 1.2;  // positive inside, in uv units
     } else {
         // Filled square for text pixels — fully opaque
         return 2.0;
