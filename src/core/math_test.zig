@@ -23,16 +23,17 @@ test "breath within bounds" {
     }
 }
 
-test "smooth_breath within bounds and hits extremes" {
-    for (0..100) |i| {
-        const t = @as(f32, @floatFromInt(i)) * 0.01;
-        const v = math.smooth_breath(t, 10.0, 20.0);
-        try testing.expect(v >= 10.0);
-        try testing.expect(v <= 20.0);
-    }
-    // sin(pi/2) = 1 at sec = 1/6 → max; sin(3pi/2) = -1 at sec = 1/2 → min
-    try testing.expectApproxEqAbs(20.0, math.smooth_breath(1.0 / 6.0, 10.0, 20.0), 1e-5);
-    try testing.expectApproxEqAbs(10.0, math.smooth_breath(0.5, 10.0, 20.0), 1e-5);
+test "breath_cycle hits extremes at quarter and three-quarter period" {
+    // phase = sec * 2pi / period: sin peaks at T/4, troughs at 3T/4
+    try testing.expectApproxEqAbs(20.0, math.breath_cycle(1.0, 4.0, 10.0, 20.0), 1e-5);
+    try testing.expectApproxEqAbs(10.0, math.breath_cycle(3.0, 4.0, 10.0, 20.0), 1e-5);
+    // breath is breath_cycle at the heartbeat period (2/3 s)
+    const sec = 0.37;
+    try testing.expectApproxEqAbs(
+        math.breath(sec, 10.0, 20.0),
+        math.breath_cycle(sec, 2.0 / 3.0, 10.0, 20.0),
+        1e-6,
+    );
 }
 
 test "scale linear" {

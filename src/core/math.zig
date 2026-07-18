@@ -15,20 +15,19 @@ pub fn create_heart_pos(t: f32) Vec2 {
     return Vec2{ .x = x, .y = y };
 }
 
-/// Smooth breathing oscillation between min and max over time.
-pub fn breath(sec: f32, min: f32, max: f32) f32 {
+/// exp(sin) oscillation between min and max over one period: the exponential
+/// mapping dwells gently at the extremes, reading as a calm held breath.
+pub fn breath_cycle(sec: f32, period_sec: f32, min: f32, max: f32) f32 {
+    const phase = sec * 2.0 * std.math.pi / period_sec;
     const e = std.math.e;
     const a = 1.0 / e;
-    const b = e - a;
-    const s = (max - min) / b;
-    const exp_val = @exp(@sin(sec * 3.0 * std.math.pi));
-    return @mulAdd(f32, exp_val, s, min - a * s);
+    const s = (max - min) / (e - a);
+    return @mulAdd(f32, @exp(@sin(phase)), s, min - a * s);
 }
 
-/// Gentle sinusoidal oscillation between min and max, same rate as breath.
-pub fn smooth_breath(sec: f32, min: f32, max: f32) f32 {
-    const t = 0.5 + 0.5 * @sin(sec * 3.0 * std.math.pi);
-    return @mulAdd(f32, max - min, t, min);
+/// Heartbeat pulse: the exp(sin) curve at a fast ~90bpm rate.
+pub fn breath(sec: f32, min: f32, max: f32) f32 {
+    return breath_cycle(sec, 2.0 / 3.0, min, max);
 }
 
 pub fn scale(val: f32, a: f32, b: f32) f32 {

@@ -15,6 +15,10 @@ const Rng = @import("../random.zig").Rng;
 
 const CONTOUR_COUNT: usize = 30;
 
+// Calm breathing cadence: one full inhale-exhale cycle per 4 seconds,
+// much slower than the ~0.67s heartbeat pulse so the two modes read apart.
+const BREATH_PERIOD_SEC: f32 = 3.7;
+
 /// Big-heart animation style; values are part of the C ABI.
 pub const MotionMode = enum(u32) {
     beat = 0,
@@ -110,11 +114,17 @@ pub const HeartSystem = struct {
         const t = elapsed - self.birth_sec;
         const scale_val = switch (self.motion) {
             .beat => math.breath(t, 50.0 * dpr, 60.0 * dpr),
-            .breath => math.smooth_breath(t, 50.0 * dpr, 60.0 * dpr),
+            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, 50.0 * dpr, 60.0 * dpr),
         };
         const size_val = switch (self.motion) {
             .beat => math.breath(t, 10.0 * dpr, 15.0 * dpr),
-            .breath => math.smooth_breath(t, 10.0 * dpr, 15.0 * dpr),
+            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, 10.0 * dpr, 15.0 * dpr),
+        };
+        // Breath mode also swells the alpha gently, like the reference
+        // breathing-circle demo; beat mode stays at constant alpha.
+        const alpha_val = self.opacity * switch (self.motion) {
+            .beat => 1.0,
+            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, 0.7, 1.0),
         };
 
         self.spawn_counter += 1;
@@ -126,11 +136,11 @@ pub const HeartSystem = struct {
                 cp.base_y * scale_val + 50.0 * dpr + self.cy - 5.0 * dpr,
             );
             cp.immortal.set_size(size_val);
-            cp.immortal.set_alpha_scale(self.opacity);
+            cp.immortal.set_alpha_scale(alpha_val);
 
             if (spawn_frame) {
                 const trail = pool.alloc_particle(cp.immortal.get_pos(), elapsed, .{ .size = MAX_PARTICLE_SIZE * dpr }, rng);
-                trail.set_alpha_scale(self.opacity);
+                trail.set_alpha_scale(alpha_val);
             }
         }
     }
