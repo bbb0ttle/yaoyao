@@ -151,7 +151,7 @@ enum L10n {
         .deleteEvent: ("Delete Event", "删除事件"),
         .loading: ("Loading...", "加载中…"),
         .date: ("Date", "日期"),
-        .heart: ("Big Heart", "大心心"),
+        .heart: ("Big Heart", "爱心"),
         .opacity: ("Opacity", "透明度"),
         .motion: ("Motion", "运动模式"),
         .motionBeat: ("Beat", "跳动"),
