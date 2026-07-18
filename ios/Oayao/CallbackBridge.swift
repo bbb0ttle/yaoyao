@@ -32,6 +32,7 @@ func oayao_swift_bootstrap() {
 
         oayao_set_heart_opacity(Float(SettingsStore.heartOpacity))
         oayao_set_heart_motion(UInt32(SettingsStore.heartMotion))
+        oayao_set_heart_size_scale(Float(SettingsStore.heartSizeScale))
         if let heartY = SettingsStore.heartY {
             oayao_set_heart_y(Float(heartY))
         }

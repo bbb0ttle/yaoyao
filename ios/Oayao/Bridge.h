@@ -44,6 +44,9 @@ void oayao_set_custom_theme_color(uint32_t role, uint8_t r, uint8_t g, uint8_t b
 // opacity: 0.0 (invisible) to 1.0 (fully opaque).
 void oayao_set_heart_opacity(float opacity);
 
+// Overall size multiplier, clamped to [0.3, 3.0]. 1.0 is the default size.
+void oayao_set_heart_size_scale(float size_scale);
+
 // Motion style: 0 = beat (pulsing), 1 = breath (gentle sinusoid).
 void oayao_set_heart_motion(uint32_t mode);
 

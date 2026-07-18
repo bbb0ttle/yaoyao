@@ -45,6 +45,7 @@ pub const HeartSystem = struct {
     spawn_counter: u32,
     opacity: f32,
     motion: MotionMode,
+    size_scale: f32,
 
     pub fn init(
         pool: *ParticlePool,
@@ -70,6 +71,7 @@ pub const HeartSystem = struct {
             .spawn_counter = 0,
             .opacity = 1.0,
             .motion = .beat,
+            .size_scale = 1.0,
         };
 
         const start: f32 = 0.0;
@@ -112,13 +114,14 @@ pub const HeartSystem = struct {
     pub fn update(self: *Self, elapsed: f32, pool: *ParticlePool, rng: *Rng) void {
         const dpr = self.dpr;
         const t = elapsed - self.birth_sec;
+        const base = 50.0 * dpr * self.size_scale;
         const scale_val = switch (self.motion) {
-            .beat => math.breath(t, 50.0 * dpr, 60.0 * dpr),
-            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, 50.0 * dpr, 60.0 * dpr),
+            .beat => math.breath(t, base, base * 1.2),
+            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, base, base * 1.2),
         };
         const size_val = switch (self.motion) {
-            .beat => math.breath(t, 10.0 * dpr, 15.0 * dpr),
-            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, 10.0 * dpr, 15.0 * dpr),
+            .beat => math.breath(t, 10.0 * dpr * self.size_scale, 15.0 * dpr * self.size_scale),
+            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, 10.0 * dpr * self.size_scale, 15.0 * dpr * self.size_scale),
         };
         // Breath mode also swells the alpha gently, like the reference
         // breathing-circle demo; beat mode stays at constant alpha.
@@ -132,8 +135,8 @@ pub const HeartSystem = struct {
 
         for (&self.contour) |*cp| {
             cp.immortal.set_pos(
-                cp.base_x * scale_val + 50.0 * dpr + self.cx,
-                cp.base_y * scale_val + 50.0 * dpr + self.cy - 5.0 * dpr,
+                cp.base_x * scale_val + base + self.cx,
+                cp.base_y * scale_val + base + self.cy - 5.0 * dpr,
             );
             cp.immortal.set_size(size_val);
             cp.immortal.set_alpha_scale(alpha_val);
@@ -151,6 +154,10 @@ pub const HeartSystem = struct {
 
     pub fn set_motion(self: *Self, motion: MotionMode) void {
         self.motion = motion;
+    }
+
+    pub fn set_size_scale(self: *Self, size_scale: f32) void {
+        self.size_scale = size_scale;
     }
 
     pub fn set_cy(self: *Self, cy: f32) void {

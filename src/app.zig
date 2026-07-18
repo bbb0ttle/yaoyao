@@ -78,6 +78,7 @@ pub const App = struct {
     heart_opacity: f32,
     heart_motion: MotionMode,
     heart_y_fraction: ?f32,
+    heart_size_scale: f32,
 
     days_text_buf: [32]u8,
     days_text_len: usize,
@@ -116,6 +117,7 @@ pub const App = struct {
             .heart_opacity = 1.0,
             .heart_motion = .beat,
             .heart_y_fraction = null,
+            .heart_size_scale = 1.0,
             .days_text_buf = undefined,
             .days_text_len = 0,
             .text_layout = .{},
@@ -188,6 +190,7 @@ pub const App = struct {
         self.heart.set_cy(self.heart_cy(h, dpr));
         self.heart.set_opacity(self.heart_opacity);
         self.heart.set_motion(self.heart_motion);
+        self.heart.set_size_scale(self.heart_size_scale);
 
         self.update_day_counter();
 
@@ -414,6 +417,10 @@ pub const App = struct {
 
     pub fn set_heart_opacity(self: *Self, opacity: f32) void {
         self.heart_opacity = std.math.clamp(opacity, 0.0, 1.0);
+    }
+
+    pub fn set_heart_size_scale(self: *Self, size_scale: f32) void {
+        self.heart_size_scale = std.math.clamp(size_scale, 0.3, 3.0);
     }
 
     pub fn set_heart_motion(self: *Self, mode_id: u32) void {

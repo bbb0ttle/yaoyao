@@ -135,6 +135,12 @@ export fn oayao_set_heart_opacity(opacity: f32) void {
     }
 }
 
+export fn oayao_set_heart_size_scale(size_scale: f32) void {
+    if (g_app) |app| {
+        app.set_heart_size_scale(size_scale);
+    }
+}
+
 export fn oayao_set_heart_motion(mode: u32) void {
     if (g_app) |app| {
         app.set_heart_motion(mode);

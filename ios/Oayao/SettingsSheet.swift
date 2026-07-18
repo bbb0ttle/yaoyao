@@ -260,12 +260,23 @@ private struct CounterStartSettingsView: View {
 private struct HeartSettingsView: View {
     @AppStorage(SettingsStore.heartOpacityKey) private var opacity = 1.0
     @AppStorage(SettingsStore.heartMotionKey) private var motion = 0
+    @AppStorage(SettingsStore.heartSizeScaleKey) private var sizeScale = 1.0
     @State private var yFraction: Double? = SettingsStore.heartY
     @ObservedObject private var languageManager = LanguageManager.shared
 
     var body: some View {
         Form {
             Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L10n.tr(.size))
+                        Spacer()
+                        Text("\(Int((sizeScale * 100).rounded()))%")
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(value: $sizeScale, in: 0.5...2)
+                        .onChange(of: sizeScale) { oayao_set_heart_size_scale(Float($0)) }
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(L10n.tr(.opacity))

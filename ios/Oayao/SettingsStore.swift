@@ -9,6 +9,7 @@ enum SettingsStore {
     static let heartOpacityKey = "oayao.heartOpacity"
     static let heartMotionKey = "oayao.heartMotion"
     static let heartYKey = "oayao.heartY"
+    static let heartSizeScaleKey = "oayao.heartSizeScale"
     static let defaultCalendarName = "oayao"
 
     /// Name of the calendar the app reads and writes events in.
@@ -74,6 +75,12 @@ enum SettingsStore {
     static var heartMotion: Int {
         get { UserDefaults.standard.object(forKey: heartMotionKey) as? Int ?? 0 }
         set { UserDefaults.standard.set(newValue, forKey: heartMotionKey) }
+    }
+
+    /// Big heart overall size multiplier; defaults to 1.0.
+    static var heartSizeScale: Double {
+        get { UserDefaults.standard.object(forKey: heartSizeScaleKey) as? Double ?? 1.0 }
+        set { UserDefaults.standard.set(newValue, forKey: heartSizeScaleKey) }
     }
 
     /// Big heart vertical position as a fraction of canvas height.
