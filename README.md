@@ -230,6 +230,7 @@ Zig 渲染层与 Swift 宿主层通过 C ABI 双向通信。
 | `oayao_set_heart_motion(mode)` | 设置大心心运动模式(0=跳动,1=呼吸);未知值忽略 |
 | `oayao_set_heart_y(fraction)` | 设置大心心垂直位置(画布高度分数 0–1) |
 | `oayao_reset_heart_y()` | 恢复大心心默认垂直位置 |
+| `oayao_reset_heart_config()` | 一键恢复大心心全部配置(尺寸/透明度/运动模式/垂直位置)为默认值 |
 | `oayao_default_heart_y()` | 当前画布下默认垂直位置(高度分数) |
 
 **CalendarManager**(`ios/Oayao/CalendarManager.swift`):

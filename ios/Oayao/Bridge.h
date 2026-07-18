@@ -56,6 +56,10 @@ void oayao_set_heart_y(float fraction);
 // Restore the built-in vertical position (undoes oayao_set_heart_y).
 void oayao_reset_heart_y(void);
 
+// Restore all big-heart settings (size, opacity, motion, position)
+// to their defaults.
+void oayao_reset_heart_config(void);
+
 // Built-in vertical position as a fraction of the current canvas height.
 float oayao_default_heart_y(void);
 

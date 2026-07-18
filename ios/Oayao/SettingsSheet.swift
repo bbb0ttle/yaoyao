@@ -255,7 +255,7 @@ private struct CounterStartSettingsView: View {
     }
 }
 
-/// Big-heart behaviour: opacity, motion style, and vertical position.
+/// Big-heart behaviour: size, opacity, motion style, and vertical position.
 /// All changes apply live on the canvas.
 private struct HeartSettingsView: View {
     @AppStorage(SettingsStore.heartOpacityKey) private var opacity = 1.0
@@ -263,6 +263,10 @@ private struct HeartSettingsView: View {
     @AppStorage(SettingsStore.heartSizeScaleKey) private var sizeScale = 1.0
     @State private var yFraction: Double? = SettingsStore.heartY
     @ObservedObject private var languageManager = LanguageManager.shared
+
+    private var allDefaults: Bool {
+        sizeScale == 1.0 && opacity == 1.0 && motion == 0 && yFraction == nil
+    }
 
     var body: some View {
         Form {
@@ -277,11 +281,6 @@ private struct HeartSettingsView: View {
                     Slider(value: $sizeScale, in: 0.5...2)
                         .onChange(of: sizeScale) { oayao_set_heart_size_scale(Float($0)) }
                 }
-                Button(L10n.tr(.reset)) {
-                    sizeScale = 1.0
-                    oayao_set_heart_size_scale(1.0)
-                }
-                .disabled(sizeScale == 1.0)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(L10n.tr(.opacity))
@@ -310,12 +309,18 @@ private struct HeartSettingsView: View {
                     }
                     Slider(value: yBinding, in: 0.1...0.9)
                 }
-                Button(L10n.tr(.reset)) {
+            }
+
+            Section {
+                Button(L10n.tr(.resetDefaults)) {
+                    sizeScale = 1.0
+                    opacity = 1.0
+                    motion = 0
                     yFraction = nil
                     SettingsStore.heartY = nil
-                    oayao_reset_heart_y()
+                    oayao_reset_heart_config()
                 }
-                .disabled(yFraction == nil)
+                .disabled(allDefaults)
             }
         }
         .navigationTitle(L10n.tr(.heart))

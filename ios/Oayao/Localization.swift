@@ -55,7 +55,7 @@ enum L10n {
         case cancel, newEvent, title, eventName, notesOptional, saveEvent
         case notes, location, event, close, deleteEvent, loading
         case date
-        case heart, opacity, motion, motionBeat, motionBreath, positionY, reset
+        case heart, opacity, motion, motionBeat, motionBreath, positionY, resetDefaults
         case size
     }
 
@@ -158,7 +158,7 @@ enum L10n {
         .motionBeat: ("Beat", "跳动"),
         .motionBreath: ("Breath", "呼吸"),
         .positionY: ("Vertical Position", "垂直位置"),
-        .reset: ("Reset", "重置"),
+        .resetDefaults: ("Reset to Defaults", "恢复默认"),
         .size: ("Size", "尺寸"),
     ]
 }

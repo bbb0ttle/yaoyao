@@ -442,6 +442,14 @@ pub const App = struct {
         self.heart_y_fraction = null;
     }
 
+    /// Restore all big-heart settings to their defaults.
+    pub fn reset_heart_config(self: *Self) void {
+        self.heart_opacity = 1.0;
+        self.heart_motion = .beat;
+        self.heart_size_scale = 1.0;
+        self.heart_y_fraction = null;
+    }
+
     /// Built-in vertical position as a fraction of the current canvas height.
     pub fn default_heart_y(self: *Self) f32 {
         const h = sapp.heightf();
