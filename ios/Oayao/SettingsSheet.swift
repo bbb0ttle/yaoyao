@@ -277,6 +277,11 @@ private struct HeartSettingsView: View {
                     Slider(value: $sizeScale, in: 0.5...2)
                         .onChange(of: sizeScale) { oayao_set_heart_size_scale(Float($0)) }
                 }
+                Button(L10n.tr(.reset)) {
+                    sizeScale = 1.0
+                    oayao_set_heart_size_scale(1.0)
+                }
+                .disabled(sizeScale == 1.0)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(L10n.tr(.opacity))

@@ -164,6 +164,10 @@ pub const HeartSystem = struct {
         self.cy = cy;
     }
 
+    pub fn set_cx(self: *Self, cx: f32) void {
+        self.cx = cx;
+    }
+
     pub fn fill_contour_positions(self: *const Self, buf: []Vec2) void {
         for (&self.contour, 0..) |*cp, i| {
             buf[i] = Vec2{ .x = cp.immortal.pos_x(), .y = cp.immortal.pos_y() };

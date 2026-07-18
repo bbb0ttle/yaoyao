@@ -169,7 +169,7 @@ pub const App = struct {
     pub fn init_systems(self: *Self, w: f32, h: f32, elapsed: f32) void {
         self.dpr = sapp.dpiScale();
         const dpr = self.dpr;
-        const hx: f32 = w / 2.0 - 50.0 * dpr;
+        const hx: f32 = self.heart_cx(w, dpr);
         const hy: f32 = self.heart_cy(h, dpr);
         const fp_x: f32 = w / 2.0 - 50.0 * dpr;
         const fp_y: f32 = h - 80.0 * dpr;
@@ -188,6 +188,7 @@ pub const App = struct {
         const t: f32 = @min(1.0, (elapsed - self.transition_start) / 3.0);
 
         self.heart.set_cy(self.heart_cy(h, dpr));
+        self.heart.set_cx(self.heart_cx(w, dpr));
         self.heart.set_opacity(self.heart_opacity);
         self.heart.set_motion(self.heart_motion);
         self.heart.set_size_scale(self.heart_size_scale);
@@ -452,6 +453,12 @@ pub const App = struct {
             return fraction * h;
         }
         return self.legacy_heart_cy(h, dpr);
+    }
+
+    // The contour's shape centre sits at cx + 50*dpr*size_scale, so cx is
+    // offset by the scaled base to keep the heart visually centred at any size.
+    fn heart_cx(self: *Self, w: f32, dpr: f32) f32 {
+        return w / 2.0 - 50.0 * dpr * self.heart_size_scale;
     }
 
     fn legacy_heart_cy(self: *Self, h: f32, dpr: f32) f32 {

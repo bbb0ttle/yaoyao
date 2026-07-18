@@ -226,7 +226,7 @@ Zig 渲染层与 Swift 宿主层通过 C ABI 双向通信。
 | `oayao_transition_to_theme(theme_id)` | 切换画布主题(0=薄荷,1=蜜桃粉,2=自定义),颜色渐变过渡;未知 id 忽略 |
 | `oayao_set_custom_theme_color(role, r, g, b)` | 更新自定义主题的单个颜色(role:0=背景,1=爱心填充,2=描边,3=计数文字);自定义主题激活时即时渐变生效 |
 | `oayao_set_heart_opacity(opacity)` | 设置大心心透明度(0.0–1.0,自动钳制) |
-| `oayao_set_heart_size_scale(size_scale)` | 设置大心心整体尺寸倍率(0.3–3.0 钳制,默认 1.0) |
+| `oayao_set_heart_size_scale(size_scale)` | 设置大心心整体尺寸倍率(0.3–3.0 钳制,默认 1.0);任意尺寸下自动保持水平居中 |
 | `oayao_set_heart_motion(mode)` | 设置大心心运动模式(0=跳动,1=呼吸);未知值忽略 |
 | `oayao_set_heart_y(fraction)` | 设置大心心垂直位置(画布高度分数 0–1) |
 | `oayao_reset_heart_y()` | 恢复大心心默认垂直位置 |
