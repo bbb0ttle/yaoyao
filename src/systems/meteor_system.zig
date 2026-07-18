@@ -24,6 +24,13 @@ const MeteorHead = struct {
     particle: *Particle,
 };
 
+/// Per-shower options with backwards-compatible defaults.
+pub const MeteorOpts = struct {
+    force: bool = false, // bypass the click cooldown
+    opacity: f32 = 1.0, // alpha of meteor heads and their trails
+    speed_scale: f32 = 1.0, // multiplier on METEOR_SPEED
+};
+
 /// Meteor shower system with head compaction, edge fading, and trail particles.
 pub const MeteorSystem = struct {
     const Self = @This();
@@ -55,17 +62,18 @@ pub const MeteorSystem = struct {
         dir_x: f32,
         dir_y: f32,
         spawn_positions: []const Vec2,
-        force: bool,
+        opts: MeteorOpts,
     ) void {
-        if (!force and self.cooldown > 0) return;
+        if (!opts.force and self.cooldown > 0) return;
         if (spawn_positions.len == 0) return;
         self.cooldown = CLICK_COOLDOWN_FRAMES;
 
         const dpr = self.dpr;
 
         const len = @sqrt(dir_x * dir_x + dir_y * dir_y);
-        const base_vx: f32 = if (len < 1.0) 0.0 else dir_x / len * METEOR_SPEED * dpr;
-        const base_vy: f32 = if (len < 1.0) METEOR_SPEED * dpr else dir_y / len * METEOR_SPEED * dpr;
+        const speed = METEOR_SPEED * dpr * opts.speed_scale;
+        const base_vx: f32 = if (len < 1.0) 0.0 else dir_x / len * speed;
+        const base_vy: f32 = if (len < 1.0) speed else dir_y / len * speed;
 
         const count: usize = 20;
 
@@ -97,6 +105,7 @@ pub const MeteorSystem = struct {
                 .meteor = true,
                 .size = METEOR_SIZE * dpr,
             }, rng);
+            p.set_alpha_scale(opts.opacity);
             const speed_var = rng.random_range(0.7, 1.3);
             p.set_vel(base_vx * speed_var, base_vy * speed_var);
 
@@ -146,6 +155,7 @@ pub const MeteorSystem = struct {
             }, rng);
             trail.set_vel(0, 0);
             trail.set_acc(0, 0);
+            trail.set_alpha_scale(p.get_alpha_scale());
 
             const tdl = trail_x;
             const tdr = self.canvas_w - trail_x;

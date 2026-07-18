@@ -216,7 +216,7 @@ pub const App = struct {
             self.spawn_burst(x, y);
             return;
         }
-        // self.meteor_from_heart(x - self.heart.center_x(), y - self.heart.center_y(), false);
+        // self.meteor_from_heart(x - self.heart.center_x(), y - self.heart.center_y(), .{});
         self.spawn_burst(x, y);
     }
 
@@ -480,7 +480,7 @@ pub const App = struct {
         }
     }
 
-    fn meteor_from_heart(self: *Self, dir_x: f32, dir_y: f32, force: bool) void {
+    fn meteor_from_heart(self: *Self, dir_x: f32, dir_y: f32, opts: meteor_sys.MeteorOpts) void {
         var spawns: [30]Vec2 = undefined;
         self.heart.fill_contour_positions(&spawns);
         self.meteor.falling(
@@ -489,7 +489,7 @@ pub const App = struct {
             dir_x,
             dir_y,
             spawns[0..],
-            force,
+            opts,
         );
     }
 
@@ -544,10 +544,15 @@ pub const App = struct {
 
             // Each fresh contact with the big heart's contour fires one meteor
             // shower travelling parallel to this heart's own trajectory,
-            // towards the same destination.
+            // towards the same destination. Slower and dimmer than the heart
+            // so it stays visibly in the lead.
             const touching = self.heart.touches_contour(p.pos_x(), p.pos_y(), p.get_size());
             if (touching and !self.incoming_hearts.items[i].was_touching_contour) {
-                self.meteor_from_heart(p.vel_x(), p.vel_y(), true);
+                self.meteor_from_heart(p.vel_x(), p.vel_y(), .{
+                    .force = true,
+                    .opacity = 0.65,
+                    .speed_scale = 0.6,
+                });
             }
             self.incoming_hearts.items[i].was_touching_contour = touching;
 
