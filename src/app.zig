@@ -215,7 +215,7 @@ pub const App = struct {
             self.spawn_burst(x, y);
             return;
         }
-        self.meteor_from_heart(x, y);
+        // self.meteor_from_heart(x, y);
         self.spawn_burst(x, y);
     }
 
