@@ -54,6 +54,7 @@ enum L10n {
         case changesApplyImmediately
         case cancel, newEvent, title, eventName, notesOptional, saveEvent
         case notes, location, event, close, deleteEvent, loading
+        case date, save
     }
 
     static func tr(_ key: Key) -> String {
@@ -148,5 +149,7 @@ enum L10n {
         .close: ("Close", "关闭"),
         .deleteEvent: ("Delete Event", "删除事件"),
         .loading: ("Loading...", "加载中…"),
+        .date: ("Date", "日期"),
+        .save: ("Save", "保存"),
     ]
 }
