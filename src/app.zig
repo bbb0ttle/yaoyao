@@ -31,6 +31,7 @@ const IncomingHeart = struct {
     event_id: []const u8,
     target_x: f32,
     target_y: f32,
+    was_touching_contour: bool,
 };
 
 /// C ABI callback invoked when a tagged heart is tapped.
@@ -215,7 +216,7 @@ pub const App = struct {
             self.spawn_burst(x, y);
             return;
         }
-        // self.meteor_from_heart(x, y);
+        // self.meteor_from_heart(x - self.heart.center_x(), y - self.heart.center_y(), false);
         self.spawn_burst(x, y);
     }
 
@@ -280,6 +281,7 @@ pub const App = struct {
             .event_id = id_dup,
             .target_x = dest_x,
             .target_y = dest_y,
+            .was_touching_contour = false,
         });
     }
 
@@ -478,17 +480,16 @@ pub const App = struct {
         }
     }
 
-    fn meteor_from_heart(self: *Self, target_x: f32, target_y: f32) void {
+    fn meteor_from_heart(self: *Self, dir_x: f32, dir_y: f32, force: bool) void {
         var spawns: [30]Vec2 = undefined;
         self.heart.fill_contour_positions(&spawns);
         self.meteor.falling(
             &self.pool,
             &self.rng,
-            target_x,
-            target_y,
-            self.heart.center_x(),
-            self.heart.center_y(),
+            dir_x,
+            dir_y,
             spawns[0..],
+            force,
         );
     }
 
@@ -540,6 +541,16 @@ pub const App = struct {
 
             const tx = self.incoming_hearts.items[i].target_x;
             const ty = self.incoming_hearts.items[i].target_y;
+
+            // Each fresh contact with the big heart's contour fires one meteor
+            // shower travelling parallel to this heart's own trajectory,
+            // towards the same destination.
+            const touching = self.heart.touches_contour(p.pos_x(), p.pos_y(), p.get_size());
+            if (touching and !self.incoming_hearts.items[i].was_touching_contour) {
+                self.meteor_from_heart(p.vel_x(), p.vel_y(), true);
+            }
+            self.incoming_hearts.items[i].was_touching_contour = touching;
+
             const adx = tx - p.pos_x();
             const ady = ty - p.pos_y();
             const dist = @sqrt(adx * adx + ady * ady);

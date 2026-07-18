@@ -163,6 +163,17 @@ pub const HeartSystem = struct {
         }
     }
 
+    /// Whether a circle at (x, y) overlaps any contour point's current extent.
+    pub fn touches_contour(self: *const Self, x: f32, y: f32, radius: f32) bool {
+        for (&self.contour) |*cp| {
+            const dx = x - cp.immortal.pos_x();
+            const dy = y - cp.immortal.pos_y();
+            const reach = radius + cp.immortal.get_size();
+            if (dx * dx + dy * dy < reach * reach) return true;
+        }
+        return false;
+    }
+
     pub fn center_x(self: *const Self) f32 {
         return self.cx;
     }

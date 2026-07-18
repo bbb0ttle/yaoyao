@@ -46,27 +46,26 @@ pub const MeteorSystem = struct {
         };
     }
 
+    /// Spawn a meteor shower from `spawn_positions`, all heads travelling
+    /// parallel along (dir_x, dir_y).
     pub fn falling(
         self: *Self,
         pool: *ParticlePool,
         rng: *Rng,
-        x: f32,
-        y: f32,
-        ref_x: f32,
-        ref_y: f32,
+        dir_x: f32,
+        dir_y: f32,
         spawn_positions: []const Vec2,
+        force: bool,
     ) void {
-        if (self.cooldown > 0) return;
+        if (!force and self.cooldown > 0) return;
         if (spawn_positions.len == 0) return;
         self.cooldown = CLICK_COOLDOWN_FRAMES;
 
         const dpr = self.dpr;
 
-        const dx = x - ref_x;
-        const dy = y - ref_y;
-        const len = @sqrt(dx * dx + dy * dy);
-        const base_vx: f32 = if (len < 1.0) 0.0 else dx / len * METEOR_SPEED * dpr;
-        const base_vy: f32 = if (len < 1.0) METEOR_SPEED * dpr else dy / len * METEOR_SPEED * dpr;
+        const len = @sqrt(dir_x * dir_x + dir_y * dir_y);
+        const base_vx: f32 = if (len < 1.0) 0.0 else dir_x / len * METEOR_SPEED * dpr;
+        const base_vy: f32 = if (len < 1.0) METEOR_SPEED * dpr else dir_y / len * METEOR_SPEED * dpr;
 
         const count: usize = 20;
 
