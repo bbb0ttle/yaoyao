@@ -6,10 +6,10 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
 echo "==> Building oayao for iOS Simulator (aarch64)..."
-zig build -Dtarget=aarch64-ios-simulator
+zig build -Dtarget=aarch64-ios-simulator -Drelease=true
 
 echo "==> Creating Oayao.app bundle..."
-zig build ios-app -Dtarget=aarch64-ios-simulator
+zig build ios-app -Dtarget=aarch64-ios-simulator -Drelease=true
 
 # Check if a simulator is already booted
 BOOTED=$(xcrun simctl list devices booted | grep -E 'iPhone|iPad' | head -1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')

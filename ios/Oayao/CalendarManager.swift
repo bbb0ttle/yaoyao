@@ -11,6 +11,11 @@ import UIKit
     private var writableCalendar: EKCalendar?
     private var hasAccess = false
 
+    /// EventKit predicate queries run off the main thread; renderer calls
+    /// (oayao_*) are always applied back on the main queue.
+    private let workQueue = DispatchQueue(label: "com.bbking.oayao.calendar-sync", qos: .userInitiated)
+    private var pendingSync: DispatchWorkItem?
+
     override private init() {
         super.init()
         NotificationCenter.default.addObserver(
@@ -55,10 +60,19 @@ import UIKit
         resolveCanonicalCalendar(completion: completion)
     }
 
+    /// EKEventStoreChanged fires on an arbitrary thread and bursts during
+    /// iCloud sync; coalesce onto the main queue with a short debounce.
+    /// This also keeps renderer C API calls on the render (main) thread.
     @objc private func handleEventStoreChanged() {
-        guard hasAccess else { return }
-        resolveCanonicalCalendar { _ in }
-        syncAllEvents()
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.hasAccess else { return }
+            self.pendingSync?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                self?.resolveCanonicalCalendar { _ in }
+            }
+            self.pendingSync = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: item)
+        }
     }
 
     private func resolveCanonicalCalendar(completion: @escaping (Bool) -> Void) {
@@ -123,27 +137,40 @@ import UIKit
 
     // MARK: - Sync
 
+    /// Query events on the work queue, then apply to the renderer on main.
     private func syncAllEvents() {
-        syncDaysCounter()
-        guard !oayaoCalendars.isEmpty else { return }
-        let today = Date()
-        let startOfDay = Calendar.current.startOfDay(for: today)
-        guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) else { return }
+        let calendars = oayaoCalendars
+        let writable = writableCalendar
+        workQueue.async { [weak self] in
+            guard let self = self else { return }
 
-        var activeIds: [String] = []
-        for calendar in oayaoCalendars {
-            let predicate = eventStore.predicateForEvents(
-                withStart: startOfDay, end: endOfDay, calendars: [calendar]
-            )
-            let events = eventStore.events(matching: predicate)
-            for event in events where !isCounterStartEvent(event) {
-                activeIds.append(event.eventIdentifier)
-                oayao_spawn_heart(event.eventIdentifier)
+            var activeIds: [String] = []
+            if !calendars.isEmpty {
+                let today = Date()
+                let startOfDay = Calendar.current.startOfDay(for: today)
+                guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) else { return }
+                for calendar in calendars {
+                    let predicate = self.eventStore.predicateForEvents(
+                        withStart: startOfDay, end: endOfDay, calendars: [calendar]
+                    )
+                    for event in self.eventStore.events(matching: predicate) where !self.isCounterStartEvent(event) {
+                        activeIds.append(event.eventIdentifier)
+                    }
+                }
+            }
+
+            let counterStartMs = self.queryCounterStartMs(calendars: calendars, writable: writable)
+            let joined = activeIds.joined(separator: "\n")
+
+            DispatchQueue.main.async {
+                for eventId in activeIds {
+                    oayao_spawn_heart(eventId)
+                }
+                oayao_sync_hearts(joined)
+                SettingsStore.counterStartMs = counterStartMs
+                oayao_set_days_counter_start_ms(counterStartMs)
             }
         }
-
-        let joined = activeIds.joined(separator: "\n")
-        oayao_sync_hearts(joined)
     }
 
     // MARK: - Days Counter
@@ -201,18 +228,25 @@ import UIKit
         }
     }
 
-    /// Read the latest marker event, push its notes date to the renderer, and
-    /// re-copy the marker when it approaches the edge of the searchable
-    /// window. A missing or unreadable marker falls back to the default.
-    private func syncDaysCounter() {
-        var startMs = oayao_days_counter_default_start_ms()
-        if let event = counterStartEvent(),
-           let date = Self.counterStartNotesFormatter.date(from: event.notes ?? "") {
-            startMs = date.timeIntervalSince1970 * 1000
-            refreshCounterStartEventIfNeeded(event)
-        }
-        SettingsStore.counterStartMs = startMs
-        oayao_set_days_counter_start_ms(startMs)
+    /// Query the marker event off the main thread: read the latest notes
+    /// date, re-copy the marker when it nears the searchable window edge.
+    /// Falls back to the renderer's built-in default when no marker exists.
+    private func queryCounterStartMs(calendars: [EKCalendar], writable: EKCalendar?) -> Double {
+        guard !calendars.isEmpty else { return oayao_days_counter_default_start_ms() }
+        let now = Date()
+        guard let start = Calendar.current.date(byAdding: .year, value: counterStartSearchPastYears, to: now),
+              let end = Calendar.current.date(byAdding: .month, value: 1, to: now)
+        else { return oayao_days_counter_default_start_ms() }
+
+        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: calendars)
+        guard let marker = eventStore.events(matching: predicate)
+            .filter({ isCounterStartEvent($0) })
+            .max(by: { $0.startDate < $1.startDate }),
+            let date = Self.counterStartNotesFormatter.date(from: marker.notes ?? "")
+        else { return oayao_days_counter_default_start_ms() }
+
+        refreshCounterStartEventIfNeeded(marker, writable: writable)
+        return date.timeIntervalSince1970 * 1000
     }
 
     /// The most recently dated marker event within the searchable window.
@@ -230,8 +264,8 @@ import UIKit
 
     /// Re-copy the marker at today's date when the latest copy is close to
     /// aging out of the searchable window, keeping it readable forever.
-    private func refreshCounterStartEventIfNeeded(_ event: EKEvent) {
-        guard hasAccess, let calendar = writableCalendar,
+    private func refreshCounterStartEventIfNeeded(_ event: EKEvent, writable: EKCalendar?) {
+        guard let calendar = writable,
               let threshold = Calendar.current.date(byAdding: .year, value: counterStartRefreshAgeYears, to: Date()),
               event.startDate < threshold
         else { return }

@@ -39,7 +39,7 @@ jobs:
         shell: bash
 
       - name: Build WASM
-        run: zig build web -Dtarget=wasm32-emscripten
+        run: zig build web -Dtarget=wasm32-emscripten -Drelease=true
 
       - name: Copy WASM artifacts
         run: mkdir -p web/public && cp zig-out/web/oayao.js zig-out/web/oayao.wasm web/public/

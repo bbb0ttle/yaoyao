@@ -81,6 +81,7 @@ pub const App = struct {
 
     days_text_buf: [32]u8,
     days_text_len: usize,
+    text_layout: text_renderer.TextLayout,
 
     tagged_hearts: std.StringHashMap(*Particle),
     incoming_hearts: std.ArrayList(IncomingHeart),
@@ -117,6 +118,7 @@ pub const App = struct {
             .heart_y_fraction = null,
             .days_text_buf = undefined,
             .days_text_len = 0,
+            .text_layout = .{},
             .tagged_hearts = std.StringHashMap(*Particle).init(allocator),
             .incoming_hearts = .empty,
             .days_counter_start_ms = DAYS_COUNTER_DEFAULT_START_MS,
@@ -196,10 +198,6 @@ pub const App = struct {
         self.update_incoming_hearts(elapsed);
         self.pool.collect_alive();
 
-        for (self.pool.alive_slice()) |idx| {
-            self.pool.get_particle(idx).update(elapsed, dpr);
-        }
-
         var inst_count = text_renderer.fill_particle_instances(
             &self.gpu,
             &self.pool,
@@ -207,6 +205,7 @@ pub const App = struct {
             h,
             dpr,
             t,
+            elapsed,
             0,
         );
 
@@ -220,6 +219,7 @@ pub const App = struct {
                 self.days_text_len,
                 &self.heart,
                 inst_count,
+                &self.text_layout,
             );
         }
 

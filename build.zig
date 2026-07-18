@@ -81,7 +81,7 @@ pub fn build(b: *Build) !void {
             const install = b.addInstallArtifact(lib, .{});
             b.getInstallStep().dependOn(&install.step);
 
-            const app_step = try createIosAppBundle(b, lib, lib_sokol, target);
+            const app_step = try createIosAppBundle(b, lib, lib_sokol, target, optimize);
             const install_app = b.step("ios-app", "Build Oayao.app bundle for iOS");
             install_app.dependOn(app_step);
         } else {
@@ -105,6 +105,11 @@ pub fn build(b: *Build) !void {
         });
         lib.step.dependOn(shd_step);
 
+        const em_extra_args: []const []const u8 = if (optimize == .Debug)
+            &.{ "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower']" }
+        else
+            &.{ "-O3", "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower']" };
+
         const link_step = try sokol_build.emLinkStep(b, .{
             .lib_main = lib,
             .target = target,
@@ -114,7 +119,7 @@ pub fn build(b: *Build) !void {
             .use_emmalloc = true,
             .use_filesystem = false,
             .shell_file_path = b.path("web/shell.html"),
-            .extra_args = &.{ "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower']" },
+            .extra_args = em_extra_args,
         });
 
         const web_step = b.step("web", "Build oayao for web");
@@ -247,10 +252,12 @@ fn createIosAppBundle(
     lib: *Build.Step.Compile,
     lib_sokol: *Build.Step.Compile,
     target: Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
 ) !*Build.Step {
     const platform = if (target.result.abi == .simulator) "iphonesimulator" else "iphoneos";
     const sdk_root = iosSdkRoot(b, target);
     const developer_dir = xcodeDeveloperDir(b);
+    const swift_opt: []const u8 = if (optimize == .Debug) "-Onone" else "-O";
 
     // Construct clang target triple from resolved target.
     const clang_arch: []const u8 = if (target.result.cpu.arch == .aarch64) "arm64" else @tagName(target.result.cpu.arch);
@@ -281,6 +288,7 @@ fn createIosAppBundle(
         \\trap 'rm -rf "$SWIFT_DIR"' EXIT
         \\cd "$SWIFT_DIR"
         \\swiftc -c \
+        \\  {[6]s} \
         \\  -sdk "$SDK_ROOT" \
         \\  -target "{s}" \
         \\  -import-objc-header "$7"/Bridge.h \
@@ -326,7 +334,7 @@ fn createIosAppBundle(
         \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
         \\rm -f "$PARTIAL"
         \\echo "Created Oayao.app bundle at zig-out/Oayao.app"
-    , .{ sdk_root, swift_target, platform, clang_target, developer_dir, platform });
+    , .{ sdk_root, swift_target, platform, clang_target, developer_dir, platform, swift_opt });
 
     const cmd = b.addSystemCommand(&.{ "sh", "-c" });
     cmd.addArg(script);

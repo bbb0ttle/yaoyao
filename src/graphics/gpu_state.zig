@@ -37,6 +37,13 @@ pub const GpuState = struct {
     instance_count: u32,
     allocator: std.mem.Allocator,
 
+    // Per-frame invariants, recomputed only when inputs change.
+    last_w: f32,
+    last_h: f32,
+    last_theme: ?Theme,
+    vs_params: shd.VsParams,
+    fs_params: shd.FsParams,
+
     pub fn init(allocator: std.mem.Allocator) !Self {
         const instance_buffer = try allocator.alloc(GpuInstance, MAX_INSTANCES);
 
@@ -52,6 +59,11 @@ pub const GpuState = struct {
             .instance_buffer = instance_buffer,
             .instance_count = 0,
             .allocator = allocator,
+            .last_w = -1.0,
+            .last_h = -1.0,
+            .last_theme = null,
+            .vs_params = undefined,
+            .fs_params = undefined,
         };
 
         self.pass_action.colors[0] = .{
@@ -86,27 +98,33 @@ pub const GpuState = struct {
     }
 
     pub fn render(self: *Self, w: f32, h: f32, theme: Theme) void {
-        const mvp = ortho(0, w, h, 0);
-        const vs_params = shd.VsParams{ .mvp = mvp };
-        const fs_params = shd.FsParams{
-            .fill_color = to_f32x4(theme.heart_fill),
-            .stroke_color = to_f32x4(theme.heart_stroke),
-            .text_color = to_f32x4(theme.timer_text),
-        };
-        self.pass_action.colors[0].clear_value = .{
-            .r = @as(f32, @floatFromInt(theme.background.r)) / 255.0,
-            .g = @as(f32, @floatFromInt(theme.background.g)) / 255.0,
-            .b = @as(f32, @floatFromInt(theme.background.b)) / 255.0,
-            .a = 1.0,
-        };
+        const dirty = self.last_w != w or self.last_h != h or
+            self.last_theme == null or !std.meta.eql(self.last_theme.?, theme);
+        if (dirty) {
+            self.vs_params = .{ .mvp = ortho(0, w, h, 0) };
+            self.fs_params = .{
+                .fill_color = to_f32x4(theme.heart_fill),
+                .stroke_color = to_f32x4(theme.heart_stroke),
+                .text_color = to_f32x4(theme.timer_text),
+            };
+            self.pass_action.colors[0].clear_value = .{
+                .r = @as(f32, @floatFromInt(theme.background.r)) / 255.0,
+                .g = @as(f32, @floatFromInt(theme.background.g)) / 255.0,
+                .b = @as(f32, @floatFromInt(theme.background.b)) / 255.0,
+                .a = 1.0,
+            };
+            self.last_w = w;
+            self.last_h = h;
+            self.last_theme = theme;
+        }
 
         const sglue = @import("sokol").glue;
         sg.beginPass(.{ .action = self.pass_action, .swapchain = sglue.swapchain() });
         if (self.instance_count > 0) {
             sg.applyPipeline(self.pip);
             sg.applyBindings(self.bind);
-            sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
-            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
+            sg.applyUniforms(shd.UB_vs_params, sg.asRange(&self.vs_params));
+            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&self.fs_params));
             sg.draw(0, 6, @intCast(self.instance_count));
         }
         sg.endPass();

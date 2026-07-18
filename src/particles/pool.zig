@@ -49,35 +49,42 @@ pub const ParticlePool = struct {
         self.alive_count = 0;
     }
 
+    /// Compact the alive list in place (swap-remove semantics preserving
+    /// order) and push dead slots onto the persistent free list.
+    /// Runs in O(alive) instead of scanning the whole backing array.
     pub fn collect_alive(self: *Self) void {
-        self.alive_count = 0;
-        self.free_head = SENTINEL;
-        for (0..self.len) |i| {
-            if (self.particles[i].is_alive()) {
-                self.alive_indices[self.alive_count] = i;
-                self.alive_count += 1;
+        var write: usize = 0;
+        var read: usize = 0;
+        while (read < self.alive_count) : (read += 1) {
+            const idx = self.alive_indices[read];
+            if (self.particles[idx].is_alive()) {
+                self.alive_indices[write] = idx;
+                write += 1;
             } else {
-                self.particles[i].set_next_free(self.free_head);
-                self.free_head = i;
+                self.particles[idx].set_next_free(self.free_head);
+                self.free_head = idx;
             }
         }
+        self.alive_count = write;
     }
 
     pub fn alloc_particle(self: *Self, pos: Vec2, elapsed: f32, opts: ParticleOpts, rng: *Rng) *Particle {
+        var idx: usize = undefined;
         if (self.free_head < SENTINEL) {
-            const idx = self.free_head;
+            idx = self.free_head;
             self.free_head = self.particles[idx].get_next_free();
-            self.particles[idx] = Particle.init(pos, elapsed, opts, rng);
-            return &self.particles[idx];
-        }
-        if (self.len < self.particles.len) {
-            const idx = self.len;
+        } else if (self.len < self.particles.len) {
+            idx = self.len;
             self.len += 1;
-            self.particles[idx] = Particle.init(pos, elapsed, opts, rng);
-            return &self.particles[idx];
+        } else {
+            // Pool exhausted: overwrite slot 0. The free list is empty by
+            // definition here, so bookkeeping stays consistent.
+            idx = 0;
         }
-        self.particles[0] = Particle.init(pos, elapsed, opts, rng);
-        return &self.particles[0];
+        self.particles[idx] = Particle.init(pos, elapsed, opts, rng);
+        self.alive_indices[self.alive_count] = idx;
+        self.alive_count += 1;
+        return &self.particles[idx];
     }
 
     pub fn alive_slice(self: *const Self) []usize {

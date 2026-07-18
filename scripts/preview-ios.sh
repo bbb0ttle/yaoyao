@@ -42,10 +42,10 @@ echo "==> Preview target device: $DEVICE"
 # --- Build ---
 if [ "$NO_BUILD" = false ]; then
     echo "==> Building oayao for iOS Simulator (aarch64)..."
-    zig build -Dtarget=aarch64-ios-simulator
+    zig build -Dtarget=aarch64-ios-simulator -Drelease=true
 
     echo "==> Creating Oayao.app bundle..."
-    zig build ios-app -Dtarget=aarch64-ios-simulator
+    zig build ios-app -Dtarget=aarch64-ios-simulator -Drelease=true
 else
     if [ ! -d "zig-out/Oayao.app" ]; then
         echo "Error: --no-build specified but zig-out/Oayao.app does not exist."
