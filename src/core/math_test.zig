@@ -23,6 +23,18 @@ test "breath within bounds" {
     }
 }
 
+test "smooth_breath within bounds and hits extremes" {
+    for (0..100) |i| {
+        const t = @as(f32, @floatFromInt(i)) * 0.01;
+        const v = math.smooth_breath(t, 10.0, 20.0);
+        try testing.expect(v >= 10.0);
+        try testing.expect(v <= 20.0);
+    }
+    // sin(pi/2) = 1 at sec = 1/6 → max; sin(3pi/2) = -1 at sec = 1/2 → min
+    try testing.expectApproxEqAbs(20.0, math.smooth_breath(1.0 / 6.0, 10.0, 20.0), 1e-5);
+    try testing.expectApproxEqAbs(10.0, math.smooth_breath(0.5, 10.0, 20.0), 1e-5);
+}
+
 test "scale linear" {
     try testing.expectApproxEqAbs(50.0, math.scale(100.0, 200.0, 100.0), 1e-6);
     try testing.expectApproxEqAbs(0.0, math.scale(0.0, 200.0, 100.0), 1e-6);

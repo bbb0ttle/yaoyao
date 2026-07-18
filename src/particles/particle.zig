@@ -42,6 +42,7 @@ pub const Particle = struct {
     flags: ParticleFlags,
     acc: Vec2,
     size_scale: f32,
+    alpha_scale: f32,
     _storage: union {
         birth_sec: f32,
         next_free: usize,
@@ -65,6 +66,7 @@ pub const Particle = struct {
             },
             ._storage = .{ .birth_sec = birth_sec },
             .size_scale = 1.0,
+            .alpha_scale = 1.0,
         };
     }
 
@@ -151,6 +153,14 @@ pub const Particle = struct {
 
     pub fn set_size_scale(self: *Particle, s: f32) void {
         self.size_scale = s;
+    }
+
+    pub fn get_alpha_scale(self: Self) f32 {
+        return self.alpha_scale;
+    }
+
+    pub fn set_alpha_scale(self: *Particle, s: f32) void {
+        self.alpha_scale = s;
     }
 
     pub fn is_alive(self: Self) bool {

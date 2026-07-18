@@ -6,6 +6,9 @@ enum SettingsStore {
     static let counterStartMsKey = "oayao.counterStartMs"
     static let themeIdKey = "oayao.themeId"
     static let customThemeColorsKey = "oayao.customThemeColors"
+    static let heartOpacityKey = "oayao.heartOpacity"
+    static let heartMotionKey = "oayao.heartMotion"
+    static let heartYKey = "oayao.heartY"
     static let defaultCalendarName = "oayao"
 
     /// Name of the calendar the app reads and writes events in.
@@ -59,4 +62,30 @@ enum SettingsStore {
         "heartStroke": 0xDBECE6,
         "timerText": 0xFFFFFF,
     ]
+
+    /// Big heart opacity (0.0–1.0); defaults to fully opaque.
+    static var heartOpacity: Double {
+        get { UserDefaults.standard.object(forKey: heartOpacityKey) as? Double ?? 1.0 }
+        set { UserDefaults.standard.set(newValue, forKey: heartOpacityKey) }
+    }
+
+    /// Big heart motion mode; values mirror the renderer's MotionMode enum
+    /// (0 = beat, 1 = breath).
+    static var heartMotion: Int {
+        get { UserDefaults.standard.object(forKey: heartMotionKey) as? Int ?? 0 }
+        set { UserDefaults.standard.set(newValue, forKey: heartMotionKey) }
+    }
+
+    /// Big heart vertical position as a fraction of canvas height.
+    /// nil means the renderer's built-in default.
+    static var heartY: Double? {
+        get { UserDefaults.standard.object(forKey: heartYKey) as? Double }
+        set {
+            if let newValue {
+                UserDefaults.standard.set(newValue, forKey: heartYKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: heartYKey)
+            }
+        }
+    }
 }

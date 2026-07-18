@@ -61,6 +61,11 @@ struct SettingsSheet: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                    NavigationLink {
+                        HeartSettingsView()
+                    } label: {
+                        Text(L10n.tr(.heart))
+                    }
                 } footer: {
                     Text(L10n.tr(.themeFooter))
                 }
@@ -247,6 +252,73 @@ private struct CounterStartSettingsView: View {
         .onChange(of: counterStart) { newValue in
             CalendarManager.shared.setCounterStart(date: newValue)
         }
+    }
+}
+
+/// Big-heart behaviour: opacity, motion style, and vertical position.
+/// All changes apply live on the canvas.
+private struct HeartSettingsView: View {
+    @AppStorage(SettingsStore.heartOpacityKey) private var opacity = 1.0
+    @AppStorage(SettingsStore.heartMotionKey) private var motion = 0
+    @State private var yFraction: Double? = SettingsStore.heartY
+    @ObservedObject private var languageManager = LanguageManager.shared
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L10n.tr(.opacity))
+                        Spacer()
+                        Text("\(Int((opacity * 100).rounded()))%")
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(value: $opacity, in: 0...1)
+                        .onChange(of: opacity) { oayao_set_heart_opacity(Float($0)) }
+                }
+                Picker(L10n.tr(.motion), selection: $motion) {
+                    Text(L10n.tr(.motionBeat)).tag(0)
+                    Text(L10n.tr(.motionBreath)).tag(1)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: motion) { oayao_set_heart_motion(UInt32($0)) }
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L10n.tr(.positionY))
+                        Spacer()
+                        Text("\(Int((displayedY * 100).rounded()))%")
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(value: yBinding, in: 0.1...0.9)
+                }
+                Button(L10n.tr(.reset)) {
+                    yFraction = nil
+                    SettingsStore.heartY = nil
+                    oayao_reset_heart_y()
+                }
+                .disabled(yFraction == nil)
+            }
+        }
+        .navigationTitle(L10n.tr(.heart))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var displayedY: Double {
+        yFraction ?? Double(oayao_default_heart_y())
+    }
+
+    private var yBinding: Binding<Double> {
+        Binding(
+            get: { displayedY },
+            set: { newValue in
+                yFraction = newValue
+                SettingsStore.heartY = newValue
+                oayao_set_heart_y(Float(newValue))
+            }
+        )
     }
 }
 

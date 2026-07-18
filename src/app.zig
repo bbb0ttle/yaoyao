@@ -12,6 +12,7 @@ const GpuState = @import("graphics/gpu_state.zig").GpuState;
 const text_renderer = @import("graphics/text_renderer.zig");
 const ParticlePool = @import("particles/pool.zig").ParticlePool;
 const HeartSystem = @import("systems/heart_system.zig").HeartSystem;
+const MotionMode = @import("systems/heart_system.zig").MotionMode;
 const meteor_sys = @import("systems/meteor_system.zig");
 const MeteorSystem = meteor_sys.MeteorSystem;
 const Particle = @import("particles/particle.zig").Particle;
@@ -57,6 +58,10 @@ pub const App = struct {
     theme_id: theme_mod.ThemeId,
     custom_theme: Theme,
 
+    heart_opacity: f32,
+    heart_motion: MotionMode,
+    heart_y_fraction: ?f32,
+
     days_text_buf: [32]u8,
     days_text_len: usize,
 
@@ -90,6 +95,9 @@ pub const App = struct {
             .theme = ThemeTransition.init(theme_mod.MINT),
             .theme_id = .mint,
             .custom_theme = theme_mod.MINT,
+            .heart_opacity = 1.0,
+            .heart_motion = .beat,
+            .heart_y_fraction = null,
             .days_text_buf = undefined,
             .days_text_len = 0,
             .tagged_hearts = std.StringHashMap(*Particle).init(allocator),
@@ -141,7 +149,7 @@ pub const App = struct {
         self.dpr = sapp.dpiScale();
         const dpr = self.dpr;
         const hx: f32 = w / 2.0 - 50.0 * dpr;
-        const hy: f32 = h / 2.0 - 200.0 * dpr;
+        const hy: f32 = self.heart_cy(h, dpr);
         const fp_x: f32 = w / 2.0 - 50.0 * dpr;
         const fp_y: f32 = h - 80.0 * dpr;
 
@@ -157,6 +165,10 @@ pub const App = struct {
 
     pub fn update_and_fill_buffers(self: *Self, w: f32, h: f32, elapsed: f32, dpr: f32) void {
         const t: f32 = @min(1.0, (elapsed - self.transition_start) / 3.0);
+
+        self.heart.set_cy(self.heart_cy(h, dpr));
+        self.heart.set_opacity(self.heart_opacity);
+        self.heart.set_motion(self.heart_motion);
 
         self.update_day_counter();
 
@@ -346,6 +358,46 @@ pub const App = struct {
 
     pub fn current_theme(self: *Self) Theme {
         return self.theme.current(self.last_elapsed);
+    }
+
+    pub fn set_heart_opacity(self: *Self, opacity: f32) void {
+        self.heart_opacity = std.math.clamp(opacity, 0.0, 1.0);
+    }
+
+    pub fn set_heart_motion(self: *Self, mode_id: u32) void {
+        const mode = std.enums.fromInt(MotionMode, mode_id) orelse {
+            log.warn("unknown heart motion mode={d}, ignoring", .{mode_id});
+            return;
+        };
+        self.heart_motion = mode;
+    }
+
+    /// Set the big heart's vertical position as a fraction of canvas height.
+    pub fn set_heart_y_fraction(self: *Self, fraction: f32) void {
+        self.heart_y_fraction = std.math.clamp(fraction, 0.0, 1.0);
+    }
+
+    /// Restore the big heart's built-in vertical position.
+    pub fn reset_heart_y(self: *Self) void {
+        self.heart_y_fraction = null;
+    }
+
+    /// Built-in vertical position as a fraction of the current canvas height.
+    pub fn default_heart_y(self: *Self) f32 {
+        const h = sapp.heightf();
+        return self.legacy_heart_cy(h, sapp.dpiScale()) / h;
+    }
+
+    fn heart_cy(self: *Self, h: f32, dpr: f32) f32 {
+        if (self.heart_y_fraction) |fraction| {
+            return fraction * h;
+        }
+        return self.legacy_heart_cy(h, dpr);
+    }
+
+    fn legacy_heart_cy(self: *Self, h: f32, dpr: f32) f32 {
+        _ = self;
+        return h / 2.0 - 200.0 * dpr;
     }
 
     fn handle_heart_tap(self: *Self, x: f32, y: f32) bool {

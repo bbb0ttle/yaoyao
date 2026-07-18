@@ -40,6 +40,22 @@ void oayao_transition_to_theme(uint32_t theme_id);
 // role: 0 = background, 1 = heart fill, 2 = heart stroke, 3 = timer text.
 void oayao_set_custom_theme_color(uint32_t role, uint8_t r, uint8_t g, uint8_t b);
 
+// Big-heart behaviour configuration. All values clamp to valid ranges.
+// opacity: 0.0 (invisible) to 1.0 (fully opaque).
+void oayao_set_heart_opacity(float opacity);
+
+// Motion style: 0 = beat (pulsing), 1 = breath (gentle sinusoid).
+void oayao_set_heart_motion(uint32_t mode);
+
+// Vertical position as a fraction of canvas height (0.0 = top, 1.0 = bottom).
+void oayao_set_heart_y(float fraction);
+
+// Restore the built-in vertical position (undoes oayao_set_heart_y).
+void oayao_reset_heart_y(void);
+
+// Built-in vertical position as a fraction of the current canvas height.
+float oayao_default_heart_y(void);
+
 #ifdef __cplusplus
 }
 #endif

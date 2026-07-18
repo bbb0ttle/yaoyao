@@ -25,6 +25,12 @@ pub fn breath(sec: f32, min: f32, max: f32) f32 {
     return @mulAdd(f32, exp_val, s, min - a * s);
 }
 
+/// Gentle sinusoidal oscillation between min and max, same rate as breath.
+pub fn smooth_breath(sec: f32, min: f32, max: f32) f32 {
+    const t = 0.5 + 0.5 * @sin(sec * 3.0 * std.math.pi);
+    return @mulAdd(f32, max - min, t, min);
+}
+
 pub fn scale(val: f32, a: f32, b: f32) f32 {
     return val * b / a;
 }

@@ -15,6 +15,12 @@ const Rng = @import("../random.zig").Rng;
 
 const CONTOUR_COUNT: usize = 30;
 
+/// Big-heart animation style; values are part of the C ABI.
+pub const MotionMode = enum(u32) {
+    beat = 0,
+    breath = 1,
+};
+
 const ContourPoint = struct {
     base_x: f32,
     base_y: f32,
@@ -33,6 +39,8 @@ pub const HeartSystem = struct {
     canvas_h: f32,
     dpr: f32,
     spawn_counter: u32,
+    opacity: f32,
+    motion: MotionMode,
 
     pub fn init(
         pool: *ParticlePool,
@@ -56,6 +64,8 @@ pub const HeartSystem = struct {
             .canvas_h = canvas_h,
             .dpr = dpr,
             .spawn_counter = 0,
+            .opacity = 1.0,
+            .motion = .beat,
         };
 
         const start: f32 = 0.0;
@@ -97,8 +107,15 @@ pub const HeartSystem = struct {
 
     pub fn update(self: *Self, elapsed: f32, pool: *ParticlePool, rng: *Rng) void {
         const dpr = self.dpr;
-        const scale_val = math.breath(elapsed - self.birth_sec, 50.0 * dpr, 60.0 * dpr);
-        const size_val = math.breath(elapsed - self.birth_sec, 10.0 * dpr, 15.0 * dpr);
+        const t = elapsed - self.birth_sec;
+        const scale_val = switch (self.motion) {
+            .beat => math.breath(t, 50.0 * dpr, 60.0 * dpr),
+            .breath => math.smooth_breath(t, 50.0 * dpr, 60.0 * dpr),
+        };
+        const size_val = switch (self.motion) {
+            .beat => math.breath(t, 10.0 * dpr, 15.0 * dpr),
+            .breath => math.smooth_breath(t, 10.0 * dpr, 15.0 * dpr),
+        };
 
         self.spawn_counter += 1;
         const spawn_frame = self.spawn_counter % 2 == 0;
@@ -109,11 +126,25 @@ pub const HeartSystem = struct {
                 cp.base_y * scale_val + 50.0 * dpr + self.cy - 5.0 * dpr,
             );
             cp.immortal.set_size(size_val);
+            cp.immortal.set_alpha_scale(self.opacity);
 
             if (spawn_frame) {
-                _ = pool.alloc_particle(cp.immortal.get_pos(), elapsed, .{ .size = MAX_PARTICLE_SIZE * dpr }, rng);
+                const trail = pool.alloc_particle(cp.immortal.get_pos(), elapsed, .{ .size = MAX_PARTICLE_SIZE * dpr }, rng);
+                trail.set_alpha_scale(self.opacity);
             }
         }
+    }
+
+    pub fn set_opacity(self: *Self, opacity: f32) void {
+        self.opacity = opacity;
+    }
+
+    pub fn set_motion(self: *Self, motion: MotionMode) void {
+        self.motion = motion;
+    }
+
+    pub fn set_cy(self: *Self, cy: f32) void {
+        self.cy = cy;
     }
 
     pub fn fill_contour_positions(self: *const Self, buf: []Vec2) void {

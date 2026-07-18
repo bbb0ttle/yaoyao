@@ -129,6 +129,35 @@ export fn oayao_set_custom_theme_color(role: u32, r: u8, g: u8, b: u8) void {
     }
 }
 
+export fn oayao_set_heart_opacity(opacity: f32) void {
+    if (g_app) |app| {
+        app.set_heart_opacity(opacity);
+    }
+}
+
+export fn oayao_set_heart_motion(mode: u32) void {
+    if (g_app) |app| {
+        app.set_heart_motion(mode);
+    }
+}
+
+export fn oayao_set_heart_y(fraction: f32) void {
+    if (g_app) |app| {
+        app.set_heart_y_fraction(fraction);
+    }
+}
+
+export fn oayao_reset_heart_y() void {
+    if (g_app) |app| {
+        app.reset_heart_y();
+    }
+}
+
+export fn oayao_default_heart_y() f32 {
+    const app = g_app orelse return 0.5;
+    return app.default_heart_y();
+}
+
 pub fn main() void {
     sapp.run(.{
         .init_cb = init,

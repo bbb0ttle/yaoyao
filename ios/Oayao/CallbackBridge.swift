@@ -30,6 +30,12 @@ func oayao_swift_bootstrap() {
         }
         oayao_transition_to_theme(SettingsStore.themeId)
 
+        oayao_set_heart_opacity(Float(SettingsStore.heartOpacity))
+        oayao_set_heart_motion(UInt32(SettingsStore.heartMotion))
+        if let heartY = SettingsStore.heartY {
+            oayao_set_heart_y(Float(heartY))
+        }
+
         CalendarManager.shared.requestAccess { granted in
             if granted {
                 print("[Oayao] Calendar access granted")

@@ -104,6 +104,7 @@ pub fn fill_particle_instances(
     for (alive) |idx| {
         const p = pool.get_particle(idx);
 
+        const alpha_scale = p.get_alpha_scale();
         const max_alpha: f32 = if (p.is_immortal()) 1.0 else math.scale(p.get_lifespan(), MAX_LIFESPAN, 200.0) / 255.0;
         const display_size: f32 = math.scale(p.get_lifespan(), MAX_LIFESPAN, p.get_size());
 
@@ -113,8 +114,8 @@ pub fn fill_particle_instances(
 
         if (inst_count >= cap) continue;
 
-        const fill_alpha = max_alpha * t;
-        const stroke_alpha = @min(1.0, p.get_lifespan() / 255.0) * t;
+        const fill_alpha = max_alpha * t * alpha_scale;
+        const stroke_alpha = @min(1.0, p.get_lifespan() / 255.0) * t * alpha_scale;
         const shape: f32 = if (display_size + stroke_width < 8.0) 0.0 else 1.0;
 
         gpu.write_instance(inst_count, .{
