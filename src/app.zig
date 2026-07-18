@@ -26,6 +26,22 @@ const ThemeTransition = theme_mod.ThemeTransition;
 const POOL_CAPACITY: usize = 5000;
 pub const DAYS_COUNTER_DEFAULT_START_MS: f64 = 1660694400000.0;
 
+// Landing region for tagged hearts: a wide starfield band between the big
+// heart and the bottom day counter.
+const LAND_MIN_X: f32 = 0.08;
+const LAND_MAX_X: f32 = 0.92;
+const LAND_MIN_Y: f32 = 0.45;
+const LAND_MAX_Y: f32 = 0.88;
+
+// Placement: most hearts grow near an existing one (clusters), the rest
+// scatter freely — the cluster/void contrast of a real starfield.
+const CLUSTER_BIAS: f32 = 0.6;
+
+// Older hearts shrink as new ones land, like stars receding into depth,
+// keeping the newest event the most prominent.
+const HEART_SHRINK_FACTOR: f32 = 0.94;
+const HEART_MIN_SIZE_SCALE: f32 = 0.38;
+
 const IncomingHeart = struct {
     particle: *Particle,
     event_id: []const u8,
@@ -240,22 +256,56 @@ pub const App = struct {
         @memcpy(id_dup[0..event_id.len], event_id);
         errdefer self.allocator.free(id_dup);
 
-        const min_dist = MAX_PARTICLE_SIZE * dpr * 4.0;
+        const hard_min = MAX_PARTICLE_SIZE * dpr * 1.6;
         var dest_x: f32 = undefined;
         var dest_y: f32 = undefined;
-        var attempt: usize = 0;
-        while (attempt < 30) : (attempt += 1) {
-            const dx = self.rng.random_range(w * 0.12, w * 0.88);
-            const dy = self.rng.random_range(h * 0.68, h * 0.76);
-            if (!self.overlaps_existing(dx, dy, min_dist)) {
-                dest_x = dx;
-                dest_y = dy;
-                break;
+        var placed = false;
+
+        // Cluster branch: grow near a random existing heart, like a star
+        // joining its group.
+        if (self.rng.random_range(0.0, 1.0) < CLUSTER_BIAS) {
+            var tries: usize = 0;
+            while (tries < 12 and !placed) : (tries += 1) {
+                const anchor = self.random_anchor() orelse break;
+                const ang = self.rng.random_range(0.0, 2.0 * std.math.pi);
+                const dist = MAX_PARTICLE_SIZE * dpr * self.rng.random_range(1.6, 3.0);
+                const cx = anchor.x + @cos(ang) * dist;
+                const cy = anchor.y + @sin(ang) * dist;
+                if (cx < w * LAND_MIN_X or cx > w * LAND_MAX_X or
+                    cy < h * LAND_MIN_Y or cy > h * LAND_MAX_Y) continue;
+                if (self.nearest_clearance(cx, cy) < hard_min) continue;
+                dest_x = cx;
+                dest_y = cy;
+                placed = true;
             }
         }
-        if (attempt >= 20) {
-            dest_x = self.rng.random_range(w * 0.12, w * 0.88);
-            dest_y = self.rng.random_range(h * 0.68, h * 0.76);
+
+        // Scatter branch (and fallback): uniform random with only the hard
+        // spacing floor — casual sampling keeps natural density variance.
+        if (!placed) {
+            var best_clear: f32 = 0.0;
+            var tries: usize = 0;
+            while (tries < 15) : (tries += 1) {
+                const cx = self.rng.random_range(w * LAND_MIN_X, w * LAND_MAX_X);
+                const cy = self.rng.random_range(h * LAND_MIN_Y, h * LAND_MAX_Y);
+                const clearance = self.nearest_clearance(cx, cy);
+                if (clearance >= hard_min) {
+                    dest_x = cx;
+                    dest_y = cy;
+                    placed = true;
+                    break;
+                }
+                if (clearance > best_clear) {
+                    best_clear = clearance;
+                    dest_x = cx;
+                    dest_y = cy;
+                    placed = true;
+                }
+            }
+            if (!placed) {
+                dest_x = self.rng.random_range(w * LAND_MIN_X, w * LAND_MAX_X);
+                dest_y = self.rng.random_range(h * LAND_MIN_Y, h * LAND_MAX_Y);
+            }
         }
 
         const speed = meteor_sys.METEOR_SPEED * dpr;
@@ -405,6 +455,9 @@ pub const App = struct {
     fn handle_heart_tap(self: *Self, x: f32, y: f32) bool {
         if (self.heart_tap_callback == null) return false;
 
+        // Nearest match wins so hearts in dense clusters remain tappable.
+        var best_dist = std.math.floatMax(f32);
+        var best_key: ?[*:0]const u8 = null;
         var it = self.tagged_hearts.iterator();
         while (it.next()) |entry| {
             const p = entry.value_ptr.*;
@@ -412,30 +465,57 @@ pub const App = struct {
             const dx = x - p.pos_x();
             const dy = y - p.pos_y();
             const dist = @sqrt(dx * dx + dy * dy);
-            if (dist < p.get_size() * 2.0) {
-                const key: [*:0]const u8 = @ptrCast(entry.key_ptr.ptr);
-                self.heart_tap_callback.?(key);
-                return true;
+            if (dist < p.get_size() * 2.0 and dist < best_dist) {
+                best_dist = dist;
+                best_key = @ptrCast(entry.key_ptr.ptr);
             }
+        }
+        if (best_key) |key| {
+            self.heart_tap_callback.?(key);
+            return true;
         }
         return false;
     }
 
-    fn overlaps_existing(self: *Self, x: f32, y: f32, min_dist: f32) bool {
+    fn nearest_clearance(self: *Self, x: f32, y: f32) f32 {
+        var best = std.math.floatMax(f32);
         var it = self.tagged_hearts.iterator();
         while (it.next()) |entry| {
             const p = entry.value_ptr.*;
             if (!p.is_alive()) continue;
             const dx = x - p.pos_x();
             const dy = y - p.pos_y();
-            if (@sqrt(dx * dx + dy * dy) < min_dist) return true;
+            best = @min(best, @sqrt(dx * dx + dy * dy));
         }
         for (self.incoming_hearts.items) |cm| {
             const dx = x - cm.target_x;
             const dy = y - cm.target_y;
-            if (@sqrt(dx * dx + dy * dy) < min_dist) return true;
+            best = @min(best, @sqrt(dx * dx + dy * dy));
         }
-        return false;
+        return best;
+    }
+
+    /// Reservoir-sample a random anchor among landed hearts and incoming
+    /// targets, used as a cluster seed.
+    fn random_anchor(self: *Self) ?Vec2 {
+        var count: usize = 0;
+        var chosen: Vec2 = undefined;
+        var it = self.tagged_hearts.iterator();
+        while (it.next()) |entry| {
+            const p = entry.value_ptr.*;
+            if (!p.is_alive()) continue;
+            if (self.rng.random_index(count + 1) == 0) {
+                chosen = p.get_pos();
+            }
+            count += 1;
+        }
+        for (self.incoming_hearts.items) |cm| {
+            if (self.rng.random_index(count + 1) == 0) {
+                chosen = Vec2{ .x = cm.target_x, .y = cm.target_y };
+            }
+            count += 1;
+        }
+        return if (count == 0) null else chosen;
     }
 
     fn update_day_counter(self: *Self) void {
@@ -582,12 +662,19 @@ pub const App = struct {
         p.set_beat(true);
         p.set_lifespan(self.rng.random_range(75.0, 110.0));
         p.set_birth_sec(elapsed);
-        p.set_size_scale(self.rng.random_range(0.55, 1.0));
+        p.set_size_scale(self.rng.random_range(0.8, 1.0));
         p.set_size(MAX_PARTICLE_SIZE * self.dpr);
         p.set_vel(
             self.rng.random_range(-0.5, 0.5) * self.dpr,
             self.rng.random_range(-2.5, -1.5) * self.dpr,
         );
+
+        // Older hearts recede a step so the newest stays the brightest star.
+        var shrink_it = self.tagged_hearts.iterator();
+        while (shrink_it.next()) |entry| {
+            const old = entry.value_ptr.*;
+            old.set_size_scale(@max(HEART_MIN_SIZE_SCALE, old.get_size_scale() * HEART_SHRINK_FACTOR));
+        }
 
         self.tagged_hearts.put(event_id, p) catch {
             log.warn("tagged_hearts.put failed, discarding heart for event_id", .{});

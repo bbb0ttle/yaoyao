@@ -151,6 +151,10 @@ pub const Particle = struct {
         self.size = s;
     }
 
+    pub fn get_size_scale(self: Self) f32 {
+        return self.size_scale;
+    }
+
     pub fn set_size_scale(self: *Particle, s: f32) void {
         self.size_scale = s;
     }
