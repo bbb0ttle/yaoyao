@@ -121,7 +121,7 @@ void main() {
     // world position offsets and warps its own patch of sky.
     if (v_shape > 2.5) {
         float n = fbm(v_uv * 2.6 + v_pos * 0.003);
-        float a = smoothstep(0.42, 0.78, n) * v_fill_a;
+        float a = smoothstep(0.36, 0.72, n) * v_fill_a;
         frag_color = vec4(fill_color.rgb, a);
         return;
     }

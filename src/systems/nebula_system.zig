@@ -61,7 +61,7 @@ pub const NebulaSystem = struct {
             self.drifts[i] = Vec2{ .x = @cos(angle) * drift_speed, .y = @sin(angle) * drift_speed };
             self.phases[i] = rng.random_range(0.0, 2.0 * std.math.pi);
             self.breath_speeds[i] = rng.random_range(0.08, 0.2);
-            self.base_alphas[i] = 0.10 + 0.08 * nearness;
+            self.base_alphas[i] = 0.18 + 0.10 * nearness;
         }
         return self;
     }
