@@ -1,8 +1,9 @@
-//! Nebula background: large diffuse blobs drifting and breathing softly.
+//! Nebula background: two screen-spanning fbm cloud layers.
 //!
-//! Blobs render through the instanced pipeline as gaussian-falloff puffs
-//! (shader shape 3). Bigger blobs are dimmer and slower, reading as distant
-//! layers; smaller ones are brighter and drift faster — a sense of depth.
+//! Each layer is one huge gaussian-less blob (shader shape 3 = continuous
+//! fbm density field). The near layer is brighter and drifts faster, the
+//! far layer dimmer and slower — a deep, seamless sky. Layers breathe over
+//! 30–80 second cycles.
 
 const std = @import("std");
 const log = std.log.scoped(.nebula);
@@ -12,81 +13,84 @@ const Particle = @import("../particles/particle.zig").Particle;
 const ParticlePool = @import("../particles/pool.zig").ParticlePool;
 const Rng = @import("../random.zig").Rng;
 
-const MAX_BLOBS: usize = 24;
-const MIN_BLOBS: f32 = 10.0;
-const AREA_PER_BLOB: f32 = 150000.0;
+const LAYER_COUNT: usize = 2;
 
-/// Fixed-size nebula layer; zero allocation after init.
+/// Fixed two-layer nebula; trivial per-frame cost.
 pub const NebulaSystem = struct {
     const Self = @This();
 
-    blobs: [MAX_BLOBS]*Particle,
-    drifts: [MAX_BLOBS]Vec2,
-    phases: [MAX_BLOBS]f32,
-    speeds: [MAX_BLOBS]f32,
-    base_alphas: [MAX_BLOBS]f32,
-    blob_count: usize,
+    layers: [LAYER_COUNT]*Particle,
+    drifts: [LAYER_COUNT]Vec2,
+    phases: [LAYER_COUNT]f32,
+    breath_speeds: [LAYER_COUNT]f32,
+    base_alphas: [LAYER_COUNT]f32,
 
     pub fn init(pool: *ParticlePool, rng: *Rng, w: f32, h: f32, dpr: f32, elapsed: f32) Self {
+        const diag = @sqrt(w * w + h * h);
+        const cx = w / 2.0;
+        const cy = h / 2.0;
+
         var self = Self{
-            .blobs = undefined,
+            .layers = undefined,
             .drifts = undefined,
             .phases = undefined,
-            .speeds = undefined,
+            .breath_speeds = undefined,
             .base_alphas = undefined,
-            .blob_count = 0,
         };
 
-        const want: usize = @intFromFloat(std.math.clamp(w * h / AREA_PER_BLOB, MIN_BLOBS, @as(f32, @floatFromInt(MAX_BLOBS))));
-        while (self.blob_count < want) {
-            const i = self.blob_count;
-            const size = rng.random_range(60.0, 200.0) * dpr;
-            const blob = pool.alloc_particle(
-                Vec2{ .x = rng.random_range(0.0, w), .y = rng.random_range(0.0, h) },
+        for (0..LAYER_COUNT) |i| {
+            const fi: f32 = @floatFromInt(i);
+            const size = diag * (0.75 + 0.15 * fi);
+            const layer = pool.alloc_particle(
+                Vec2{
+                    .x = cx + rng.random_range(-0.05, 0.05) * diag,
+                    .y = cy + rng.random_range(-0.05, 0.05) * diag,
+                },
                 elapsed,
                 .{ .immortal = true, .blob = true, .size = size },
                 rng,
             );
-            blob.set_vel(0, 0);
-            blob.set_acc(0, 0);
-            self.blobs[i] = blob;
+            layer.set_vel(0, 0);
+            layer.set_acc(0, 0);
+            self.layers[i] = layer;
 
-            // Depth: big blobs sit far (dim, slow), small ones near (bright, fast).
-            const nearness = 1.0 - (size / dpr - 60.0) / 140.0;
+            // Far layer: dimmer, slower. Near layer: brighter, quicker.
+            const nearness = 1.0 - fi / @as(f32, LAYER_COUNT - 1);
             const angle = rng.random_range(0.0, 2.0 * std.math.pi);
-            const speed = rng.random_range(0.04, 0.12) * dpr * (0.5 + nearness);
-            self.drifts[i] = Vec2{ .x = @cos(angle) * speed, .y = @sin(angle) * speed };
+            const drift_speed = rng.random_range(0.03, 0.08) * dpr * (0.5 + nearness);
+            self.drifts[i] = Vec2{ .x = @cos(angle) * drift_speed, .y = @sin(angle) * drift_speed };
             self.phases[i] = rng.random_range(0.0, 2.0 * std.math.pi);
-            self.speeds[i] = rng.random_range(0.4, 0.8);
-            self.base_alphas[i] = rng.random_range(0.10, 0.20) * (0.7 + 0.6 * nearness);
-            self.blob_count += 1;
+            self.breath_speeds[i] = rng.random_range(0.08, 0.2);
+            self.base_alphas[i] = 0.10 + 0.08 * nearness;
         }
         return self;
     }
 
-    /// Breathe each blob's alpha and drift it, bouncing softly off the edges.
+    /// Very slow breathing; gentle drift bounced within the coverage margin
+    /// so each layer always spans the full screen.
     pub fn update(self: *Self, elapsed: f32, w: f32, h: f32) void {
-        var i: usize = 0;
-        while (i < self.blob_count) : (i += 1) {
-            const blob = self.blobs[i];
-            const wave = 0.5 + 0.5 * @sin(elapsed * self.speeds[i] + self.phases[i]);
-            blob.set_alpha_scale(self.base_alphas[i] * (0.6 + 0.4 * wave));
+        const diag = @sqrt(w * w + h * h);
+        const cx = w / 2.0;
+        const cy = h / 2.0;
 
-            const margin = blob.get_size() * 0.5;
-            const next_x = blob.pos_x() + self.drifts[i].x;
-            const next_y = blob.pos_y() + self.drifts[i].y;
-            if (next_x < -margin or next_x > w + margin) self.drifts[i].x = -self.drifts[i].x;
-            if (next_y < -margin or next_y > h + margin) self.drifts[i].y = -self.drifts[i].y;
-            blob.translate(self.drifts[i].x, self.drifts[i].y);
+        for (0..LAYER_COUNT) |i| {
+            const layer = self.layers[i];
+            const wave = 0.5 + 0.5 * @sin(elapsed * self.breath_speeds[i] + self.phases[i]);
+            layer.set_alpha_scale(self.base_alphas[i] * (0.7 + 0.3 * wave));
+
+            const margin = layer.get_size() - diag / 2.0;
+            const next_x = layer.pos_x() + self.drifts[i].x;
+            const next_y = layer.pos_y() + self.drifts[i].y;
+            if (@abs(next_x - cx) > margin) self.drifts[i].x = -self.drifts[i].x;
+            if (@abs(next_y - cy) > margin) self.drifts[i].y = -self.drifts[i].y;
+            layer.translate(self.drifts[i].x, self.drifts[i].y);
         }
     }
 
-    /// Kill all blobs (pool compaction reclaims the slots).
+    /// Kill all layers (pool compaction reclaims the slots).
     pub fn clear(self: *Self) void {
-        var i: usize = 0;
-        while (i < self.blob_count) : (i += 1) {
-            self.blobs[i].set_alive(false);
+        for (0..LAYER_COUNT) |i| {
+            self.layers[i].set_alive(false);
         }
-        self.blob_count = 0;
     }
 };

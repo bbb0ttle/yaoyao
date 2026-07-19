@@ -25,6 +25,7 @@ in float inst_fill_a;
 in float inst_shape;
 
 out vec2 v_uv;
+out vec2 v_pos;
 out float v_stroke_size;
 out float v_fill_size;
 out float v_stroke_a;
@@ -37,6 +38,7 @@ void main() {
     vec2 world = local * inst_stroke_size + inst_pos;
     gl_Position = mvp * vec4(world, 0.0, 1.0);
     v_uv = local;  // [-1, 1] in stroke-size world space
+    v_pos = inst_pos;
     v_stroke_size = inst_stroke_size;
     v_fill_size = inst_fill_size;
     v_stroke_a = inst_stroke_a;
@@ -53,12 +55,40 @@ layout(binding=1) uniform fs_params {
 };
 
 in vec2 v_uv;
+in vec2 v_pos;
 in float v_stroke_size;
 in float v_fill_size;
 in float v_stroke_a;
 in float v_fill_a;
 in float v_shape;
 out vec4 frag_color;
+
+// Hash & value noise for the nebula's irregular shapes.
+// Sine-free hash (Hoskins) — much cheaper ALU than fract(sin(...)).
+float hash2(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1030);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), u.x),
+               mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 3; i++) {
+        v += a * vnoise(p);
+        p *= 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
 
 float eval_sdf(vec2 uv, float shape) {
     if (shape < 0.5) {
@@ -86,10 +116,13 @@ float eval_sdf(vec2 uv, float shape) {
 }
 
 void main() {
-    // Nebula blob (shape 3): gaussian radial falloff, no stroke.
+    // Nebula layer (shape 3): an fbm density field spanning the whole screen.
+    // The field is continuous, so there are no quad-edge seams; each layer's
+    // world position offsets and warps its own patch of sky.
     if (v_shape > 2.5) {
-        float g = exp(-dot(v_uv, v_uv) * 4.0);
-        frag_color = vec4(fill_color.rgb, g * v_fill_a);
+        float n = fbm(v_uv * 2.6 + v_pos * 0.003);
+        float a = smoothstep(0.42, 0.78, n) * v_fill_a;
+        frag_color = vec4(fill_color.rgb, a);
         return;
     }
 
