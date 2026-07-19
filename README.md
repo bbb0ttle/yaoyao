@@ -222,6 +222,7 @@ Zig 渲染层与 Swift 宿主层通过 C ABI 双向通信。
 | `oayao_remove_heart(event_id)` | 移除事件对应的爱心 |
 | `oayao_sync_hearts(active_ids)` | 按换行分隔的事件 ID 列表同步;不在列表中的爱心开始淡出 |
 | `oayao_set_heart_tap_callback(cb)` | 注册爱心点击回调,回调参数为事件 ID |
+| `oayao_set_counter_tap_callback(cb)` | 注册计数器旁双心点击回调(无参数,iOS 用于打开设置) |
 | `oayao_set_days_counter_start_ms(ms)` | 设置天数计数器起始时间戳(Unix epoch 毫秒) |
 | `oayao_days_counter_default_start_ms()` | 内置默认起始时间戳(未设置起始日期时回退使用) |
 | `oayao_transition_to_theme(theme_id)` | 切换画布主题(0=薄荷,1=蜜桃粉,2=自定义),颜色渐变过渡;未知 id 忽略 |
@@ -243,7 +244,7 @@ Zig 渲染层与 Swift 宿主层通过 C ABI 双向通信。
 - 天数计数器锚定:读取最新的「开始的地方」标记事件,将 notes 中的日期推送到渲染层;标记接近 4 年查询窗口边缘时按当天日期重拷一份
 - 提供事件 CRUD、`calshow:` 链接分享与日历可共享性检测
 
-**UI 层**:点击画布爱心 → `EventDetailSheet`(medium/large detent);右下角悬浮按钮 → `AddEventSheet` / `SettingsSheet`(iOS 26+ 使用玻璃效果,旧版本回退为 ultraThinMaterial)。
+**UI 层**:点击画布爱心 → `EventDetailSheet`(medium/large detent);右下角悬浮按钮 → `AddEventSheet`;设置入口为计数器旁的双心(点击弹出 `SettingsSheet`,iOS 26+ 使用玻璃效果,旧版本回退为 ultraThinMaterial)。
 
 ## Web 架构
 

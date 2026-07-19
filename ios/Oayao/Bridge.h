@@ -24,6 +24,11 @@ void oayao_sync_hearts(const char *active_ids);
 typedef void (*oayao_heart_tap_callback_t)(const char *event_id);
 void oayao_set_heart_tap_callback(oayao_heart_tap_callback_t callback);
 
+// Register a callback invoked when the user taps either of the two
+// floating hearts beside the day counter.
+typedef void (*oayao_counter_tap_callback_t)(void);
+void oayao_set_counter_tap_callback(oayao_counter_tap_callback_t callback);
+
 // Set the start timestamp (Unix epoch ms) for the day counter display.
 void oayao_set_days_counter_start_ms(double ms);
 

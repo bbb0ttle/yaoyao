@@ -54,6 +54,9 @@ const IncomingHeart = struct {
 /// C ABI callback invoked when a tagged heart is tapped.
 pub const HeartTapCallback = ?*const fn (event_id: [*:0]const u8) callconv(.c) void;
 
+/// C ABI callback invoked when either counter-pair heart is tapped.
+pub const CounterTapCallback = ?*const fn () callconv(.c) void;
+
 /// Core application: owns GPU state, particle pool, heart/meteor systems, and tagged heart map.
 pub const App = struct {
     const Self = @This();
@@ -92,6 +95,7 @@ pub const App = struct {
     incoming_hearts: std.ArrayList(IncomingHeart),
     days_counter_start_ms: f64,
     heart_tap_callback: HeartTapCallback,
+    counter_tap_callback: CounterTapCallback,
 
     pub fn init(allocator: std.mem.Allocator) !*Self {
         var gpu = try GpuState.init(allocator);
@@ -132,6 +136,7 @@ pub const App = struct {
             .incoming_hearts = .empty,
             .days_counter_start_ms = DAYS_COUNTER_DEFAULT_START_MS,
             .heart_tap_callback = null,
+            .counter_tap_callback = null,
         };
         return self;
     }
@@ -251,12 +256,15 @@ pub const App = struct {
 
     pub fn handle_click(self: *Self, x: f32, y: f32) void {
         if (!self.is_meteor_ready or !self.is_heart_ready) return;
+        self.spawn_burst(x, y);
+
+        if (self.handle_counter_hearts_tap(x, y)) {
+            return;
+        }
         if (self.handle_heart_tap(x, y)) {
-            self.spawn_burst(x, y);
             return;
         }
         // self.meteor_from_heart(x - self.heart.center_x(), y - self.heart.center_y(), .{});
-        self.spawn_burst(x, y);
     }
 
     pub fn handle_resize(self: *Self) void {
@@ -407,6 +415,10 @@ pub const App = struct {
         self.heart_tap_callback = cb;
     }
 
+    pub fn set_counter_tap_callback(self: *Self, cb: CounterTapCallback) void {
+        self.counter_tap_callback = cb;
+    }
+
     pub fn set_days_counter_start_ms(self: *Self, ms: f64) void {
         self.days_counter_start_ms = ms;
     }
@@ -499,6 +511,21 @@ pub const App = struct {
     fn legacy_heart_cy(self: *Self, h: f32, dpr: f32) f32 {
         _ = self;
         return h / 2.0 - 200.0 * dpr;
+    }
+
+    fn handle_counter_hearts_tap(self: *Self, x: f32, y: f32) bool {
+        const cb = self.counter_tap_callback orelse return false;
+        const pair = [2]*Particle{ self.heart.float_pair_left(), self.heart.float_pair_right() };
+        for (pair) |p| {
+            if (!p.is_alive()) continue;
+            const dx = x - p.pos_x();
+            const dy = y - p.pos_y();
+            if (@sqrt(dx * dx + dy * dy) < p.get_size() * 2.5) {
+                cb();
+                return true;
+            }
+        }
+        return false;
     }
 
     fn handle_heart_tap(self: *Self, x: f32, y: f32) bool {

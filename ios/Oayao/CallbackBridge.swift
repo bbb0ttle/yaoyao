@@ -11,12 +11,19 @@ let heartTapCallback: oayao_heart_tap_callback_t = { eventIdPtr in
     }
 }
 
+let counterTapCallback: oayao_counter_tap_callback_t = {
+    DispatchQueue.main.async {
+        presentSettings()
+    }
+}
+
 // MARK: - Bootstrap (global, called from Zig init)
 
 @_cdecl("oayao_swift_bootstrap")
 func oayao_swift_bootstrap() {
     DispatchQueue.main.async {
         oayao_set_heart_tap_callback(heartTapCallback)
+        oayao_set_counter_tap_callback(counterTapCallback)
 
         let customColors = SettingsStore.customThemeColors
         for (role, key) in [(0, "background"), (1, "heartFill"), (2, "heartStroke"), (3, "timerText")] {
@@ -162,23 +169,12 @@ private struct GlassModifier: ViewModifier {
     }
 }
 
-// Settings above the primary add button, centred on the same axis.
+// Settings opens by tapping the floating hearts beside the day counter;
+// only the add-event button floats over the canvas.
 private struct OverlayButtons: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Button(action: { presentSettings() }) {
-                Image("SettingsIcon")
-                    .resizable()
-                    .frame(width: 24, height: 24)
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(ScaleButtonStyle())
-
-            GlassAddButton {
-                presentAddEvent()
-            }
+        GlassAddButton {
+            presentAddEvent()
         }
     }
 }
