@@ -86,6 +86,13 @@ float eval_sdf(vec2 uv, float shape) {
 }
 
 void main() {
+    // Nebula blob (shape 3): gaussian radial falloff, no stroke.
+    if (v_shape > 2.5) {
+        float g = exp(-dot(v_uv, v_uv) * 4.0);
+        frag_color = vec4(fill_color.rgb, g * v_fill_a);
+        return;
+    }
+
     // Stroke SDF at stroke scale (v_uv is already in stroke-local space)
     float d_stroke = eval_sdf(v_uv, v_shape);
     float stroke_aa = 1.0 / max(v_stroke_size, 0.5);

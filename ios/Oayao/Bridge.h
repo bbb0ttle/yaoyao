@@ -60,6 +60,9 @@ void oayao_reset_heart_y(void);
 // to their defaults.
 void oayao_reset_heart_config(void);
 
+// Toggle the nebula background effect (0 = off, 1 = on). Default off.
+void oayao_set_nebula_enabled(uint32_t enabled);
+
 // Built-in vertical position as a fraction of the current canvas height.
 float oayao_default_heart_y(void);
 

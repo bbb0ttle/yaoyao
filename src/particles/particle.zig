@@ -17,6 +17,7 @@ pub const ParticleOpts = struct {
     floating: bool = false,
     beat: bool = false,
     meteor: bool = false,
+    blob: bool = false,
     size: f32 = MAX_PARTICLE_SIZE,
 };
 
@@ -27,7 +28,8 @@ const ParticleFlags = packed struct(u8) {
     is_beat: bool,
     is_meteor: bool,
     is_fading_out: bool,
-    _pad: u2 = 0,
+    is_blob: bool,
+    _pad: u1 = 0,
 };
 
 /// A pooled particle with position, velocity, flags, and tagged union storage.
@@ -63,6 +65,7 @@ pub const Particle = struct {
                 .is_beat = opts.beat,
                 .is_meteor = opts.meteor,
                 .is_fading_out = false,
+                .is_blob = opts.blob,
             },
             ._storage = .{ .birth_sec = birth_sec },
             .size_scale = 1.0,
@@ -211,7 +214,9 @@ pub const Particle = struct {
         return self.flags.is_fading_out;
     }
 
-    pub fn set_fading_out(self: *Particle, v: bool) void {
+    pub fn is_blob(self: Self) bool {
+        return self.flags.is_blob;
+    }    pub fn set_fading_out(self: *Particle, v: bool) void {
         self.flags.is_fading_out = v;
     }
 

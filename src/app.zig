@@ -15,6 +15,7 @@ const HeartSystem = @import("systems/heart_system.zig").HeartSystem;
 const MotionMode = @import("systems/heart_system.zig").MotionMode;
 const meteor_sys = @import("systems/meteor_system.zig");
 const MeteorSystem = meteor_sys.MeteorSystem;
+const NebulaSystem = @import("systems/nebula_system.zig").NebulaSystem;
 const Particle = @import("particles/particle.zig").Particle;
 const MAX_PARTICLE_SIZE = @import("particles/particle.zig").MAX_PARTICLE_SIZE;
 const Rng = @import("random.zig").Rng;
@@ -61,11 +62,14 @@ pub const App = struct {
     pool: ParticlePool,
     heart: HeartSystem,
     meteor: MeteorSystem,
+    nebula: NebulaSystem,
     rng: Rng,
     allocator: std.mem.Allocator,
 
     is_heart_ready: bool,
     is_meteor_ready: bool,
+    is_nebula_ready: bool,
+    nebula_enabled: bool,
     transition_start: f32,
     resize_cooldown: u32,
     dpr: f32,
@@ -102,10 +106,13 @@ pub const App = struct {
             .pool = pool,
             .heart = undefined,
             .meteor = undefined,
+            .nebula = undefined,
             .rng = rng,
             .allocator = allocator,
             .is_heart_ready = false,
             .is_meteor_ready = false,
+            .is_nebula_ready = false,
+            .nebula_enabled = false,
             .transition_start = 0.0,
             .resize_cooldown = 0,
             .dpr = sapp.dpiScale(),
@@ -182,6 +189,10 @@ pub const App = struct {
             self.meteor = MeteorSystem.init(w, h, dpr);
             self.is_meteor_ready = true;
         }
+
+        // Heart init resets the pool, wiping any nebula blobs; the next
+        // update respawns them when nebula is enabled.
+        self.is_nebula_ready = false;
     }
 
     pub fn update_and_fill_buffers(self: *Self, w: f32, h: f32, elapsed: f32, dpr: f32) void {
@@ -194,6 +205,14 @@ pub const App = struct {
         self.heart.set_size_scale(self.heart_size_scale);
 
         self.update_day_counter();
+
+        if (self.nebula_enabled and !self.is_nebula_ready) {
+            self.nebula = NebulaSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed);
+            self.is_nebula_ready = true;
+        }
+        if (self.is_nebula_ready) {
+            self.nebula.update(elapsed, w, h);
+        }
 
         self.heart.update(elapsed, &self.pool, &self.rng);
         if (self.is_meteor_ready) {
@@ -448,6 +467,14 @@ pub const App = struct {
         self.heart_motion = .beat;
         self.heart_size_scale = 1.0;
         self.heart_y_fraction = null;
+    }
+
+    pub fn set_nebula_enabled(self: *Self, enabled: bool) void {
+        self.nebula_enabled = enabled;
+        if (!enabled and self.is_nebula_ready) {
+            self.nebula.clear();
+            self.is_nebula_ready = false;
+        }
     }
 
     /// Built-in vertical position as a fraction of the current canvas height.

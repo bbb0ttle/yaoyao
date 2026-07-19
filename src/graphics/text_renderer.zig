@@ -152,14 +152,14 @@ pub fn fill_particle_instances(
 
         const fill_alpha = max_alpha * t * alpha_scale;
         const stroke_alpha = @min(1.0, p.get_lifespan() / 255.0) * t * alpha_scale;
-        const shape: f32 = if (display_size + stroke_width < 8.0) 0.0 else 1.0;
+        const shape: f32 = if (p.is_blob()) 3.0 else if (display_size + stroke_width < 8.0) 0.0 else 1.0;
 
         gpu.write_instance(inst_count, .{
             .pos_x = p.pos_x(),
             .pos_y = p.pos_y(),
             .stroke_size = display_size + stroke_width,
             .fill_size = display_size,
-            .stroke_a = if (stroke_alpha > 10.0 / 255.0) stroke_alpha else 0.0,
+            .stroke_a = if (p.is_blob()) 0.0 else if (stroke_alpha > 10.0 / 255.0) stroke_alpha else 0.0,
             .fill_a = if (fill_alpha > 0.0) fill_alpha else 0.0,
             .shape = shape,
         });

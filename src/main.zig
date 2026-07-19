@@ -165,6 +165,12 @@ export fn oayao_reset_heart_config() void {
     }
 }
 
+export fn oayao_set_nebula_enabled(enabled: u32) void {
+    if (g_app) |app| {
+        app.set_nebula_enabled(enabled != 0);
+    }
+}
+
 export fn oayao_default_heart_y() f32 {
     const app = g_app orelse return 0.5;
     return app.default_heart_y();

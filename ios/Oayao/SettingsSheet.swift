@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsSheet: View {
     @AppStorage(SettingsStore.calendarNameKey) private var calendarName = SettingsStore.defaultCalendarName
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
+    @AppStorage(SettingsStore.nebulaEnabledKey) private var nebulaEnabled = false
     @ObservedObject private var languageManager = LanguageManager.shared
     @State private var counterStart = Date()
     @Environment(\.dismiss) private var dismiss
@@ -66,6 +67,8 @@ struct SettingsSheet: View {
                     } label: {
                         Text(L10n.tr(.heart))
                     }
+                    Toggle(L10n.tr(.nebula), isOn: $nebulaEnabled)
+                        .onChange(of: nebulaEnabled) { oayao_set_nebula_enabled($0 ? 1 : 0) }
                 } footer: {
                     Text(L10n.tr(.themeFooter))
                 }
