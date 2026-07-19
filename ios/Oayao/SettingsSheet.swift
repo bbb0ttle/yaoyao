@@ -420,7 +420,10 @@ private extension Color {
 private struct ThemeSettingsView: View {
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
     @ObservedObject private var languageManager = LanguageManager.shared
-    @State private var customColors: [String: Int] = SettingsStore.customThemeColors
+    // Draft colors stay unquantized while dragging the picker; rounding to
+    // 8-bit happens only when persisting and pushing to the renderer,
+    // otherwise the picker readback snaps the slider to coarse steps.
+    @State private var draftColors: [String: Color] = [:]
 
     var body: some View {
         Form {
@@ -463,15 +466,25 @@ private struct ThemeSettingsView: View {
         }
         .navigationTitle(L10n.tr(.theme))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            let stored = SettingsStore.customThemeColors
+            var colors: [String: Color] = [:]
+            for role in CustomColorRole.allCases {
+                colors[role.key] = Color(packedRGB: stored[role.key] ?? 0xFFFFFF)
+            }
+            draftColors = colors
+        }
     }
 
     private func customColorBinding(_ role: CustomColorRole) -> Binding<Color> {
         Binding(
-            get: { Color(packedRGB: customColors[role.key] ?? 0xFFFFFF) },
+            get: { draftColors[role.key] ?? .white },
             set: { newColor in
+                draftColors[role.key] = newColor
                 let packed = newColor.packedRGB
-                customColors[role.key] = packed
-                SettingsStore.customThemeColors = customColors
+                var stored = SettingsStore.customThemeColors
+                stored[role.key] = packed
+                SettingsStore.customThemeColors = stored
                 oayao_set_custom_theme_color(
                     role.rawValue,
                     UInt8((packed >> 16) & 0xFF),
