@@ -12,7 +12,9 @@ let heartTapCallback: oayao_heart_tap_callback_t = { eventIdPtr in
 }
 
 let counterTapCallback: oayao_counter_tap_callback_t = {
-    DispatchQueue.main.async {
+    // Defer the sheet so the tap's particle burst plays out first: presenting
+    // immediately would stall the render loop and then cover the burst.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
         presentSettings()
     }
 }
