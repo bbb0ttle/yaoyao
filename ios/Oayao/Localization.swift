@@ -154,7 +154,7 @@ enum L10n {
         .cancel: ("Cancel", "取消"),
         .newEvent: ("New Event", "新建事件"),
         .title: ("Title", "标题"),
-        .eventName: ("Event name", "事件名称"),
+        .eventName: ("Event name", "添加心事件"),
         .notesOptional: ("Notes (optional)", "备注(可选)"),
         .saveEvent: ("Save Event", "保存事件"),
         .notes: ("Notes", "备注"),
