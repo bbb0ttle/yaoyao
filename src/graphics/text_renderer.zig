@@ -119,7 +119,8 @@ pub fn fill_text_instances(
 }
 
 /// Update alive particles and fill GPU instances in a single traversal,
-/// with culling and alpha.
+/// with culling and alpha. Cooling embers are filled first so they draw
+/// behind the hearts that shed them.
 pub fn fill_particle_instances(
     gpu: *GpuState,
     pool: *ParticlePool,
@@ -130,14 +131,32 @@ pub fn fill_particle_instances(
     elapsed: f32,
     start_inst: u32,
 ) u32 {
+    const alive = pool.alive_slice();
+    var inst_count = fill_pass(gpu, pool, alive, true, w, h, dpr, t, elapsed, start_inst);
+    inst_count = fill_pass(gpu, pool, alive, false, w, h, dpr, t, elapsed, inst_count);
+    return inst_count;
+}
+
+fn fill_pass(
+    gpu: *GpuState,
+    pool: *ParticlePool,
+    alive: []const usize,
+    cooling_pass: bool,
+    w: f32,
+    h: f32,
+    dpr: f32,
+    t: f32,
+    elapsed: f32,
+    start_inst: u32,
+) u32 {
     const stroke_width: f32 = STROKE_WIDTH * dpr;
     const radius_margin: f32 = stroke_width + 3.0;
-    const alive = pool.alive_slice();
     var inst_count = start_inst;
     const cap = MAX_INSTANCES;
 
     for (alive) |idx| {
         const p = pool.get_particle(idx);
+        if (p.is_cooling() != cooling_pass) continue;
         p.update(elapsed, dpr);
 
         const alpha_scale = p.get_alpha_scale();

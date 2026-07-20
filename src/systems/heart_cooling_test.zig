@@ -17,6 +17,13 @@ test "cooling: intensity decays monotonically from one" {
     }
 }
 
+test "cooling: intensity follows ease-out curve" {
+    // Quadratic ease-out: (1 - t)^2, below the linear ramp mid-decay.
+    try testing.expectApproxEqAbs(@as(f32, 0.25), heart_cooling.intensity(2.0, 4.0), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 0.0), heart_cooling.intensity(4.0, 4.0), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 0.0), heart_cooling.intensity(5.0, 4.0), 1e-6);
+}
+
 test "cooling: landing burst fires immediately on add" {
     var pool = try test_pool();
     defer pool.deinit();
@@ -88,4 +95,38 @@ test "cooling: clear drops all emitters" {
     try cooling.add(20.0, 20.0, "evt-7", 0.0, &pool, &rng, 1.0);
     cooling.clear();
     try testing.expectEqual(@as(usize, 0), cooling.emitters.items.len);
+}
+
+test "cooling: stream particles fall from below the heart" {
+    var pool = try test_pool();
+    defer pool.deinit();
+    var cooling = HeartCooling.init(testing.allocator);
+    defer cooling.deinit();
+    var rng = Rng.init(13);
+
+    try cooling.add(50.0, 50.0, "evt-9", 0.0, &pool, &rng, 1.0);
+    const after_burst = pool.get_alive_count();
+    cooling.update(0.1, &pool, &rng, 1.0);
+    try testing.expectEqual(after_burst + 2, pool.get_alive_count());
+
+    var i: usize = after_burst;
+    while (i < pool.get_alive_count()) : (i += 1) {
+        const p = pool.get_particle(i);
+        try testing.expect(p.vel_y() > 0.0);
+        try testing.expect(p.pos_y() > 50.0);
+    }
+}
+
+test "cooling: emitted particles are flagged cooling for layered rendering" {
+    var pool = try test_pool();
+    defer pool.deinit();
+    var cooling = HeartCooling.init(testing.allocator);
+    defer cooling.deinit();
+    var rng = Rng.init(8);
+
+    try cooling.add(10.0, 10.0, "evt-8", 0.0, &pool, &rng, 1.0);
+    var i: usize = 0;
+    while (i < pool.get_alive_count()) : (i += 1) {
+        try testing.expect(pool.get_particle(i).is_cooling());
+    }
 }

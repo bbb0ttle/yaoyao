@@ -16,6 +16,14 @@ const COOLING_DURATION_MAX: f32 = 4.5;
 // the visual volume stays constant across the whole cooling period — only
 // gravity and alpha decay.
 const EMIT_RATE: usize = 2;
+// The continuous stream falls downward in a loose fan from just below the
+// heart's bottom edge, keeping the heart's own silhouette clear of embers.
+// The landing burst stays omnidirectional — it is the momentary arrival
+// gush.
+const STREAM_VX_SPREAD: f32 = 0.7;
+const STREAM_VY_MIN: f32 = 0.4;
+const STREAM_VY_MAX: f32 = 2.0;
+const STREAM_ORIGIN_OFFSET: f32 = 6.0;
 // Initial landing pop: a short burst at full intensity to mark the arrival.
 const LAND_BURST_MIN: usize = 16;
 const LAND_BURST_MAX: usize = 24;
@@ -23,10 +31,12 @@ const LAND_BURST_MAX: usize = 24;
 const VEL_SCALE_MIN: f32 = 0.85;
 const VEL_SCALE_MAX: f32 = 1.15;
 
-/// Emission intensity decay: 1.0 at landing, ramping linearly to zero over
-/// the emitter's own cooling duration.
+/// Emission intensity decay: 1.0 at landing, following a quadratic
+/// ease-out curve — quick initial drop, gentle settle into silence.
 pub fn intensity(age_sec: f32, duration_sec: f32) f32 {
-    return @max(0.0, 1.0 - age_sec / duration_sec);
+    const t = std.math.clamp(age_sec / duration_sec, 0.0, 1.0);
+    const inv = 1.0 - t;
+    return inv * inv;
 }
 
 const Emitter = struct {
@@ -38,15 +48,16 @@ const Emitter = struct {
     duration: f32,
 };
 
-fn emit_particles(x: f32, y: f32, count: usize, vel_scale: f32, k: f32, pool: *ParticlePool, rng: *Rng, dpr: f32) void {
+fn emit_particles(x: f32, y: f32, count: usize, vel_scale: f32, k: f32, vx_spread: f32, vy_min: f32, vy_max: f32, pool: *ParticlePool, rng: *Rng, dpr: f32) void {
     var i: usize = 0;
     while (i < count) : (i += 1) {
         const p = pool.alloc_particle(Vec2{ .x = x, .y = y }, 0, .{
+            .cooling = true,
             .size = rng.random_range(8.0, 10.0) * dpr,
         }, rng);
         p.set_vel(
-            rng.random_range(-0.3, 0.3) * dpr * vel_scale,
-            rng.random_range(-1.2, 2.0) * dpr * vel_scale,
+            rng.random_range(-vx_spread, vx_spread) * dpr * vel_scale,
+            rng.random_range(vy_min, vy_max) * dpr * vel_scale,
         );
         p.set_acc(0, 0.2 * k);
         p.set_alpha_scale(0.15 + 0.85 * k);
@@ -92,7 +103,7 @@ pub const HeartCooling = struct {
             .vel_scale = vel_scale,
             .duration = duration,
         });
-        emit_particles(x, y, burst_count, vel_scale, 1.0, pool, rng, dpr);
+        emit_particles(x, y, burst_count, vel_scale, 1.0, 0.3, -1.2, 2.0, pool, rng, dpr);
     }
 
     /// Stop cooling for a heart that is being removed.
@@ -128,7 +139,7 @@ pub const HeartCooling = struct {
                 continue;
             }
             const k = intensity(age, e.duration);
-            emit_particles(e.x, e.y, EMIT_RATE, e.vel_scale, k, pool, rng, dpr);
+            emit_particles(e.x, e.y + STREAM_ORIGIN_OFFSET * dpr, EMIT_RATE, e.vel_scale, k, STREAM_VX_SPREAD, STREAM_VY_MIN, STREAM_VY_MAX, pool, rng, dpr);
             i += 1;
         }
     }
