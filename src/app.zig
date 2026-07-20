@@ -123,6 +123,7 @@ pub const App = struct {
     spawn_batch_count: usize,
     last_spawn_sec: f32,
     days_counter_start_ms: f64,
+    is_days_counter_set: bool,
     heart_tap_callback: HeartTapCallback,
     counter_tap_callback: CounterTapCallback,
     counter_tap_pulse_sec: ?f32,
@@ -168,6 +169,7 @@ pub const App = struct {
             .spawn_batch_count = 0,
             .last_spawn_sec = -1.0e9,
             .days_counter_start_ms = DAYS_COUNTER_DEFAULT_START_MS,
+            .is_days_counter_set = false,
             .heart_tap_callback = null,
             .counter_tap_callback = null,
             .counter_tap_pulse_sec = null,
@@ -528,6 +530,13 @@ pub const App = struct {
 
     pub fn set_days_counter_start_ms(self: *Self, ms: f64) void {
         self.days_counter_start_ms = ms;
+        self.is_days_counter_set = true;
+    }
+
+    /// Back to the placeholder state: the counter shows a static
+    /// "0.0000000000 DAYS" until a start date is set again.
+    pub fn clear_days_counter_start_ms(self: *Self) void {
+        self.is_days_counter_set = false;
     }
 
     pub fn transition_to_theme(self: *Self, theme_id: u32) void {
@@ -730,11 +739,14 @@ pub const App = struct {
     }
 
     fn update_day_counter(self: *Self) void {
-        var ts: std.c.timespec = undefined;
-        _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
-        const unix_ms: f64 = @as(f64, @floatFromInt(ts.sec)) * 1000.0 + @as(f64, @floatFromInt(ts.nsec)) / 1_000_000.0;
-        const start_ms: f64 = self.days_counter_start_ms;
-        const diff_days = (unix_ms - start_ms) / (1000.0 * 60.0 * 60.0 * 24.0);
+        // Unset start date: static zero placeholder, no ticking.
+        var diff_days: f64 = 0.0;
+        if (self.is_days_counter_set) {
+            var ts: std.c.timespec = undefined;
+            _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
+            const unix_ms: f64 = @as(f64, @floatFromInt(ts.sec)) * 1000.0 + @as(f64, @floatFromInt(ts.nsec)) / 1_000_000.0;
+            diff_days = (unix_ms - self.days_counter_start_ms) / (1000.0 * 60.0 * 60.0 * 24.0);
+        }
         const int_part: u64 = @intFromFloat(@floor(diff_days));
         const frac: f64 = diff_days - @floor(diff_days);
 

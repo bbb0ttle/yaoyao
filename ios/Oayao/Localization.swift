@@ -45,7 +45,7 @@ enum L10n {
         case settings, done, language, followSystem
         case calendar, name, shareWithPartner, calendarFooter
         case calendarAccessTitle, calendarAccessMessage, calendarAccessNeeded, openSettings
-        case daysCounter, startDate, counterFooter
+        case daysCounter, startDate, counterFooter, notSet
         case theme, themeFooter, customColors, customColorsFooter
         case themeMint, themePeach, themeCustom, themeMidnight
         case colorBackground, colorHeartFill, colorHeartStroke, colorTimerText

@@ -32,6 +32,10 @@ void oayao_set_counter_tap_callback(oayao_counter_tap_callback_t callback);
 // Set the start timestamp (Unix epoch ms) for the day counter display.
 void oayao_set_days_counter_start_ms(double ms);
 
+// Clear the day counter start: the canvas shows a static zero placeholder
+// until a start date is set again.
+void oayao_clear_days_counter_start_ms(void);
+
 // Built-in default start timestamp (Unix epoch ms) for the day counter,
 // applied when no calendar event anchors the counter.
 double oayao_days_counter_default_start_ms(void);

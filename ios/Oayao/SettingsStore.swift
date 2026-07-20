@@ -21,16 +21,19 @@ enum SettingsStore {
         return trimmed.isEmpty ? defaultCalendarName : trimmed
     }
 
-    /// Day counter start timestamp (Unix epoch milliseconds).
-    /// Local cache of the date recorded in the calendar's marker event;
-    /// falls back to the renderer's built-in default when never set.
-    static var counterStartMs: Double {
+    /// Day counter start timestamp (Unix epoch milliseconds), nil when
+    /// never set. Local cache of the date recorded in the calendar's
+    /// marker event; the canvas shows a static zero placeholder while nil.
+    static var counterStartMs: Double? {
         get {
-            let stored = UserDefaults.standard.object(forKey: counterStartMsKey) as? Double
-            return stored ?? oayao_days_counter_default_start_ms()
+            UserDefaults.standard.object(forKey: counterStartMsKey) as? Double
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: counterStartMsKey)
+            if let newValue {
+                UserDefaults.standard.set(newValue, forKey: counterStartMsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: counterStartMsKey)
+            }
         }
     }
 

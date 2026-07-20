@@ -95,6 +95,12 @@ export fn oayao_remove_heart(event_id: [*:0]const u8) void {
     }
 }
 
+export fn oayao_clear_days_counter_start_ms() void {
+    if (g_app) |app| {
+        app.clear_days_counter_start_ms();
+    }
+}
+
 export fn oayao_counter_hearts_frame() CounterHeartsFrame {
     if (g_app) |app| {
         return app.counter_hearts_frame();

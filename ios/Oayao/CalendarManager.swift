@@ -51,8 +51,11 @@ import Combine
             DispatchQueue.main.async {
                 self?.hasAccess = granted
                 // Show the last known start date immediately; the authoritative
-                // value syncs from the calendar once access resolves.
-                oayao_set_days_counter_start_ms(SettingsStore.counterStartMs)
+                // value syncs from the calendar once access resolves. Without a
+                // cached value the canvas keeps its zero placeholder.
+                if let cached = SettingsStore.counterStartMs {
+                    oayao_set_days_counter_start_ms(cached)
+                }
                 if granted {
                     self?.findOrCreateCalendar(completion: completion)
                 } else {
@@ -185,8 +188,13 @@ import Combine
                     oayao_spawn_heart(eventId)
                 }
                 oayao_sync_hearts(joined)
-                SettingsStore.counterStartMs = counterStartMs
-                oayao_set_days_counter_start_ms(counterStartMs)
+                if let counterStartMs = counterStartMs {
+                    SettingsStore.counterStartMs = counterStartMs
+                    oayao_set_days_counter_start_ms(counterStartMs)
+                } else {
+                    SettingsStore.counterStartMs = nil
+                    oayao_clear_days_counter_start_ms()
+                }
             }
         }
     }
@@ -213,10 +221,10 @@ import Combine
         return formatter
     }()
 
-    /// The date the day counter currently starts from: the last value synced
-    /// from the marker event, or the built-in default when never set.
-    func counterStartDate() -> Date {
-        Date(timeIntervalSince1970: SettingsStore.counterStartMs / 1000)
+    /// The date the day counter currently starts from, nil when never set:
+    /// the last value synced from the marker event or the local cache.
+    func counterStartDate() -> Date? {
+        SettingsStore.counterStartMs.map { Date(timeIntervalSince1970: $0 / 1000) }
     }
 
     /// Persist the chosen start date: cache it locally, push it to the
@@ -248,20 +256,21 @@ import Combine
 
     /// Query the marker event off the main thread: read the latest notes
     /// date, re-copy the marker when it nears the searchable window edge.
-    /// Falls back to the renderer's built-in default when no marker exists.
-    private func queryCounterStartMs(calendars: [EKCalendar], writable: EKCalendar?) -> Double {
-        guard !calendars.isEmpty else { return oayao_days_counter_default_start_ms() }
+    /// Falls back to the local cache, then nil (placeholder) when no start
+    /// date was ever recorded.
+    private func queryCounterStartMs(calendars: [EKCalendar], writable: EKCalendar?) -> Double? {
+        guard !calendars.isEmpty else { return SettingsStore.counterStartMs }
         let now = Date()
         guard let start = Calendar.current.date(byAdding: .year, value: counterStartSearchPastYears, to: now),
               let end = Calendar.current.date(byAdding: .month, value: 1, to: now)
-        else { return oayao_days_counter_default_start_ms() }
+        else { return SettingsStore.counterStartMs }
 
         let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: calendars)
         guard let marker = eventStore.events(matching: predicate)
             .filter({ isCounterStartEvent($0) })
             .max(by: { $0.startDate < $1.startDate }),
             let date = Self.counterStartNotesFormatter.date(from: marker.notes ?? "")
-        else { return oayao_days_counter_default_start_ms() }
+        else { return SettingsStore.counterStartMs }
 
         refreshCounterStartEventIfNeeded(marker, writable: writable)
         return date.timeIntervalSince1970 * 1000
