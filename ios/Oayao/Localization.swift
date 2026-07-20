@@ -46,7 +46,7 @@ enum L10n {
         case calendar, name, shareWithPartner, calendarFooter
         case daysCounter, startDate, counterFooter
         case theme, themeFooter, customColors, customColorsFooter
-        case themeMint, themePeach, themeCustom
+        case themeMint, themePeach, themeCustom, themeMidnight
         case colorBackground, colorHeartFill, colorHeartStroke, colorTimerText
         case howItWorks, guideStep1, guideStep2, guideStep3, guideStep4
         case openCalendarApp, calendarNotShareable, sharingUsesIcloud
@@ -102,6 +102,7 @@ enum L10n {
         .themeMint: ("Mint", "薄荷绿"),
         .themePeach: ("Peach", "蜜桃粉"),
         .themeCustom: ("Custom", "自定义"),
+        .themeMidnight: ("Midnight", "午夜蓝"),
         .colorBackground: ("Background", "背景"),
         .colorHeartFill: ("Heart Fill", "爱心填充"),
         .colorHeartStroke: ("Heart Stroke", "爱心描边"),

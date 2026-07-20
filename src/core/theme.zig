@@ -24,6 +24,7 @@ pub const ThemeId = enum(u32) {
     mint = 0,
     peach = 1,
     custom = 2,
+    midnight = 3,
 };
 
 /// Roles of the key colors shared by every rendered element.
@@ -48,11 +49,19 @@ pub const PEACH: Theme = .{
     .timer_text = Rgba.WHITE,
 };
 
+pub const MIDNIGHT: Theme = .{
+    .background = .{ .r = 18, .g = 24, .b = 46, .a = 255 },
+    .heart_fill = .{ .r = 238, .g = 243, .b = 255, .a = 255 },
+    .heart_stroke = .{ .r = 86, .g = 100, .b = 150, .a = 255 },
+    .timer_text = .{ .r = 190, .g = 205, .b = 240, .a = 255 },
+};
+
 pub fn theme_for(id: ThemeId, custom: Theme) Theme {
     return switch (id) {
         .mint => MINT,
         .peach => PEACH,
         .custom => custom,
+        .midnight => MIDNIGHT,
     };
 }
 

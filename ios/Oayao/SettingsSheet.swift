@@ -351,6 +351,7 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
     case mint = 0
     case peach = 1
     case custom = 2
+    case midnight = 3
 
     var id: UInt32 { rawValue }
 
@@ -363,6 +364,7 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
         case .mint: return L10n.tr(.themeMint)
         case .peach: return L10n.tr(.themePeach)
         case .custom: return L10n.tr(.themeCustom)
+        case .midnight: return L10n.tr(.themeMidnight)
         }
     }
 
@@ -371,6 +373,7 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
         case .mint: return Color(packedRGB: 0xA9E5D6)
         case .peach: return Color(packedRGB: 0xF5CDD7)
         case .custom: return Color(packedRGB: SettingsStore.customThemeColors["background"] ?? 0xA9E5D6)
+        case .midnight: return Color(packedRGB: 0x12182E)
         }
     }
 }
