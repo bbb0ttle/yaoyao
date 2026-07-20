@@ -71,6 +71,14 @@ void oayao_set_nebula_enabled(uint32_t enabled);
 // Built-in vertical position as a fraction of the current canvas height.
 float oayao_default_heart_y(void);
 
+// Union frame of the counter-pair hearts' tap target, in logical points.
+// Queried live by the iOS VoiceOver proxy element; zero rect while the
+// heart system is not ready.
+typedef struct {
+    float x, y, w, h;
+} oayao_counter_hearts_frame_t;
+oayao_counter_hearts_frame_t oayao_counter_hearts_frame(void);
+
 #ifdef __cplusplus
 }
 #endif

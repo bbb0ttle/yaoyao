@@ -10,6 +10,7 @@ const sapp = sokol.app;
 const slog = sokol.log;
 
 const App = @import("app.zig").App;
+const CounterHeartsFrame = @import("app.zig").CounterHeartsFrame;
 const bootstrap = @import("platform/bootstrap.zig");
 
 // Named allocator constant — replace with debugging allocator as needed.
@@ -92,6 +93,13 @@ export fn oayao_remove_heart(event_id: [*:0]const u8) void {
         const len = std.mem.sliceTo(event_id, 0).len;
         app.remove_heart(event_id[0..len]);
     }
+}
+
+export fn oayao_counter_hearts_frame() CounterHeartsFrame {
+    if (g_app) |app| {
+        return app.counter_hearts_frame();
+    }
+    return .{ .x = 0, .y = 0, .w = 0, .h = 0 };
 }
 
 export fn oayao_sync_hearts(active_ids: [*:0]const u8) void {

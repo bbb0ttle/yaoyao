@@ -56,6 +56,7 @@ func oayao_swift_bootstrap() {
         }
 
         addOverlayButtons()
+        addCounterHeartsAccessElement()
 
         // Pre-warm SwiftUI view caches after the initial Metal render completes.
         // NavigationView + Form create UIKit backing views (UINavigationController,
@@ -213,6 +214,40 @@ private func addOverlayButtons() {
         host.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
         host.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
     ])
+}
+
+// MARK: - Accessibility
+
+/// VoiceOver-only settings entry over the counter hearts. The Metal canvas
+/// is invisible to the accessibility tree, so the double-heart tap target
+/// needs a native proxy; its frame is queried live from the renderer
+/// because the hearts float and pulse.
+private final class CounterHeartsAccessElement: UIAccessibilityElement {
+    override var accessibilityFrameInContainerSpace: CGRect {
+        get {
+            let f = oayao_counter_hearts_frame()
+            return CGRect(x: CGFloat(f.x), y: CGFloat(f.y), width: CGFloat(f.w), height: CGFloat(f.h))
+        }
+        set {}
+    }
+
+    override func accessibilityActivate() -> Bool {
+        presentSettings()
+        return true
+    }
+}
+
+private func addCounterHeartsAccessElement() {
+    guard let window = keyWindow() else { return }
+    let container = UIView(frame: window.bounds)
+    container.isUserInteractionEnabled = false
+    container.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    window.addSubview(container)
+
+    let element = CounterHeartsAccessElement(accessibilityContainer: container)
+    element.accessibilityLabel = L10n.tr(.settings)
+    element.accessibilityTraits = .button
+    container.accessibilityElements = [element]
 }
 
 // MARK: - Helpers

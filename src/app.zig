@@ -51,6 +51,24 @@ const HEART_MIN_SIZE_SCALE: f32 = 0.38;
 const MAX_FLY_IN_HEARTS: usize = 3;
 const SPAWN_BATCH_WINDOW_SEC: f32 = 1.0;
 
+// Tap feedback pulse for the counter-pair hearts: a quick scale pop that
+// eases back to normal.
+const COUNTER_TAP_PULSE_SEC: f32 = 0.35;
+const COUNTER_TAP_PULSE_SCALE: f32 = 0.6;
+
+// VoiceOver proxy frame padding around the counter pair, in points; covers
+// the largest pulsing hit circle.
+const COUNTER_ACCESS_PAD_PT: f32 = 30.0;
+
+/// Frame of the counter-pair tap target in logical points, for the iOS
+/// accessibility proxy element.
+pub const CounterHeartsFrame = extern struct {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+};
+
 const IncomingHeart = struct {
     particle: *Particle,
     event_id: []const u8,
@@ -107,6 +125,7 @@ pub const App = struct {
     days_counter_start_ms: f64,
     heart_tap_callback: HeartTapCallback,
     counter_tap_callback: CounterTapCallback,
+    counter_tap_pulse_sec: ?f32,
 
     pub fn init(allocator: std.mem.Allocator) !*Self {
         var gpu = try GpuState.init(allocator);
@@ -151,6 +170,7 @@ pub const App = struct {
             .days_counter_start_ms = DAYS_COUNTER_DEFAULT_START_MS,
             .heart_tap_callback = null,
             .counter_tap_callback = null,
+            .counter_tap_pulse_sec = null,
         };
         return self;
     }
@@ -240,6 +260,7 @@ pub const App = struct {
         }
         self.update_incoming_hearts(elapsed);
         self.cooling.update(elapsed, &self.pool, &self.rng, dpr);
+        self.update_counter_tap_pulse(elapsed);
         self.pool.collect_alive();
 
         var inst_count = text_renderer.fill_particle_instances(
@@ -607,11 +628,39 @@ pub const App = struct {
             const dx = x - p.pos_x();
             const dy = y - p.pos_y();
             if (@sqrt(dx * dx + dy * dy) < p.get_size() * 2.5) {
+                self.counter_tap_pulse_sec = self.last_elapsed;
                 cb();
                 return true;
             }
         }
         return false;
+    }
+
+    fn update_counter_tap_pulse(self: *Self, elapsed: f32) void {
+        const start = self.counter_tap_pulse_sec orelse return;
+        const k = @max(0.0, 1.0 - (elapsed - start) / COUNTER_TAP_PULSE_SEC);
+        const scale = 1.0 + COUNTER_TAP_PULSE_SCALE * k;
+        self.heart.float_pair_left().set_size_scale(scale);
+        self.heart.float_pair_right().set_size_scale(scale);
+        if (k == 0.0) {
+            self.counter_tap_pulse_sec = null;
+        }
+    }
+
+    /// Union of both counter hearts' tap circles in logical points, for the
+    /// iOS VoiceOver proxy. Zero rect while the heart system is not ready.
+    pub fn counter_hearts_frame(self: *Self) CounterHeartsFrame {
+        if (!self.is_heart_ready) {
+            return .{ .x = 0, .y = 0, .w = 0, .h = 0 };
+        }
+        const dpr = self.dpr;
+        const left = self.heart.float_pair_left();
+        const right = self.heart.float_pair_right();
+        const x0 = @min(left.pos_x(), right.pos_x()) / dpr - COUNTER_ACCESS_PAD_PT;
+        const y0 = @min(left.pos_y(), right.pos_y()) / dpr - COUNTER_ACCESS_PAD_PT;
+        const x1 = @max(left.pos_x(), right.pos_x()) / dpr + COUNTER_ACCESS_PAD_PT;
+        const y1 = @max(left.pos_y(), right.pos_y()) / dpr + COUNTER_ACCESS_PAD_PT;
+        return .{ .x = x0, .y = y0, .w = x1 - x0, .h = y1 - y0 };
     }
 
     fn handle_heart_tap(self: *Self, x: f32, y: f32) bool {
