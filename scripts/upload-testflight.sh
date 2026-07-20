@@ -77,22 +77,44 @@ echo "==> Version: $APP_VERSION ($APP_BUILD_NUMBER)"
 # Xcode / SDK validation
 # ============================================================
 
-XCODE_VERSION="$(xcrun xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}')"
 XCODE_VERSION_FULL="$(xcrun xcodebuild -version 2>/dev/null)"
+XCODE_VERSION="$(echo "$XCODE_VERSION_FULL" | head -1 | awk '{print $2}')"
+XCODE_BUILD="$(echo "$XCODE_VERSION_FULL" | tail -1 | awk '{print $3}')"
 SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || echo "0")"
+SDK_BUILD="$(xcrun --sdk iphoneos --show-sdk-build-version 2>/dev/null || echo "0")"
 
-echo "==> Xcode $XCODE_VERSION, SDK $SDK_VERSION"
+echo "==> Xcode $XCODE_VERSION ($XCODE_BUILD), SDK $SDK_VERSION ($SDK_BUILD)"
 
-# Check if this is genuinely a beta/preview Xcode (not just a new major version).
-if echo "$XCODE_VERSION_FULL" | grep -qi 'beta\|preview\|seed'; then
+# Beta Xcode builds carry a trailing lowercase seed letter in the build number
+# (e.g. 17A5295e); the version string itself never contains the word "beta".
+if echo "$XCODE_VERSION_FULL" | grep -qi 'beta\|preview\|seed' || \
+   echo "$XCODE_BUILD" | grep -qE '^[0-9]+[A-Z]+[0-9]+[a-z]+$'; then
     echo ""
-    echo "ERROR: You are using a beta/preview version of Xcode."
+    echo "ERROR: You are using a beta/preview version of Xcode ($XCODE_VERSION $XCODE_BUILD)."
     echo "App Store Connect requires a release or RC version of Xcode."
     echo ""
     echo "To fix:"
     echo "  1. Install the release Xcode from the Mac App Store or"
     echo "     https://developer.apple.com/download/applications/"
     echo "  2. Set DEVELOPER_DIR in .env to point to the release Xcode"
+    exit 1
+fi
+
+# Pin the exact GM toolchain App Store Connect expects. A beta toolchain can
+# otherwise slip through the checks above and only fail after upload. When
+# Apple releases a new GM, update these defaults (or set them in .env) —
+# see https://xcodereleases.com for the current GM build numbers.
+EXPECTED_XCODE_BUILD="${EXPECTED_XCODE_BUILD:-17F113}"
+EXPECTED_SDK_BUILD="${EXPECTED_SDK_BUILD:-23F81a}"
+
+if [ "$XCODE_BUILD" != "$EXPECTED_XCODE_BUILD" ] || [ "$SDK_BUILD" != "$EXPECTED_SDK_BUILD" ]; then
+    echo ""
+    echo "ERROR: Toolchain does not match the pinned GM builds."
+    echo "  Xcode build: $XCODE_BUILD (expected $EXPECTED_XCODE_BUILD)"
+    echo "  SDK build:   $SDK_BUILD (expected $EXPECTED_SDK_BUILD)"
+    echo ""
+    echo "Either install the expected GM Xcode, or — if Apple has shipped a"
+    echo "newer GM — update EXPECTED_XCODE_BUILD / EXPECTED_SDK_BUILD in .env."
     exit 1
 fi
 
@@ -111,6 +133,18 @@ zig build ios-app -Dtarget=aarch64-ios -Drelease=true
 
 if [ ! -d "zig-out/Oayao.app" ]; then
     echo "Error: Oayao.app bundle was not created."
+    exit 1
+fi
+
+# Verify the toolchain metadata actool stamped into the product — this is what
+# App Store Connect inspects, and it must match the GM toolchain above.
+STAMPED_XCODE_BUILD="$(/usr/libexec/PlistBuddy -c "Print :DTXcodeBuild" zig-out/Oayao.app/Info.plist 2>/dev/null || echo missing)"
+STAMPED_SDK_BUILD="$(/usr/libexec/PlistBuddy -c "Print :DTSDKBuild" zig-out/Oayao.app/Info.plist 2>/dev/null || echo missing)"
+echo "==> Stamped metadata: DTXcodeBuild=$STAMPED_XCODE_BUILD, DTSDKBuild=$STAMPED_SDK_BUILD"
+if [ "$STAMPED_XCODE_BUILD" != "$XCODE_BUILD" ] || [ "$STAMPED_SDK_BUILD" != "$SDK_BUILD" ]; then
+    echo ""
+    echo "ERROR: Built app metadata does not match the selected GM toolchain."
+    echo "Refusing to upload — the binary would be rejected as a beta build."
     exit 1
 fi
 

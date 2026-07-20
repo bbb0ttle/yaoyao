@@ -333,6 +333,29 @@ fn createIosAppBundle(
         \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 15.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
         \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
         \\rm -f "$PARTIAL"
+        \\
+        \\# actool only stamps icon keys. App Store Connect inspects the DT*
+        \\# toolchain metadata to detect beta builds, so stamp it ourselves
+        \\# from the selected toolchain (respects DEVELOPER_DIR).
+        \\SDK_VER="$(DEVELOPER_DIR="{[4]s}" /usr/bin/xcrun --sdk {[2]s} --show-sdk-version)"
+        \\SDK_BUILD="$(DEVELOPER_DIR="{[4]s}" /usr/bin/xcrun --sdk {[2]s} --show-sdk-build-version)"
+        \\XCODE_VER="$(DEVELOPER_DIR="{[4]s}" /usr/bin/xcrun xcodebuild -version | head -1 | cut -d' ' -f2)"
+        \\XCODE_BUILD="$(DEVELOPER_DIR="{[4]s}" /usr/bin/xcrun xcodebuild -version | tail -1 | cut -d' ' -f3)"
+        \\XCODE_MAJOR="$(echo "$XCODE_VER" | cut -d. -f1)"
+        \\XCODE_MINOR="$(echo "$XCODE_VER" | cut -d. -f2)"
+        \\XCODE_PATCH="$(echo "$XCODE_VER" | cut -d. -f3)"
+        \\[ -z "$XCODE_PATCH" ] && XCODE_PATCH=0
+        \\DT_XCODE=$(( XCODE_MAJOR*100 + XCODE_MINOR*10 + XCODE_PATCH ))
+        \\"$PLISTBUDDY" \
+        \\  -c "Add :DTCompiler string com.apple.compilers.llvm.clang.1_0" \
+        \\  -c "Add :DTPlatformName string {[2]s}" \
+        \\  -c "Add :DTPlatformVersion string $SDK_VER" \
+        \\  -c "Add :DTPlatformBuild string $SDK_BUILD" \
+        \\  -c "Add :DTSDKName string {[2]s}$SDK_VER" \
+        \\  -c "Add :DTSDKBuild string $SDK_BUILD" \
+        \\  -c "Add :DTXcode string $DT_XCODE" \
+        \\  -c "Add :DTXcodeBuild string $XCODE_BUILD" \
+        \\  "$APP/Info.plist"
         \\echo "Created Oayao.app bundle at zig-out/Oayao.app"
     , .{ sdk_root, swift_target, platform, clang_target, developer_dir, platform, swift_opt });
 
