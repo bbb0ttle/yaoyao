@@ -355,6 +355,12 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
 
     var id: UInt32 { rawValue }
 
+    /// Picker display order: the custom theme always sorts last, regardless
+    /// of raw value or themes added later.
+    static var pickerOrder: [CanvasTheme] {
+        allCases.filter { $0 != .custom } + [.custom]
+    }
+
     init(storedId: UInt32) {
         self = CanvasTheme(rawValue: storedId) ?? .mint
     }
@@ -434,7 +440,7 @@ private struct ThemeSettingsView: View {
     var body: some View {
         Form {
             Section {
-                ForEach(CanvasTheme.allCases) { theme in
+                ForEach(CanvasTheme.pickerOrder) { theme in
                     Button {
                         themeId = Int(theme.rawValue)
                         oayao_transition_to_theme(theme.rawValue)

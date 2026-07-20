@@ -52,7 +52,7 @@ pub const PEACH: Theme = .{
 pub const MIDNIGHT: Theme = .{
     .background = .{ .r = 18, .g = 24, .b = 46, .a = 255 },
     .heart_fill = .{ .r = 238, .g = 243, .b = 255, .a = 255 },
-    .heart_stroke = .{ .r = 86, .g = 100, .b = 150, .a = 255 },
+    .heart_stroke = .{ .r = 142, .g = 171, .b = 232, .a = 255 },
     .timer_text = .{ .r = 190, .g = 205, .b = 240, .a = 255 },
 };
 
