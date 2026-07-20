@@ -5,6 +5,7 @@ struct AddEventSheet: View {
     @State private var date = Date()
     @State private var notes = ""
     @State private var isSaving = false
+    @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
     @ObservedObject private var languageManager = LanguageManager.shared
     @Environment(\.dismiss) private var dismiss
 
@@ -38,14 +39,18 @@ struct AddEventSheet: View {
                 }
 
                 Section {
+                    // Disabled-state styling is manual: SwiftUI's automatic
+                    // dimming stacks with the tinted row and crushes
+                    // legibility on dark themes like midnight.
                     Button {
+                        guard canSave else { return }
                         save()
                     } label: {
                         HStack {
                             Spacer()
                             if isSaving {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(CanvasTheme(storedId: UInt32(themeId)).heartFillColor)
                             } else {
                                 Text(L10n.tr(.saveEvent))
                                     .bold()
@@ -53,12 +58,15 @@ struct AddEventSheet: View {
                             Spacer()
                         }
                     }
-                    .tint(.white)
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+                    .tint(CanvasTheme(storedId: UInt32(themeId)).heartFillColor.opacity(canSave ? 1.0 : 0.45))
                 }
-                .listRowBackground(Color(red: 169/255, green: 229/255, blue: 214/255))
+                .listRowBackground(CanvasTheme(storedId: UInt32(themeId)).backgroundColor)
             }
         }
+    }
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty && !isSaving
     }
 
     private func save() {

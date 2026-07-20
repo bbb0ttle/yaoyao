@@ -382,6 +382,18 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
         case .midnight: return Color(packedRGB: 0x12182E)
         }
     }
+
+    /// Heart fill of the theme; pairs with `backgroundColor` for readable
+    /// foreground text on theme-tinted surfaces. Values mirror the
+    /// renderer's palettes in src/core/theme.zig.
+    var heartFillColor: Color {
+        switch self {
+        case .mint: return Color(packedRGB: 0xFFFFFF)
+        case .peach: return Color(packedRGB: 0xFFFFFF)
+        case .custom: return Color(packedRGB: SettingsStore.customThemeColors["heartFill"] ?? 0xFFFFFF)
+        case .midnight: return Color(packedRGB: 0xEEF3FF)
+        }
+    }
 }
 
 /// Roles of the custom theme's editable colors; raw values mirror the
