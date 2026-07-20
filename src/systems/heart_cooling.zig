@@ -1,31 +1,31 @@
-//! Cooldown emission for freshly landed tagged hearts: each landing sheds
-//! falling heart particles at an exponentially decaying rate until cold.
+//! Cooldown emission for freshly landed tagged hearts: each landing
+//! continuously emits particles every frame until cold. Decay is expressed
+//! through gravity and alpha — every frame emits the same number of particles,
+//! only the falling strength and visibility diminish.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.heart_cooling);
 
 const Vec2 = @import("../core/types.zig").Vec2;
 const ParticlePool = @import("../particles/pool.zig").ParticlePool;
 const Rng = @import("../random.zig").Rng;
 
-const COOLING_DURATION_SEC: f32 = 3.0;
-const COOLING_TAU_SEC: f32 = 0.8;
-// Landing burst: close to spawn_burst intensity for a proper gush, but with
-// shorter lifespans and tighter velocities so the spread stays contained.
-const LAND_BURST_MIN: usize = 18;
-const LAND_BURST_MAX: usize = 26;
-const EMIT_MIN_GAP_SEC: f32 = 0.12;
-const EMIT_MAX_GAP_SEC: f32 = 1.0;
+const COOLING_DURATION_MIN: f32 = 2.5;
+const COOLING_DURATION_MAX: f32 = 4.5;
+// Per-frame continuous emission rate; always the same count per emitter so
+// the visual volume stays constant across the whole cooling period — only
+// gravity and alpha decay.
+const EMIT_RATE: usize = 2;
+// Initial landing pop: a short burst at full intensity to mark the arrival.
+const LAND_BURST_MIN: usize = 16;
+const LAND_BURST_MAX: usize = 24;
+// Per-emitter velocity scale is rolled once at landing.
+const VEL_SCALE_MIN: f32 = 0.85;
+const VEL_SCALE_MAX: f32 = 1.15;
 
-/// Emission intensity decay: 1.0 at landing, cooling towards zero.
+/// Emission intensity decay: 1.0 at landing, ramping linearly to zero.
 pub fn intensity(age_sec: f32) f32 {
-    return @exp(-age_sec / COOLING_TAU_SEC);
-}
-
-fn emit_gap_sec(age_sec: f32) f32 {
-    return std.math.clamp(EMIT_MIN_GAP_SEC / intensity(age_sec), EMIT_MIN_GAP_SEC, EMIT_MAX_GAP_SEC);
+    return @max(0.0, 1.0 - age_sec / 5.0);
 }
 
 const Emitter = struct {
@@ -33,8 +33,25 @@ const Emitter = struct {
     y: f32,
     event_id: []u8,
     birth_sec: f32,
-    next_emit_sec: f32,
+    vel_scale: f32,
+    duration: f32,
 };
+
+fn emit_particles(x: f32, y: f32, count: usize, vel_scale: f32, k: f32, pool: *ParticlePool, rng: *Rng, dpr: f32) void {
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        const p = pool.alloc_particle(Vec2{ .x = x, .y = y }, 0, .{
+            .size = rng.random_range(8.0, 10.0) * dpr,
+        }, rng);
+        p.set_vel(
+            rng.random_range(-0.3, 0.3) * dpr * vel_scale,
+            rng.random_range(-1.2, 2.0) * dpr * vel_scale,
+        );
+        p.set_acc(0, 0.2 * k);
+        p.set_alpha_scale(0.15 + 0.85 * k);
+        p.set_lifespan(rng.random_range(70.0, 100.0));
+    }
+}
 
 /// Tracks cooling emitters per landed heart, keyed by event id. Positions
 /// are copied coordinates, never particle pointers, so a pool reset cannot
@@ -63,14 +80,18 @@ pub const HeartCooling = struct {
         const id_dup = try self.alloc.dupe(u8, event_id);
         errdefer self.alloc.free(id_dup);
 
+        const burst_count = LAND_BURST_MIN + rng.random_index(LAND_BURST_MAX - LAND_BURST_MIN + 1);
+        const vel_scale = rng.random_range(VEL_SCALE_MIN, VEL_SCALE_MAX);
+        const duration = rng.random_range(COOLING_DURATION_MIN, COOLING_DURATION_MAX);
         try self.emitters.append(self.alloc, Emitter{
             .x = x,
             .y = y,
             .event_id = id_dup,
             .birth_sec = elapsed,
-            .next_emit_sec = elapsed + EMIT_MIN_GAP_SEC,
+            .vel_scale = vel_scale,
+            .duration = duration,
         });
-        emit_burst(x, y, pool, rng, dpr);
+        emit_particles(x, y, burst_count, vel_scale, 1.0, pool, rng, dpr);
     }
 
     /// Stop cooling for a heart that is being removed.
@@ -91,20 +112,22 @@ pub const HeartCooling = struct {
         self.emitters.clearRetainingCapacity();
     }
 
+    /// Every frame, each active emitter releases a small steady stream of
+    /// particles.  Only gravity and alpha decay with intensity — the
+    /// per-frame particle count stays constant so the visual volume never
+    /// flickers.
     pub fn update(self: *Self, elapsed: f32, pool: *ParticlePool, rng: *Rng, dpr: f32) void {
         var i: usize = 0;
         while (i < self.emitters.items.len) {
             const e = &self.emitters.items[i];
             const age = elapsed - e.birth_sec;
-            if (age > COOLING_DURATION_SEC) {
+            if (age > e.duration) {
                 self.alloc.free(e.event_id);
                 _ = self.emitters.swapRemove(i);
                 continue;
             }
-            if (elapsed >= e.next_emit_sec) {
-                emit_one(e.x, e.y, pool, rng, dpr);
-                e.next_emit_sec += emit_gap_sec(age);
-            }
+            const k = @max(0.0, 1.0 - age / e.duration);
+            emit_particles(e.x, e.y, EMIT_RATE, e.vel_scale, k, pool, rng, dpr);
             i += 1;
         }
     }
@@ -115,31 +138,3 @@ pub const HeartCooling = struct {
         }
     }
 };
-
-fn emit_burst(x: f32, y: f32, pool: *ParticlePool, rng: *Rng, dpr: f32) void {
-    const count = LAND_BURST_MIN + rng.random_index(LAND_BURST_MAX - LAND_BURST_MIN + 1);
-    var i: usize = 0;
-    while (i < count) : (i += 1) {
-        const p = pool.alloc_particle(Vec2{ .x = x, .y = y }, 0, .{
-            .size = rng.random_range(8.0, 10.0) * dpr,
-        }, rng);
-        p.set_vel(
-            rng.random_range(-0.9, 0.9) * dpr,
-            rng.random_range(-1.2, 2.0) * dpr,
-        );
-        p.set_acc(0, 0.2);
-        p.set_lifespan(rng.random_range(70.0, 100.0));
-    }
-}
-
-fn emit_one(x: f32, y: f32, pool: *ParticlePool, rng: *Rng, dpr: f32) void {
-    const p = pool.alloc_particle(Vec2{ .x = x, .y = y }, 0, .{
-        .size = rng.random_range(8.0, 10.0) * dpr,
-    }, rng);
-    p.set_vel(
-        rng.random_range(-0.6, 0.6) * dpr,
-        rng.random_range(0.5, 2.0) * dpr,
-    );
-    p.set_acc(0, 0.2);
-    p.set_lifespan(rng.random_range(70.0, 110.0));
-}

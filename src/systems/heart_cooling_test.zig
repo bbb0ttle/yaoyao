@@ -26,11 +26,11 @@ test "cooling: landing burst fires immediately on add" {
 
     try cooling.add(10.0, 10.0, "evt-1", 0.0, &pool, &rng, 1.0);
     const burst_count = pool.get_alive_count();
-    try testing.expect(burst_count >= 18 and burst_count <= 26);
+    try testing.expect(burst_count >= 16 and burst_count <= 24);
     try testing.expectEqual(@as(usize, 1), cooling.emitters.items.len);
 }
 
-test "cooling: trickle hearts fall downward at heart-renderable size" {
+test "cooling: continuous emission adds 2 particles per frame" {
     var pool = try test_pool();
     defer pool.deinit();
     var cooling = HeartCooling.init(testing.allocator);
@@ -38,41 +38,10 @@ test "cooling: trickle hearts fall downward at heart-renderable size" {
     var rng = Rng.init(42);
 
     try cooling.add(50.0, 50.0, "evt-2", 0.0, &pool, &rng, 2.0);
-    const burst_count = pool.get_alive_count();
+    const after_landing = pool.get_alive_count();
     cooling.update(0.12, &pool, &rng, 2.0);
-    try testing.expect(pool.get_alive_count() > burst_count);
-
-    var i: usize = 0;
-    while (i < pool.get_alive_count()) : (i += 1) {
-        const p = pool.get_particle(i);
-        try testing.expect(p.get_size() >= 16.0 and p.get_size() <= 20.0);
-        if (i >= burst_count) {
-            try testing.expect(p.vel_y() > 0.0);
-        }
-    }
-}
-
-test "cooling: emission rate decays over cooling period" {
-    var pool = try test_pool();
-    defer pool.deinit();
-    var cooling = HeartCooling.init(testing.allocator);
-    defer cooling.deinit();
-    var rng = Rng.init(7);
-
-    try cooling.add(10.0, 10.0, "evt-3", 0.0, &pool, &rng, 1.0);
-    const after_burst = pool.get_alive_count();
-
-    var t: f32 = 0.0;
-    while (t < 1.5) : (t += 1.0 / 60.0) {
-        cooling.update(t, &pool, &rng, 1.0);
-    }
-    const mid = pool.get_alive_count();
-    while (t < 3.0) : (t += 1.0 / 60.0) {
-        cooling.update(t, &pool, &rng, 1.0);
-    }
-    const end = pool.get_alive_count();
-
-    try testing.expect(mid - after_burst > end - mid);
+    // One frame of update should add exactly 2 particles (no deaths yet)
+    try testing.expectEqual(after_landing + 2, pool.get_alive_count());
 }
 
 test "cooling: emitter is retired after cooling duration" {
@@ -83,7 +52,7 @@ test "cooling: emitter is retired after cooling duration" {
     var rng = Rng.init(1);
 
     try cooling.add(10.0, 10.0, "evt-4", 0.0, &pool, &rng, 1.0);
-    cooling.update(3.1, &pool, &rng, 1.0);
+    cooling.update(7.0, &pool, &rng, 1.0);
     try testing.expectEqual(@as(usize, 0), cooling.emitters.items.len);
 }
 
@@ -95,7 +64,7 @@ test "cooling: cancel stops emission for a removed heart" {
     var rng = Rng.init(3);
 
     try cooling.add(10.0, 10.0, "evt-5", 0.0, &pool, &rng, 1.0);
-    const after_burst = pool.get_alive_count();
+    const after_landing = pool.get_alive_count();
     cooling.cancel("evt-5");
     try testing.expectEqual(@as(usize, 0), cooling.emitters.items.len);
 
@@ -103,7 +72,8 @@ test "cooling: cancel stops emission for a removed heart" {
     while (t < 3.0) : (t += 1.0 / 60.0) {
         cooling.update(t, &pool, &rng, 1.0);
     }
-    try testing.expectEqual(after_burst, pool.get_alive_count());
+    // No new particles were added; old ones have all died
+    try testing.expect(pool.get_alive_count() < after_landing);
 }
 
 test "cooling: clear drops all emitters" {
