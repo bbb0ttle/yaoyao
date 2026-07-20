@@ -99,6 +99,10 @@ private func presentAddEvent() {
     // Metal render loop can finish its current frame before UIKit
     // presentation work blocks the main thread.
     DispatchQueue.main.async {
+        guard CalendarManager.shared.hasAccess else {
+            presentCalendarAccessAlert()
+            return
+        }
         guard let rootVC = rootViewController() else { return }
         let sheet = UIHostingController(
             rootView: AddEventSheet()
@@ -109,6 +113,22 @@ private func presentAddEvent() {
         }
         rootVC.present(sheet, animated: true)
     }
+}
+
+/// Denied access can't be re-prompted by iOS; the only fix is the system's
+/// Settings page, so the alert routes there instead of failing silently.
+private func presentCalendarAccessAlert() {
+    guard let rootVC = rootViewController() else { return }
+    let alert = UIAlertController(
+        title: L10n.tr(.calendarAccessTitle),
+        message: L10n.tr(.calendarAccessMessage),
+        preferredStyle: .alert
+    )
+    alert.addAction(UIAlertAction(title: L10n.tr(.cancel), style: .cancel))
+    alert.addAction(UIAlertAction(title: L10n.tr(.openSettings), style: .default) { _ in
+        CalendarManager.openSystemSettings()
+    })
+    rootVC.present(alert, animated: true)
 }
 
 private func presentSettings() {

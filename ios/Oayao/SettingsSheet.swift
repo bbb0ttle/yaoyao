@@ -6,6 +6,7 @@ struct SettingsSheet: View {
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
     @AppStorage(SettingsStore.nebulaEnabledKey) private var nebulaEnabled = false
     @ObservedObject private var languageManager = LanguageManager.shared
+    @ObservedObject private var calendarManager = CalendarManager.shared
     @State private var counterStart = Date()
     @Environment(\.dismiss) private var dismiss
 
@@ -13,20 +14,33 @@ struct SettingsSheet: View {
         NavigationView {
             Form {
                 Section {
-                    NavigationLink {
-                        CalendarNameSettingsView()
-                    } label: {
-                        HStack {
-                            Text(L10n.tr(.name))
-                            Spacer()
-                            Text(calendarName)
-                                .foregroundColor(.secondary)
+                    if calendarManager.hasAccess {
+                        NavigationLink {
+                            CalendarNameSettingsView()
+                        } label: {
+                            HStack {
+                                Text(L10n.tr(.name))
+                                Spacer()
+                                Text(calendarName)
+                                    .foregroundColor(.secondary)
+                            }
                         }
-                    }
-                    NavigationLink {
-                        ShareGuideView()
-                    } label: {
-                        Text(L10n.tr(.shareWithPartner))
+                        NavigationLink {
+                            ShareGuideView()
+                        } label: {
+                            Text(L10n.tr(.shareWithPartner))
+                        }
+                    } else {
+                        Button {
+                            CalendarManager.openSystemSettings()
+                        } label: {
+                            HStack {
+                                Text(L10n.tr(.calendarAccessNeeded))
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Text(L10n.tr(.openSettings))
+                            }
+                        }
                     }
                 } header: {
                     Text(L10n.tr(.calendar))

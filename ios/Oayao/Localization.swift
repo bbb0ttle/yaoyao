@@ -44,6 +44,7 @@ enum L10n {
     enum Key {
         case settings, done, language, followSystem
         case calendar, name, shareWithPartner, calendarFooter
+        case calendarAccessTitle, calendarAccessMessage, calendarAccessNeeded, openSettings
         case daysCounter, startDate, counterFooter
         case theme, themeFooter, customColors, customColorsFooter
         case themeMint, themePeach, themeCustom, themeMidnight
@@ -83,6 +84,16 @@ enum L10n {
             "Events in this calendar appear as floating hearts. Share it with your partner to see each other's hearts.",
             "日历中的事件会以爱心的形式出现在画布上。共享后，可看到对方的爱心。"
         ),
+        .calendarAccessTitle: ("Calendar Access Needed", "需要日历权限"),
+        .calendarAccessMessage: (
+            "Allow calendar access in Settings to save events as hearts on the canvas.",
+            "在系统设置中允许日历访问后，才能将事件保存为画布上的爱心。"
+        ),
+        .calendarAccessNeeded: (
+            "Calendar access is off — events can't appear as hearts.",
+            "日历权限未开启，事件无法显示为爱心。"
+        ),
+        .openSettings: ("Open Settings", "前往设置"),
         .daysCounter: ("Days Counter", "天数计数"),
         .startDate: ("Start Date", "开始日期"),
         .counterFooter: (

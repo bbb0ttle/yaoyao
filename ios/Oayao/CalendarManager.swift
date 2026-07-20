@@ -1,15 +1,16 @@
 import EventKit
 import UIKit
+import Combine
 
 /// Wraps EventKit operations for the configured calendar.
 /// Each calendar event maps to a floating heart in the Metal canvas.
-@objc final class CalendarManager: NSObject, @unchecked Sendable {
+@objc final class CalendarManager: NSObject, ObservableObject, @unchecked Sendable {
     static let shared = CalendarManager()
 
     private let eventStore = EKEventStore()
     private var oayaoCalendars: [EKCalendar] = []
     private var writableCalendar: EKCalendar?
-    private var hasAccess = false
+    @Published private(set) var hasAccess = false
 
     /// EventKit predicate queries run off the main thread; renderer calls
     /// (oayao_*) are always applied back on the main queue.
@@ -24,9 +25,26 @@ import UIKit
             name: .EKEventStoreChanged,
             object: eventStore
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
     }
 
     // MARK: - Permission
+
+    /// Re-check access on foreground: a user who grants permission in system
+    /// Settings comes back to a working calendar without relaunching.
+    @objc private func handleWillEnterForeground() {
+        requestAccess { _ in }
+    }
+
+    static func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
 
     func requestAccess(completion: @escaping (Bool) -> Void) {
         eventStore.requestAccess(to: .event) { [weak self] granted, error in
