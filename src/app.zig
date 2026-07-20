@@ -16,6 +16,7 @@ const MotionMode = @import("systems/heart_system.zig").MotionMode;
 const meteor_sys = @import("systems/meteor_system.zig");
 const MeteorSystem = meteor_sys.MeteorSystem;
 const NebulaSystem = @import("systems/nebula_system.zig").NebulaSystem;
+const HeartCooling = @import("systems/heart_cooling.zig").HeartCooling;
 const Particle = @import("particles/particle.zig").Particle;
 const MAX_PARTICLE_SIZE = @import("particles/particle.zig").MAX_PARTICLE_SIZE;
 const Rng = @import("random.zig").Rng;
@@ -93,6 +94,7 @@ pub const App = struct {
 
     tagged_hearts: std.StringHashMap(*Particle),
     incoming_hearts: std.ArrayList(IncomingHeart),
+    cooling: HeartCooling,
     days_counter_start_ms: f64,
     heart_tap_callback: HeartTapCallback,
     counter_tap_callback: CounterTapCallback,
@@ -134,6 +136,7 @@ pub const App = struct {
             .text_layout = .{},
             .tagged_hearts = std.StringHashMap(*Particle).init(allocator),
             .incoming_hearts = .empty,
+            .cooling = HeartCooling.init(allocator),
             .days_counter_start_ms = DAYS_COUNTER_DEFAULT_START_MS,
             .heart_tap_callback = null,
             .counter_tap_callback = null,
@@ -146,6 +149,7 @@ pub const App = struct {
             self.allocator.free(cm.event_id);
         }
         self.incoming_hearts.deinit(self.allocator);
+        self.cooling.deinit();
         self.tagged_hearts.deinit();
         self.pool.deinit();
         self.gpu.deinit();
@@ -224,6 +228,7 @@ pub const App = struct {
             self.meteor.update(&self.pool, &self.rng);
         }
         self.update_incoming_hearts(elapsed);
+        self.cooling.update(elapsed, &self.pool, &self.rng, dpr);
         self.pool.collect_alive();
 
         var inst_count = text_renderer.fill_particle_instances(
@@ -270,6 +275,7 @@ pub const App = struct {
     pub fn handle_resize(self: *Self) void {
         self.resize_cooldown = 30;
         self.is_heart_ready = false;
+        self.cooling.clear();
     }
 
     pub fn spawn_heart(self: *Self, event_id: []const u8, elapsed: f32) !void {
@@ -369,6 +375,7 @@ pub const App = struct {
     pub fn remove_heart(self: *Self, event_id: []const u8) void {
         if (self.tagged_hearts.fetchRemove(event_id)) |kv| {
             kv.value.set_fading_out(true);
+            self.cooling.cancel(event_id);
             self.allocator.free(kv.key);
         }
     }
@@ -756,6 +763,12 @@ pub const App = struct {
             log.warn("tagged_hearts.put failed, discarding heart for event_id", .{});
             self.allocator.free(event_id);
             p.set_alive(false);
+            _ = self.incoming_hearts.swapRemove(index);
+            return;
+        };
+
+        self.cooling.add(cm.target_x, cm.target_y, event_id, elapsed, &self.pool, &self.rng, self.dpr) catch {
+            log.warn("cooling.add failed for event_id, skipping cooldown emission", .{});
         };
 
         _ = self.incoming_hearts.swapRemove(index);

@@ -6,4 +6,5 @@ test {
     _ = @import("random_test.zig");
     _ = @import("particles/particle_test.zig");
     _ = @import("particles/pool_test.zig");
+    _ = @import("systems/heart_cooling_test.zig");
 }
