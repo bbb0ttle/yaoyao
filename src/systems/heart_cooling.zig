@@ -23,9 +23,10 @@ const LAND_BURST_MAX: usize = 24;
 const VEL_SCALE_MIN: f32 = 0.85;
 const VEL_SCALE_MAX: f32 = 1.15;
 
-/// Emission intensity decay: 1.0 at landing, ramping linearly to zero.
-pub fn intensity(age_sec: f32) f32 {
-    return @max(0.0, 1.0 - age_sec / 5.0);
+/// Emission intensity decay: 1.0 at landing, ramping linearly to zero over
+/// the emitter's own cooling duration.
+pub fn intensity(age_sec: f32, duration_sec: f32) f32 {
+    return @max(0.0, 1.0 - age_sec / duration_sec);
 }
 
 const Emitter = struct {
@@ -126,7 +127,7 @@ pub const HeartCooling = struct {
                 _ = self.emitters.swapRemove(i);
                 continue;
             }
-            const k = @max(0.0, 1.0 - age / e.duration);
+            const k = intensity(age, e.duration);
             emit_particles(e.x, e.y, EMIT_RATE, e.vel_scale, k, pool, rng, dpr);
             i += 1;
         }

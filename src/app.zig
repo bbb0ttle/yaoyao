@@ -44,6 +44,13 @@ const CLUSTER_BIAS: f32 = 0.6;
 const HEART_SHRINK_FACTOR: f32 = 0.94;
 const HEART_MIN_SIZE_SCALE: f32 = 0.38;
 
+// Spawn bursts (initial calendar sync) beyond this budget skip the fly-in
+// and fade in directly at their destinations, so a full day's events does
+// not turn the canvas into a meteor storm. Spawns within the window count
+// as one batch; single event additions always fly in.
+const MAX_FLY_IN_HEARTS: usize = 3;
+const SPAWN_BATCH_WINDOW_SEC: f32 = 1.0;
+
 const IncomingHeart = struct {
     particle: *Particle,
     event_id: []const u8,
@@ -95,6 +102,8 @@ pub const App = struct {
     tagged_hearts: std.StringHashMap(*Particle),
     incoming_hearts: std.ArrayList(IncomingHeart),
     cooling: HeartCooling,
+    spawn_batch_count: usize,
+    last_spawn_sec: f32,
     days_counter_start_ms: f64,
     heart_tap_callback: HeartTapCallback,
     counter_tap_callback: CounterTapCallback,
@@ -137,6 +146,8 @@ pub const App = struct {
             .tagged_hearts = std.StringHashMap(*Particle).init(allocator),
             .incoming_hearts = .empty,
             .cooling = HeartCooling.init(allocator),
+            .spawn_batch_count = 0,
+            .last_spawn_sec = -1.0e9,
             .days_counter_start_ms = DAYS_COUNTER_DEFAULT_START_MS,
             .heart_tap_callback = null,
             .counter_tap_callback = null,
@@ -293,9 +304,54 @@ pub const App = struct {
         @memcpy(id_dup[0..event_id.len], event_id);
         errdefer self.allocator.free(id_dup);
 
+        const dest = self.pick_landing_spot(w, h, dpr);
+
+        // Batch tracking uses the frame-driven clock: the `elapsed` passed
+        // in from the C ABI is only a frame duration, so it can never
+        // measure the quiet gap between separate sync rounds.
+        const now = self.last_elapsed;
+        if (now - self.last_spawn_sec > SPAWN_BATCH_WINDOW_SEC) {
+            self.spawn_batch_count = 0;
+        }
+        self.last_spawn_sec = now;
+        self.spawn_batch_count += 1;
+
+        if (self.spawn_batch_count > MAX_FLY_IN_HEARTS) {
+            self.convert_incoming_to_fade_in(now);
+            self.spawn_heart_fade_in(id_dup, dest.x, dest.y, now);
+            return;
+        }
+
+        const speed = meteor_sys.METEOR_SPEED * dpr;
+        const angle = std.math.atan2(h, w);
+        const vx = -@cos(angle) * speed;
+        const vy = @sin(angle) * speed;
+
+        const start_x = w + 40.0 * dpr;
+        const t = (start_x - dest.x) / (-vx);
+        const start_y = dest.y - vy * t;
+
+        const meteor_size = meteor_sys.METEOR_SIZE * dpr * self.rng.random_range(0.5, 1.0);
+        const particle = self.pool.alloc_particle(
+            Vec2{ .x = start_x, .y = start_y },
+            elapsed,
+            .{ .immortal = true, .meteor = true, .size = meteor_size },
+            &self.rng,
+        );
+        particle.set_vel(vx, vy);
+
+        try self.incoming_hearts.append(self.allocator, .{
+            .particle = particle,
+            .event_id = id_dup,
+            .target_x = dest.x,
+            .target_y = dest.y,
+            .was_touching_contour = false,
+        });
+    }
+
+    fn pick_landing_spot(self: *Self, w: f32, h: f32, dpr: f32) Vec2 {
         const hard_min = MAX_PARTICLE_SIZE * dpr * 1.6;
-        var dest_x: f32 = undefined;
-        var dest_y: f32 = undefined;
+        var dest: Vec2 = undefined;
         var placed = false;
 
         // Cluster branch: grow near a random existing heart, like a star
@@ -311,8 +367,7 @@ pub const App = struct {
                 if (cx < w * LAND_MIN_X or cx > w * LAND_MAX_X or
                     cy < h * LAND_MIN_Y or cy > h * LAND_MAX_Y) continue;
                 if (self.nearest_clearance(cx, cy) < hard_min) continue;
-                dest_x = cx;
-                dest_y = cy;
+                dest = Vec2{ .x = cx, .y = cy };
                 placed = true;
             }
         }
@@ -327,49 +382,73 @@ pub const App = struct {
                 const cy = self.rng.random_range(h * LAND_MIN_Y, h * LAND_MAX_Y);
                 const clearance = self.nearest_clearance(cx, cy);
                 if (clearance >= hard_min) {
-                    dest_x = cx;
-                    dest_y = cy;
+                    dest = Vec2{ .x = cx, .y = cy };
                     placed = true;
                     break;
                 }
                 if (clearance > best_clear) {
                     best_clear = clearance;
-                    dest_x = cx;
-                    dest_y = cy;
+                    dest = Vec2{ .x = cx, .y = cy };
                     placed = true;
                 }
             }
             if (!placed) {
-                dest_x = self.rng.random_range(w * LAND_MIN_X, w * LAND_MAX_X);
-                dest_y = self.rng.random_range(h * LAND_MIN_Y, h * LAND_MAX_Y);
+                dest = Vec2{
+                    .x = self.rng.random_range(w * LAND_MIN_X, w * LAND_MAX_X),
+                    .y = self.rng.random_range(h * LAND_MIN_Y, h * LAND_MAX_Y),
+                };
             }
         }
 
-        const speed = meteor_sys.METEOR_SPEED * dpr;
-        const angle = std.math.atan2(h, w);
-        const vx = -@cos(angle) * speed;
-        const vy = @sin(angle) * speed;
+        return dest;
+    }
 
-        const start_x = w + 40.0 * dpr;
-        const t = (start_x - dest_x) / (-vx);
-        const start_y = dest_y - vy * t;
+    fn spawn_heart_fade_in(self: *Self, event_id: []const u8, x: f32, y: f32, elapsed: f32) void {
+        const p = self.pool.alloc_particle(Vec2{ .x = x, .y = y }, elapsed, .{
+            .floating = true,
+            .beat = true,
+            .size = MAX_PARTICLE_SIZE * self.dpr,
+        }, &self.rng);
+        self.fade_in_heart_at(p, event_id, x, y, elapsed);
+    }
 
-        const meteor_size = meteor_sys.METEOR_SIZE * dpr * self.rng.random_range(0.5, 1.0);
-        const particle = self.pool.alloc_particle(
-            Vec2{ .x = start_x, .y = start_y },
-            elapsed,
-            .{ .immortal = true, .meteor = true, .size = meteor_size },
-            &self.rng,
-        );
-        particle.set_vel(vx, vy);
+    /// Settle a heart directly at its destination with a fade-in ramp, no
+    /// fly-in, no cooldown emission. Takes ownership of `event_id`.
+    fn fade_in_heart_at(self: *Self, p: *Particle, event_id: []const u8, x: f32, y: f32, elapsed: f32) void {
+        p.set_pos(x, y);
+        p.set_immortal(false);
+        p.set_meteor(false);
+        p.set_floating(true);
+        p.set_beat(true);
+        p.set_lifespan(self.rng.random_range(75.0, 110.0));
+        p.set_birth_sec(elapsed);
+        p.set_size_scale(self.rng.random_range(0.8, 1.0));
+        p.set_size(MAX_PARTICLE_SIZE * self.dpr);
+        p.set_alpha_scale(0.0);
+        p.set_fading_in(true);
 
-        try self.incoming_hearts.append(self.allocator, .{
-            .particle = particle,
-            .event_id = id_dup,
-            .target_x = dest_x,
-            .target_y = dest_y,
-            .was_touching_contour = false,
-        });
+        self.shrink_tagged_hearts();
+        self.tagged_hearts.put(event_id, p) catch {
+            log.warn("tagged_hearts.put failed, discarding heart for event_id", .{});
+            self.allocator.free(event_id);
+            p.set_alive(false);
+        };
+    }
+
+    fn convert_incoming_to_fade_in(self: *Self, elapsed: f32) void {
+        for (self.incoming_hearts.items) |cm| {
+            self.fade_in_heart_at(cm.particle, cm.event_id, cm.target_x, cm.target_y, elapsed);
+        }
+        self.incoming_hearts.clearRetainingCapacity();
+    }
+
+    fn shrink_tagged_hearts(self: *Self) void {
+        // Older hearts recede a step so the newest stays the brightest star.
+        var shrink_it = self.tagged_hearts.iterator();
+        while (shrink_it.next()) |entry| {
+            const old = entry.value_ptr.*;
+            old.set_size_scale(@max(HEART_MIN_SIZE_SCALE, old.get_size_scale() * HEART_SHRINK_FACTOR));
+        }
     }
 
     pub fn remove_heart(self: *Self, event_id: []const u8) void {
@@ -753,11 +832,7 @@ pub const App = struct {
         );
 
         // Older hearts recede a step so the newest stays the brightest star.
-        var shrink_it = self.tagged_hearts.iterator();
-        while (shrink_it.next()) |entry| {
-            const old = entry.value_ptr.*;
-            old.set_size_scale(@max(HEART_MIN_SIZE_SCALE, old.get_size_scale() * HEART_SHRINK_FACTOR));
-        }
+        self.shrink_tagged_hearts();
 
         self.tagged_hearts.put(event_id, p) catch {
             log.warn("tagged_hearts.put failed, discarding heart for event_id", .{});

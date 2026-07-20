@@ -10,6 +10,7 @@ const Rng = @import("../random.zig").Rng;
 
 pub const MAX_LIFESPAN: f32 = 155.0;
 pub const MAX_PARTICLE_SIZE: f32 = 12.0;
+const FADE_IN_PER_FRAME: f32 = 1.0 / 45.0;
 
 /// Optional configuration for particle creation with sensible defaults.
 pub const ParticleOpts = struct {
@@ -29,7 +30,7 @@ const ParticleFlags = packed struct(u8) {
     is_meteor: bool,
     is_fading_out: bool,
     is_blob: bool,
-    _pad: u1 = 0,
+    is_fading_in: bool,
 };
 
 /// A pooled particle with position, velocity, flags, and tagged union storage.
@@ -66,6 +67,7 @@ pub const Particle = struct {
                 .is_meteor = opts.meteor,
                 .is_fading_out = false,
                 .is_blob = opts.blob,
+                .is_fading_in = false,
             },
             ._storage = .{ .birth_sec = birth_sec },
             .size_scale = 1.0,
@@ -77,6 +79,13 @@ pub const Particle = struct {
         if (!self.flags.is_alive) return;
         if (self.flags.is_meteor) return;
         self.age += 0.2;
+
+        if (self.flags.is_fading_in) {
+            self.alpha_scale = @min(1.0, self.alpha_scale + FADE_IN_PER_FRAME);
+            if (self.alpha_scale >= 1.0) {
+                self.flags.is_fading_in = false;
+            }
+        }
 
         if (!self.flags.is_immortal and (!self.flags.is_floating or self.flags.is_fading_out)) {
             if (!self.flags.is_floating) {
@@ -136,6 +145,10 @@ pub const Particle = struct {
     pub fn set_acc(self: *Particle, x: f32, y: f32) void {
         self.acc.x = x;
         self.acc.y = y;
+    }
+
+    pub fn acc_y(self: Self) f32 {
+        return self.acc.y;
     }
 
     pub fn get_lifespan(self: Self) f32 {
@@ -216,7 +229,16 @@ pub const Particle = struct {
 
     pub fn is_blob(self: Self) bool {
         return self.flags.is_blob;
-    }    pub fn set_fading_out(self: *Particle, v: bool) void {
+    }
+
+    pub fn is_fading_in(self: Self) bool {
+        return self.flags.is_fading_in;
+    }
+
+    pub fn set_fading_in(self: *Particle, v: bool) void {
+        self.flags.is_fading_in = v;
+    }
+    pub fn set_fading_out(self: *Particle, v: bool) void {
         self.flags.is_fading_out = v;
     }
 

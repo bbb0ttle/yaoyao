@@ -10,10 +10,10 @@ fn test_pool() !ParticlePool {
 }
 
 test "cooling: intensity decays monotonically from one" {
-    try testing.expectApproxEqAbs(@as(f32, 1.0), heart_cooling.intensity(0.0), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 1.0), heart_cooling.intensity(0.0, 4.0), 1e-6);
     var age: f32 = 0.0;
     while (age < 3.0) : (age += 0.1) {
-        try testing.expect(heart_cooling.intensity(age + 0.1) < heart_cooling.intensity(age));
+        try testing.expect(heart_cooling.intensity(age + 0.1, 4.0) < heart_cooling.intensity(age, 4.0));
     }
 }
 
@@ -72,8 +72,9 @@ test "cooling: cancel stops emission for a removed heart" {
     while (t < 3.0) : (t += 1.0 / 60.0) {
         cooling.update(t, &pool, &rng, 1.0);
     }
-    // No new particles were added; old ones have all died
-    try testing.expect(pool.get_alive_count() < after_landing);
+    // Particle lifecycles are driven by the render loop, not the pool, so
+    // in this harness a cancelled emitter simply adds nothing new.
+    try testing.expectEqual(after_landing, pool.get_alive_count());
 }
 
 test "cooling: clear drops all emitters" {
