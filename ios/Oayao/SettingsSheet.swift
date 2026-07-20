@@ -389,24 +389,85 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
     }
 
     var backgroundColor: Color {
-        switch self {
-        case .mint: return Color(packedRGB: 0xA9E5D6)
-        case .peach: return Color(packedRGB: 0xF5CDD7)
-        case .custom: return Color(packedRGB: SettingsStore.customThemeColors["background"] ?? 0xA9E5D6)
-        case .midnight: return Color(packedRGB: 0x12182E)
-        }
+        Color(packedRGB: backgroundPacked)
     }
 
     /// Heart fill of the theme; pairs with `backgroundColor` for readable
     /// foreground text on theme-tinted surfaces. Values mirror the
     /// renderer's palettes in src/core/theme.zig.
     var heartFillColor: Color {
+        Color(packedRGB: heartFillPacked)
+    }
+
+    var backgroundPacked: Int {
         switch self {
-        case .mint: return Color(packedRGB: 0xFFFFFF)
-        case .peach: return Color(packedRGB: 0xFFFFFF)
-        case .custom: return Color(packedRGB: SettingsStore.customThemeColors["heartFill"] ?? 0xFFFFFF)
-        case .midnight: return Color(packedRGB: 0xEEF3FF)
+        case .mint: return 0xA9E5D6
+        case .peach: return 0xF5CDD7
+        case .custom: return SettingsStore.customThemeColors["background"] ?? 0xA9E5D6
+        case .midnight: return 0x12182E
         }
+    }
+
+    var heartFillPacked: Int {
+        switch self {
+        case .mint: return 0xFFFFFF
+        case .peach: return 0xFFFFFF
+        case .custom: return SettingsStore.customThemeColors["heartFill"] ?? 0xFFFFFF
+        case .midnight: return 0xEEF3FF
+        }
+    }
+
+    /// Text color on `backgroundColor`: the theme's heart fill when it
+    /// already meets WCAG AA contrast (4.5:1), otherwise the softest
+    /// grayscale that still passes — never stark black or white.
+    var readableTextColor: Color {
+        Color(packedRGB: Self.readablePacked(heartFillPacked, on: backgroundPacked))
+    }
+
+    private static let minTextContrast: Double = 4.5
+
+    private static func readablePacked(_ text: Int, on background: Int) -> Int {
+        let bgLuminance = luminance(rgb(background))
+        if contrast(bgLuminance, luminance(rgb(text))) >= minTextContrast {
+            return text
+        }
+        // Grayscale luminance is monotone in value, so binary-search the
+        // gentlest compliant gray: the lightest dark gray on light
+        // backgrounds, the darkest light gray on dark ones.
+        let preferDark = contrast(bgLuminance, 0.0) >= contrast(bgLuminance, 1.0)
+        var lo = 0.0
+        var hi = 1.0
+        var best = preferDark ? 0.0 : 1.0
+        for _ in 0..<24 {
+            let mid = (lo + hi) / 2
+            if contrast(bgLuminance, luminance((mid, mid, mid))) >= minTextContrast {
+                best = mid
+                if preferDark { lo = mid } else { hi = mid }
+            } else {
+                if preferDark { hi = mid } else { lo = mid }
+            }
+        }
+        let v = Int((best * 255).rounded())
+        return v << 16 | v << 8 | v
+    }
+
+    private static func rgb(_ packed: Int) -> (r: Double, g: Double, b: Double) {
+        (
+            Double((packed >> 16) & 0xFF) / 255.0,
+            Double((packed >> 8) & 0xFF) / 255.0,
+            Double(packed & 0xFF) / 255.0
+        )
+    }
+
+    private static func luminance(_ c: (r: Double, g: Double, b: Double)) -> Double {
+        func linearize(_ v: Double) -> Double {
+            v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linearize(c.r) + 0.7152 * linearize(c.g) + 0.0722 * linearize(c.b)
+    }
+
+    private static func contrast(_ a: Double, _ b: Double) -> Double {
+        (max(a, b) + 0.05) / (min(a, b) + 0.05)
     }
 }
 

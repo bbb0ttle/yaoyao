@@ -50,7 +50,7 @@ struct AddEventSheet: View {
                             Spacer()
                             if isSaving {
                                 ProgressView()
-                                    .tint(CanvasTheme(storedId: UInt32(themeId)).heartFillColor)
+                                    .tint(CanvasTheme(storedId: UInt32(themeId)).readableTextColor)
                             } else {
                                 Text(L10n.tr(.saveEvent))
                                     .bold()
@@ -58,7 +58,7 @@ struct AddEventSheet: View {
                             Spacer()
                         }
                     }
-                    .tint(CanvasTheme(storedId: UInt32(themeId)).heartFillColor.opacity(canSave ? 1.0 : 0.45))
+                    .tint(CanvasTheme(storedId: UInt32(themeId)).readableTextColor.opacity(canSave ? 1.0 : 0.45))
                 }
                 .listRowBackground(CanvasTheme(storedId: UInt32(themeId)).backgroundColor)
             }
