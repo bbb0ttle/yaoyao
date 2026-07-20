@@ -7,12 +7,34 @@ struct SettingsSheet: View {
     @AppStorage(SettingsStore.nebulaEnabledKey) private var nebulaEnabled = false
     @ObservedObject private var languageManager = LanguageManager.shared
     @ObservedObject private var calendarManager = CalendarManager.shared
-    @State private var counterStart = Date()
+    @State private var counterStart: Date? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationView {
             Form {
+                Section {
+                    NavigationLink {
+                        CounterStartSettingsView(counterStart: $counterStart)
+                    } label: {
+                        HStack {
+                            Text(L10n.tr(.startDate))
+                            Spacer()
+                            if let counterStart {
+                                Text(counterStart, style: .date)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text(L10n.tr(.notSet))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text(L10n.tr(.daysCounter))
+                } footer: {
+                    Text(L10n.tr(.counterFooter))
+                }
+
                 Section {
                     if calendarManager.hasAccess {
                         NavigationLink {
@@ -46,23 +68,6 @@ struct SettingsSheet: View {
                     Text(L10n.tr(.calendar))
                 } footer: {
                     Text(L10n.tr(.calendarFooter))
-                }
-
-                Section {
-                    NavigationLink {
-                        CounterStartSettingsView(counterStart: $counterStart)
-                    } label: {
-                        HStack {
-                            Text(L10n.tr(.startDate))
-                            Spacer()
-                            Text(counterStart, style: .date)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                } header: {
-                    Text(L10n.tr(.daysCounter))
-                } footer: {
-                    Text(L10n.tr(.counterFooter))
                 }
 
                 Section {
@@ -248,7 +253,8 @@ private struct CalendarNameSettingsView: View {
 
 /// Edit page for the day counter start date; changes apply immediately.
 private struct CounterStartSettingsView: View {
-    @Binding var counterStart: Date
+    @Binding var counterStart: Date?
+    @State private var picked = Date()
     @ObservedObject private var languageManager = LanguageManager.shared
 
     var body: some View {
@@ -256,7 +262,7 @@ private struct CounterStartSettingsView: View {
             Section {
                 DatePicker(
                     L10n.tr(.startDate),
-                    selection: $counterStart,
+                    selection: $picked,
                     displayedComponents: .date
                 )
                 .datePickerStyle(.graphical)
@@ -266,7 +272,11 @@ private struct CounterStartSettingsView: View {
         }
         .navigationTitle(L10n.tr(.startDate))
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: counterStart) { newValue in
+        .onAppear {
+            picked = counterStart ?? Date()
+        }
+        .onChange(of: picked) { newValue in
+            counterStart = newValue
             CalendarManager.shared.setCounterStart(date: newValue)
         }
     }
