@@ -100,6 +100,7 @@ enum L10n {
             "Recorded in the calendar so it syncs to your partner when shared.",
             "记录于日历中,共享后会同步给对方。"
         ),
+        .notSet: ("Not Set", "未设置"),
         .theme: ("Theme", "主题"),
         .themeFooter: (
             "Canvas colors fade smoothly when switching themes.",
