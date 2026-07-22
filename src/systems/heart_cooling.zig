@@ -1,7 +1,7 @@
 //! Cooldown emission for freshly landed tagged hearts: each landing
-//! continuously emits particles every frame until cold. Decay is expressed
-//! through gravity and alpha — every frame emits the same number of particles,
-//! only the falling strength and visibility diminish.
+//! continuously emits particles until cold. Emission count, gravity, and
+//! alpha all decay with intensity — the heart has arrived, so the stream
+//! loses energy as it settles into silence.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -12,9 +12,8 @@ const Rng = @import("../random.zig").Rng;
 
 const COOLING_DURATION_MIN: f32 = 2.5;
 const COOLING_DURATION_MAX: f32 = 4.5;
-// Per-frame continuous emission rate; always the same count per emitter so
-// the visual volume stays constant across the whole cooling period — only
-// gravity and alpha decay.
+// Per-frame emission rate at full intensity (k=1); the actual per-frame
+// count is round(EMIT_RATE * k), so the stream thins out as the heart cools.
 const EMIT_RATE: usize = 2;
 // The continuous stream falls downward in a loose fan from just below the
 // heart's bottom edge, keeping the heart's own silhouette clear of embers.
@@ -23,7 +22,7 @@ const EMIT_RATE: usize = 2;
 const STREAM_VX_SPREAD: f32 = 0.7;
 const STREAM_VY_MIN: f32 = 0.4;
 const STREAM_VY_MAX: f32 = 2.0;
-const STREAM_ORIGIN_OFFSET: f32 = 6.0;
+const STREAM_ORIGIN_OFFSET: f32 = 2.0;
 // Initial landing pop: a short burst at full intensity to mark the arrival.
 const LAND_BURST_MIN: usize = 16;
 const LAND_BURST_MAX: usize = 24;
@@ -124,10 +123,9 @@ pub const HeartCooling = struct {
         self.emitters.clearRetainingCapacity();
     }
 
-    /// Every frame, each active emitter releases a small steady stream of
-    /// particles.  Only gravity and alpha decay with intensity — the
-    /// per-frame particle count stays constant so the visual volume never
-    /// flickers.
+    /// Every frame, each active emitter releases a small stream of
+    /// particles. Emission count scales with intensity — round(EMIT_RATE * k)
+    /// — alongside gravity and alpha, so the stream weakens as it cools.
     pub fn update(self: *Self, elapsed: f32, pool: *ParticlePool, rng: *Rng, dpr: f32) void {
         var i: usize = 0;
         while (i < self.emitters.items.len) {
@@ -139,7 +137,8 @@ pub const HeartCooling = struct {
                 continue;
             }
             const k = intensity(age, e.duration);
-            emit_particles(e.x, e.y + STREAM_ORIGIN_OFFSET * dpr, EMIT_RATE, e.vel_scale, k, STREAM_VX_SPREAD, STREAM_VY_MIN, STREAM_VY_MAX, pool, rng, dpr);
+            const count: usize = @intFromFloat(@round(@as(f32, @floatFromInt(EMIT_RATE)) * k));
+            emit_particles(e.x, e.y + STREAM_ORIGIN_OFFSET * dpr, count, e.vel_scale, k, STREAM_VX_SPREAD, STREAM_VY_MIN, STREAM_VY_MAX, pool, rng, dpr);
             i += 1;
         }
     }

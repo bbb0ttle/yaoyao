@@ -51,6 +51,22 @@ test "cooling: continuous emission adds 2 particles per frame" {
     try testing.expectEqual(after_landing + 2, pool.get_alive_count());
 }
 
+test "cooling: emission weakens as the heart cools" {
+    var pool = try test_pool();
+    defer pool.deinit();
+    var cooling = HeartCooling.init(testing.allocator);
+    defer cooling.deinit();
+    var rng = Rng.init(7);
+
+    try cooling.add(50.0, 50.0, "evt-3", 0.0, &pool, &rng, 1.0);
+    // Late in cooling (k < 0.25 for any rolled duration) the per-frame
+    // count rounds down to zero — the stream has run out of energy.
+    const before = pool.get_alive_count();
+    cooling.update(2.4, &pool, &rng, 1.0);
+    try testing.expectEqual(before, pool.get_alive_count());
+    try testing.expectEqual(@as(usize, 1), cooling.emitters.items.len);
+}
+
 test "cooling: emitter is retired after cooling duration" {
     var pool = try test_pool();
     defer pool.deinit();
