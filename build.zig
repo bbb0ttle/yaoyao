@@ -139,7 +139,15 @@ pub fn build(b: *Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    const tests = b.addTest(.{ .root_module = tests_mod });
+    const tests = b.addTest(.{
+        .root_module = tests_mod,
+        // -Dtest-filter="..." compiles in only matching tests; the full
+        // suite is the default.
+        .filters = if (b.option([]const u8, "test-filter", "Skip tests whose name lacks the substring")) |filter|
+            &.{filter}
+        else
+            &.{},
+    });
     const run_tests = b.addRunArtifact(tests);
     test_step.dependOn(&run_tests.step);
 }
