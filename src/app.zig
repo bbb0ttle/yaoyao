@@ -46,9 +46,11 @@ const HEART_SHRINK_FACTOR: f32 = 0.94;
 
 // Atmospheric drag on the fly-in: a real meteor is braked by the air, its
 // speed decaying exponentially with distance travelled (quadratic drag).
-// The heart enters at METEOR_SPEED and eases to this terminal approach
-// speed exactly as it reaches its landing spot.
-const FLY_DRAG_END_SPEED: f32 = 3.0; // px/frame × dpr
+// The heart enters at twice the background meteor speed — a blazing streak
+// that the atmosphere brakes hard over the first third of the path — then
+// glides in at the terminal approach speed, reached exactly at the target.
+const FLY_START_SPEED: f32 = 16.0; // px/frame × dpr
+const FLY_DRAG_END_SPEED: f32 = 2.5; // px/frame × dpr
 
 // Follow-through settle: an arriving heart keeps a share of its incoming
 // velocity, and a damped spring carries it past the target before easing
@@ -369,7 +371,7 @@ pub const App = struct {
             return;
         }
 
-        const speed = meteor_sys.METEOR_SPEED * dpr;
+        const speed = FLY_START_SPEED * dpr;
         const angle = std.math.atan2(h, w);
         const vx = -@cos(angle) * speed;
         const vy = @sin(angle) * speed;
