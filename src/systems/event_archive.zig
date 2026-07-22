@@ -6,22 +6,24 @@ const Allocator = std.mem.Allocator;
 const Rng = @import("../random.zig").Rng;
 
 /// FIFO archive with a hard cap: putting into a full archive frees the
-/// oldest entry. Removal and sync purging keep it consistent with the
-/// calendar.
+/// oldest entry. A hash index over the same slices (list owns, index
+/// borrows) keeps membership checks O(1) at archive scale.
 pub const ArchiveList = struct {
     const Self = @This();
 
     alloc: Allocator,
     ids: std.ArrayList([]const u8),
+    index: std.StringHashMap(void),
     cap: usize,
 
     pub fn init(alloc: Allocator, cap: usize) Self {
-        return .{ .alloc = alloc, .ids = .empty, .cap = cap };
+        return .{ .alloc = alloc, .ids = .empty, .index = std.StringHashMap(void).init(alloc), .cap = cap };
     }
 
     pub fn deinit(self: *Self) void {
         for (self.ids.items) |id| self.alloc.free(id);
         self.ids.deinit(self.alloc);
+        self.index.deinit();
         self.* = undefined;
     }
 
@@ -31,30 +33,36 @@ pub const ArchiveList = struct {
 
     /// Take ownership of `id`, freeing the oldest entry first when full.
     pub fn put(self: *Self, id: []const u8) !void {
+        if (self.index.contains(id)) {
+            self.alloc.free(id);
+            return;
+        }
         if (self.ids.items.len >= self.cap) {
-            self.alloc.free(self.ids.orderedRemove(0));
+            const oldest = self.ids.orderedRemove(0);
+            _ = self.index.remove(oldest);
+            self.alloc.free(oldest);
         }
         errdefer self.alloc.free(id);
         try self.ids.append(self.alloc, id);
+        errdefer _ = self.ids.pop();
+        try self.index.put(id, {});
     }
 
     /// Free and drop `id` if archived. Returns whether it was present.
     pub fn remove(self: *Self, id: []const u8) bool {
+        const kv = self.index.fetchRemove(id) orelse return false;
         for (self.ids.items, 0..) |item, i| {
-            if (std.mem.eql(u8, item, id)) {
+            if (item.ptr == kv.key.ptr) {
                 self.alloc.free(item);
-                _ = self.ids.swapRemove(i);
+                _ = self.ids.orderedRemove(i);
                 return true;
             }
         }
-        return false;
+        unreachable; // index and list share every slice
     }
 
     pub fn contains(self: *const Self, id: []const u8) bool {
-        for (self.ids.items) |item| {
-            if (std.mem.eql(u8, item, id)) return true;
-        }
-        return false;
+        return self.index.contains(id);
     }
 
     /// Drop every entry absent from `active` (calendar sync reconciliation).
@@ -62,8 +70,9 @@ pub const ArchiveList = struct {
         var i: usize = 0;
         while (i < self.ids.items.len) {
             if (!active.contains(self.ids.items[i])) {
+                _ = self.index.remove(self.ids.items[i]);
                 self.alloc.free(self.ids.items[i]);
-                _ = self.ids.swapRemove(i);
+                _ = self.ids.orderedRemove(i);
             } else {
                 i += 1;
             }

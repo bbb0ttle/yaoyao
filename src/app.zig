@@ -77,6 +77,11 @@ const HEART_MIN_SIZE_SCALE: f32 = 0.38;
 const MAX_FLY_IN_HEARTS: usize = 3;
 const SPAWN_BATCH_WINDOW_SEC: f32 = 1.0;
 
+// Cold-start syncs push the whole day's events at once; spawn_heart only
+// enqueues, and the update loop drains this many per frame so the UI
+// never freezes — thousands of arrivals pour in over a couple of seconds.
+const SYNC_DRAIN_PER_FRAME: usize = 24;
+
 // Tagged hearts are capped at the visual comfort capacity of the canvas:
 // past the cap, the oldest landed heart fades out and its event retires
 // to the archive — the present stays readable, the past is not lost.
@@ -172,6 +177,8 @@ pub const App = struct {
 
     tagged_hearts: std.StringHashMap(*Particle),
     incoming_hearts: std.ArrayList(IncomingHeart),
+    spawn_queue: std.ArrayList([]u8),
+    spawn_queue_head: usize,
     cooling: HeartCooling,
     archive: ArchiveList,
     landed_order: std.ArrayList([]const u8),
@@ -222,6 +229,8 @@ pub const App = struct {
             .text_layout = .{},
             .tagged_hearts = std.StringHashMap(*Particle).init(allocator),
             .incoming_hearts = .empty,
+            .spawn_queue = .empty,
+            .spawn_queue_head = 0,
             .cooling = HeartCooling.init(allocator),
             .archive = ArchiveList.init(allocator, MAX_ARCHIVE),
             .landed_order = .empty,
@@ -239,6 +248,10 @@ pub const App = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        for (self.spawn_queue.items[self.spawn_queue_head..]) |id| {
+            self.allocator.free(id);
+        }
+        self.spawn_queue.deinit(self.allocator);
         for (self.incoming_hearts.items) |cm| {
             if (cm.event_id) |id| self.allocator.free(id);
         }
@@ -339,6 +352,7 @@ pub const App = struct {
             self.meteor.update(&self.pool, &self.rng);
         }
         self.update_incoming_hearts(elapsed);
+        self.drain_spawn_queue(elapsed);
         self.cooling.update(elapsed, &self.pool, &self.rng, dpr);
         self.update_counter_tap_pulse(elapsed);
         self.update_replay(elapsed);
@@ -411,25 +425,52 @@ pub const App = struct {
         }
     }
 
+    /// O(1) enqueue: cold-start syncs push thousands of events; the drain
+    /// spreads spawn work across frames so the UI never freezes.
+    /// `event_id` is borrowed; the queue owns a sentinel-terminated copy
+    /// (tagged-heart keys are cast to C strings for the tap callback).
     pub fn spawn_heart(self: *Self, event_id: []const u8, elapsed: f32) !void {
+        _ = elapsed;
+        const id_dup = try self.allocator.allocSentinel(u8, event_id.len, 0);
+        @memcpy(id_dup[0..event_id.len], event_id);
+        errdefer self.allocator.free(id_dup);
+        try self.spawn_queue.append(self.allocator, id_dup);
+    }
+
+    fn drain_spawn_queue(self: *Self, elapsed: f32) void {
+        var budget: usize = SYNC_DRAIN_PER_FRAME;
+        while (budget > 0 and self.spawn_queue_head < self.spawn_queue.items.len) : (budget -= 1) {
+            const id = self.spawn_queue.items[self.spawn_queue_head];
+            self.spawn_queue_head += 1;
+            self.do_spawn_heart(id, elapsed);
+        }
+        if (self.spawn_queue_head == self.spawn_queue.items.len) {
+            self.spawn_queue.clearRetainingCapacity();
+            self.spawn_queue_head = 0;
+        }
+    }
+
+    /// Spawn one queued event. Takes ownership of `id`.
+    fn do_spawn_heart(self: *Self, id: []u8, elapsed: f32) void {
         const dpr = self.dpr;
         const w = sapp.widthf();
         const h = sapp.heightf();
 
-        if (self.tagged_hearts.contains(event_id)) return;
-
+        if (self.tagged_hearts.contains(id)) {
+            self.allocator.free(id);
+            return;
+        }
         for (self.incoming_hearts.items) |cm| {
-            if (cm.event_id) |id| {
-                if (std.mem.eql(u8, id, event_id)) return;
+            if (cm.event_id) |cm_id| {
+                if (std.mem.eql(u8, cm_id, id)) {
+                    self.allocator.free(id);
+                    return;
+                }
             }
         }
 
         // Re-adding an archived event brings it back to the present.
-        _ = self.archive.remove(event_id);
-
-        const id_dup = try self.allocator.allocSentinel(u8, event_id.len, 0);
-        @memcpy(id_dup[0..event_id.len], event_id);
-        errdefer self.allocator.free(id_dup);
+        _ = self.archive.remove(id);
 
         const dest = self.pick_landing_spot(w, h, dpr);
 
@@ -445,11 +486,14 @@ pub const App = struct {
 
         if (self.spawn_batch_count > MAX_FLY_IN_HEARTS) {
             self.convert_incoming_to_fade_in(now);
-            self.spawn_heart_fade_in(id_dup, dest.x, dest.y, now);
+            self.spawn_heart_fade_in(id, dest.x, dest.y, now);
             return;
         }
 
-        try self.spawn_fly_in(.tagged, id_dup, dest, w, h, dpr, elapsed);
+        self.spawn_fly_in(.tagged, id, dest, w, h, dpr, elapsed) catch {
+            log.warn("spawn_fly_in failed, discarding heart for event_id", .{});
+            self.allocator.free(id);
+        };
     }
 
     /// Launch a meteor heart towards `dest` on the shared ease-out
@@ -675,6 +719,20 @@ pub const App = struct {
                 mi += 1;
             }
         }
+
+        // Queued spawns for events that vanished are dropped too.
+        var qr: usize = self.spawn_queue_head;
+        var qw: usize = self.spawn_queue_head;
+        while (qr < self.spawn_queue.items.len) : (qr += 1) {
+            const id = self.spawn_queue.items[qr];
+            if (active_set.contains(id)) {
+                self.spawn_queue.items[qw] = id;
+                qw += 1;
+            } else {
+                self.allocator.free(id);
+            }
+        }
+        self.spawn_queue.shrinkRetainingCapacity(qw);
 
         self.archive.retain_only(&active_set);
     }
