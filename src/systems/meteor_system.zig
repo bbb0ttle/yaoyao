@@ -1,13 +1,8 @@
 //! Meteor shower effect with edge-fade, trail particles, and head compaction.
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.meteor_system);
 
 const Vec2 = @import("../core/types.zig").Vec2;
 const Particle = @import("../particles/particle.zig").Particle;
-const ParticleOpts = @import("../particles/particle.zig").ParticleOpts;
 const MAX_LIFESPAN = @import("../particles/particle.zig").MAX_LIFESPAN;
 const ParticlePool = @import("../particles/pool.zig").ParticlePool;
 const Rng = @import("../random.zig").Rng;
@@ -168,6 +163,12 @@ pub const MeteorSystem = struct {
 
         if (self.cooldown > 0) self.cooldown -= 1;
         self.compact();
+    }
+
+    /// Drop all tracked heads, e.g. when a resize is about to reset the
+    /// particle pool and orphan the head pointers.
+    pub fn reset(self: *Self) void {
+        self.head_count = 0;
     }
 
     fn compact(self: *Self) void {

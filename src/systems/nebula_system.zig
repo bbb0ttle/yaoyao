@@ -6,7 +6,6 @@
 //! 30–80 second cycles.
 
 const std = @import("std");
-const log = std.log.scoped(.nebula);
 
 const Vec2 = @import("../core/types.zig").Vec2;
 const Particle = @import("../particles/particle.zig").Particle;

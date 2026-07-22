@@ -1,9 +1,6 @@
 //! Heart curve parametric equations and breathing animation math.
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.math);
 
 const Vec2 = @import("types.zig").Vec2;
 

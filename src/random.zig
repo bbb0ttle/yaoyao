@@ -1,9 +1,5 @@
 //! Pseudorandom number generator using a linear congruential engine.
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.random);
 
 /// Pseudorandom number generator with seedable LCG state.
 pub const Rng = struct {

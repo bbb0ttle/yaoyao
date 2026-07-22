@@ -1,8 +1,6 @@
 //! Application entry point and sokol C ABI callbacks.
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
 const log = std.log.scoped(.oayao);
 
 const sokol = @import("sokol");
@@ -72,17 +70,22 @@ export fn event(ev: [*c]const sapp.Event) void {
     }
 }
 
+// Legacy name kept for the web bundle (web/main.ts); new callers should
+// use the prefixed oayao_trigger_meteor_shower below.
 export fn trigger_meteor_shower(x: f32, y: f32) void {
     if (g_app) |app| {
         app.handle_click(x, y);
     }
 }
 
+export fn oayao_trigger_meteor_shower(x: f32, y: f32) void {
+    trigger_meteor_shower(x, y);
+}
+
 export fn oayao_spawn_heart(event_id: [*:0]const u8) void {
     if (g_app) |app| {
         const len = std.mem.sliceTo(event_id, 0).len;
-        const elapsed: f32 = @floatCast(sapp.frameDuration());
-        app.spawn_heart(event_id[0..len], elapsed) catch |err| {
+        app.spawn_heart(event_id[0..len], app.current_elapsed()) catch |err| {
             log.warn("spawn_heart failed: {}", .{err});
         };
     }

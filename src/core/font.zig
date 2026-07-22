@@ -1,9 +1,5 @@
 //! 3x5 bitmap font data and character lookup.
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.font);
 
 /// 3x5 pixel bitmap font with 22 glyphs (0-9, ., space, brackets, days/Days).
 pub const FONT_3X5: [22][5]u8 = .{

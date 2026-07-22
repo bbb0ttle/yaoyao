@@ -1,8 +1,7 @@
 //! ParticlePool with free-list allocation and alive-index tracking.
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
+const builtin = @import("builtin");
 const log = std.log.scoped(.pool);
 
 const Particle = @import("particle.zig").Particle;
@@ -77,9 +76,26 @@ pub const ParticlePool = struct {
             idx = self.len;
             self.len += 1;
         } else {
-            // Pool exhausted: overwrite slot 0. The free list is empty by
-            // definition here, so bookkeeping stays consistent.
-            idx = 0;
+            // Pool exhausted: sacrifice the first non-immortal alive
+            // particle (falling back to the oldest alive entry) and reuse
+            // its slot. Removing it from alive_indices first keeps the
+            // alive list duplicate-free — blindly overwriting a slot would
+            // later push it onto the free list twice.
+            var sacrifice_pos: usize = 0;
+            for (self.alive_indices[0..self.alive_count], 0..) |ai, ai_pos| {
+                if (!self.particles[ai].is_immortal()) {
+                    sacrifice_pos = ai_pos;
+                    break;
+                }
+            }
+            idx = self.alive_indices[sacrifice_pos];
+            self.alive_indices[sacrifice_pos] = self.alive_indices[self.alive_count - 1];
+            self.alive_count -= 1;
+            // is_test: stderr writes break the zig build runner's test
+            // protocol (0.17.0-dev), so the warning is app-only.
+            if (!builtin.is_test) {
+                log.warn("particle pool exhausted, recycling slot {d}", .{idx});
+            }
         }
         self.particles[idx] = Particle.init(pos, elapsed, opts, rng);
         self.alive_indices[self.alive_count] = idx;

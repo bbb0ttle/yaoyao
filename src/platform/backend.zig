@@ -1,9 +1,5 @@
 //! GPU backend detection and simulator workaround.
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.backend);
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;

@@ -1,9 +1,5 @@
 //! Text and particle instance buffer filling for GPU upload.
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.text_renderer);
 
 const GpuInstance = @import("gpu_state.zig").GpuInstance;
 const GpuState = @import("gpu_state.zig").GpuState;
@@ -34,48 +30,59 @@ pub const TextLayout = struct {
     }
 };
 
-/// Fill GPU instance buffer with 3x5 bitmap text glyph instances.
-pub fn fill_text_instances(
-    gpu: *GpuState,
+/// Recompute the cached counter-text layout and place the counter heart
+/// pair — only when the inputs change. Called from the update phase so
+/// the render fill below stays free of simulation side effects; between
+/// layout changes the pair drifts freely.
+pub fn update_counter_layout(
+    heart: *HeartSystem,
     w: f32,
     h: f32,
     dpr: f32,
+    days_text_len: usize,
+    cache: *TextLayout,
+) void {
+    if (cache.matches(w, h, dpr, days_text_len)) return;
+
+    const pixel_size: f32 = @max(1.0, dpr);
+    const char_stride: f32 = pixel_size * 2.0 * 3.0 + pixel_size;
+    const gap: f32 = 4.0 * dpr;
+    const max_hr: f32 = (MAX_PARTICLE_SIZE + 4.0) * dpr;
+
+    const text_width: f32 = @as(f32, @floatFromInt(days_text_len)) * char_stride;
+    const hearts_area_w: f32 = 7.0 * dpr + 2.0 * max_hr;
+    const group_w: f32 = hearts_area_w + gap + text_width;
+    const group_left: f32 = w / 2.0 - group_w / 2.0;
+
+    const left_h = heart.float_pair_left();
+    const right_h = heart.float_pair_right();
+    const dx: f32 = (group_left + max_hr) - left_h.pos_x();
+    left_h.set_pos(left_h.pos_x() + dx, left_h.pos_y());
+    right_h.set_pos(right_h.pos_x() + dx, right_h.pos_y());
+    left_h.set_pos(left_h.pos_x(), h - 80.0 * dpr);
+    right_h.set_pos(right_h.pos_x(), h - 80.0 * dpr - 2.0 * dpr);
+
+    cache.* = .{
+        .w = w,
+        .h = h,
+        .dpr = dpr,
+        .text_len = days_text_len,
+        .pixel_size = pixel_size,
+        .char_stride = char_stride,
+        .text_x = group_left + hearts_area_w + gap,
+        .text_y = h - 83.0 * dpr,
+    };
+}
+
+/// Fill GPU instance buffer with 3x5 bitmap text glyph instances.
+/// The layout cache must be fresh — call update_counter_layout first.
+pub fn fill_text_instances(
+    gpu: *GpuState,
     days_text_buf: []const u8,
     days_text_len: usize,
-    heart: *HeartSystem,
     start_inst: u32,
-    cache: *TextLayout,
+    cache: *const TextLayout,
 ) u32 {
-    if (!cache.matches(w, h, dpr, days_text_len)) {
-        const pixel_size: f32 = @max(1.0, dpr);
-        const char_stride: f32 = pixel_size * 2.0 * 3.0 + pixel_size;
-        const gap: f32 = 4.0 * dpr;
-        const max_hr: f32 = (MAX_PARTICLE_SIZE + 4.0) * dpr;
-
-        const text_width: f32 = @as(f32, @floatFromInt(days_text_len)) * char_stride;
-        const hearts_area_w: f32 = 7.0 * dpr + 2.0 * max_hr;
-        const group_w: f32 = hearts_area_w + gap + text_width;
-        const group_left: f32 = w / 2.0 - group_w / 2.0;
-
-        const left_h = heart.float_pair_left();
-        const right_h = heart.float_pair_right();
-        const dx: f32 = (group_left + max_hr) - left_h.pos_x();
-        left_h.set_pos(left_h.pos_x() + dx, left_h.pos_y());
-        right_h.set_pos(right_h.pos_x() + dx, right_h.pos_y());
-        left_h.set_pos(left_h.pos_x(), h - 80.0 * dpr);
-        right_h.set_pos(right_h.pos_x(), h - 80.0 * dpr - 2.0 * dpr);
-
-        cache.* = .{
-            .w = w,
-            .h = h,
-            .dpr = dpr,
-            .text_len = days_text_len,
-            .pixel_size = pixel_size,
-            .char_stride = char_stride,
-            .text_x = group_left + hearts_area_w + gap,
-            .text_y = h - 83.0 * dpr,
-        };
-    }
 
     const pixel_size = cache.pixel_size;
     const char_stride = cache.char_stride;
@@ -118,9 +125,9 @@ pub fn fill_text_instances(
     return inst_count;
 }
 
-/// Update alive particles and fill GPU instances in a single traversal,
-/// with culling and alpha. Cooling embers are filled first so they draw
-/// behind the hearts that shed them.
+/// Fill GPU instances for all alive particles, in two draw-order passes:
+/// cooling embers first so they draw behind the hearts that shed them.
+/// Particles must already have been updated this frame by the caller.
 pub fn fill_particle_instances(
     gpu: *GpuState,
     pool: *ParticlePool,
@@ -128,12 +135,11 @@ pub fn fill_particle_instances(
     h: f32,
     dpr: f32,
     t: f32,
-    elapsed: f32,
     start_inst: u32,
 ) u32 {
     const alive = pool.alive_slice();
-    var inst_count = fill_pass(gpu, pool, alive, true, w, h, dpr, t, elapsed, start_inst);
-    inst_count = fill_pass(gpu, pool, alive, false, w, h, dpr, t, elapsed, inst_count);
+    var inst_count = fill_pass(gpu, pool, alive, true, w, h, dpr, t, start_inst);
+    inst_count = fill_pass(gpu, pool, alive, false, w, h, dpr, t, inst_count);
     return inst_count;
 }
 
@@ -146,7 +152,6 @@ fn fill_pass(
     h: f32,
     dpr: f32,
     t: f32,
-    elapsed: f32,
     start_inst: u32,
 ) u32 {
     const stroke_width: f32 = STROKE_WIDTH * dpr;
@@ -157,7 +162,6 @@ fn fill_pass(
     for (alive) |idx| {
         const p = pool.get_particle(idx);
         if (p.is_cooling() != cooling_pass) continue;
-        p.update(elapsed, dpr);
 
         const alpha_scale = p.get_alpha_scale();
         const max_alpha: f32 = if (p.is_immortal()) 1.0 else math.scale(p.get_lifespan(), MAX_LIFESPAN, 200.0) / 255.0;

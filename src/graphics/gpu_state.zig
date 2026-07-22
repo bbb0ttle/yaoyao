@@ -1,9 +1,6 @@
 //! GPU state management: pipeline, buffers, instanced rendering.
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.gpu_state);
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;

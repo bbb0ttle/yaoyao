@@ -1,9 +1,6 @@
 //! Heart contour rendering system with floating pair animation.
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.heart_system);
 
 const Vec2 = @import("../core/types.zig").Vec2;
 const math = @import("../core/math.zig");

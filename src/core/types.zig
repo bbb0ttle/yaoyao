@@ -1,9 +1,5 @@
 //! Shared primitive types: color, 2D vector.
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.types);
 
 /// 8-bit RGBA color with named palette constants.
 pub const Rgba = struct {

@@ -1,8 +1,6 @@
 //! Core application state, lifecycle, and heart event orchestration.
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
 const log = std.log.scoped(.app);
 
 const sokol = @import("sokol");
@@ -23,6 +21,7 @@ const Rng = @import("random.zig").Rng;
 const Vec2 = @import("core/types.zig").Vec2;
 const theme_mod = @import("core/theme.zig");
 const core_math = @import("core/math.zig");
+const platform_time = @import("platform/time.zig");
 const Theme = theme_mod.Theme;
 const ThemeTransition = theme_mod.ThemeTransition;
 
@@ -215,18 +214,29 @@ pub const App = struct {
         }
         self.incoming_hearts.deinit(self.allocator);
         self.cooling.deinit();
+        var key_it = self.tagged_hearts.keyIterator();
+        while (key_it.next()) |key| {
+            self.allocator.free(key.*);
+        }
         self.tagged_hearts.deinit();
         self.pool.deinit();
         self.gpu.deinit();
         self.allocator.destroy(self);
-        self.* = undefined;
     }
 
+    /// Frame-driven clock. All motion constants are per-frame tuned for
+    /// 60fps; higher refresh rates speed the animation up proportionally.
     pub fn tick_elapsed(self: *Self) f32 {
         const elapsed = self.start_time;
         self.start_time += @as(f32, @floatCast(sapp.frameDuration()));
         self.last_elapsed = elapsed;
         return elapsed;
+    }
+
+    /// Frame-driven clock for C ABI callers, which have no elapsed time of
+    /// their own (sokol only exposes a frame *duration*).
+    pub fn current_elapsed(self: *Self) f32 {
+        return self.last_elapsed;
     }
 
     pub fn cooldown_tick(self: *Self) void {
@@ -279,6 +289,9 @@ pub const App = struct {
         self.heart.set_size_scale(self.heart_size_scale);
 
         self.update_day_counter();
+        if (self.days_text_len > 0) {
+            text_renderer.update_counter_layout(&self.heart, w, h, dpr, self.days_text_len, &self.text_layout);
+        }
 
         if (self.nebula_enabled and !self.is_nebula_ready) {
             self.nebula = NebulaSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed);
@@ -295,6 +308,12 @@ pub const App = struct {
         self.update_incoming_hearts(elapsed);
         self.cooling.update(elapsed, &self.pool, &self.rng, dpr);
         self.update_counter_tap_pulse(elapsed);
+
+        // Simulation step for every alive particle, exactly once per frame,
+        // before compaction and rendering.
+        for (self.pool.alive_slice()) |idx| {
+            self.pool.get_particle(idx).update(elapsed, dpr);
+        }
         self.pool.collect_alive();
 
         var inst_count = text_renderer.fill_particle_instances(
@@ -304,19 +323,14 @@ pub const App = struct {
             h,
             dpr,
             t,
-            elapsed,
             0,
         );
 
         if (self.days_text_len > 0) {
             inst_count = text_renderer.fill_text_instances(
                 &self.gpu,
-                w,
-                h,
-                dpr,
                 &self.days_text_buf,
                 self.days_text_len,
-                &self.heart,
                 inst_count,
                 &self.text_layout,
             );
@@ -335,13 +349,29 @@ pub const App = struct {
         if (self.handle_heart_tap(x, y)) {
             return;
         }
-        // self.meteor_from_heart(x - self.heart.center_x(), y - self.heart.center_y(), .{});
     }
 
     pub fn handle_resize(self: *Self) void {
         self.resize_cooldown = 30;
         self.is_heart_ready = false;
         self.cooling.clear();
+
+        // The upcoming HeartSystem.init resets the pool, orphaning every
+        // particle pointer held in these containers — drop them now so a
+        // later remove/update can never touch a recycled slot. Landed
+        // hearts vanish with the pool, as they already did implicitly.
+        var key_it = self.tagged_hearts.keyIterator();
+        while (key_it.next()) |key| {
+            self.allocator.free(key.*);
+        }
+        self.tagged_hearts.clearRetainingCapacity();
+        for (self.incoming_hearts.items) |cm| {
+            self.allocator.free(cm.event_id);
+        }
+        self.incoming_hearts.clearRetainingCapacity();
+        if (self.is_meteor_ready) {
+            self.meteor.reset();
+        }
     }
 
     pub fn spawn_heart(self: *Self, event_id: []const u8, elapsed: f32) !void {
@@ -361,9 +391,9 @@ pub const App = struct {
 
         const dest = self.pick_landing_spot(w, h, dpr);
 
-        // Batch tracking uses the frame-driven clock: the `elapsed` passed
-        // in from the C ABI is only a frame duration, so it can never
-        // measure the quiet gap between separate sync rounds.
+        // Batch tracking on the frame-driven clock: bursts within the
+        // window count as one batch (initial calendar sync); single event
+        // additions always fly in.
         const now = self.last_elapsed;
         if (now - self.last_spawn_sec > SPAWN_BATCH_WINDOW_SEC) {
             self.spawn_batch_count = 0;
@@ -526,7 +556,10 @@ pub const App = struct {
         var split_iter = std.mem.splitScalar(u8, active_ids, '\n');
         while (split_iter.next()) |id| {
             if (id.len > 0) {
-                active_set.put(id, {}) catch continue;
+                active_set.put(id, {}) catch {
+                    log.warn("active_set.put failed, skipping id", .{});
+                    continue;
+                };
             }
         }
 
@@ -536,7 +569,10 @@ pub const App = struct {
         var heart_it = self.tagged_hearts.iterator();
         while (heart_it.next()) |entry| {
             if (!active_set.contains(entry.key_ptr.*)) {
-                stale_ids.append(self.allocator, entry.key_ptr.*) catch continue;
+                stale_ids.append(self.allocator, entry.key_ptr.*) catch {
+                    log.warn("stale_ids.append failed, skipping id", .{});
+                    continue;
+                };
             }
         }
 
@@ -724,6 +760,8 @@ pub const App = struct {
             const dist = @sqrt(dx * dx + dy * dy);
             if (dist < p.get_size() * 2.0 and dist < best_dist) {
                 best_dist = dist;
+                // Keys are sentinel-allocated in spawn_heart, so this cast
+                // to a C string pointer is sound for the tap callback.
                 best_key = @ptrCast(entry.key_ptr.ptr);
             }
         }
@@ -779,10 +817,7 @@ pub const App = struct {
         // Unset start date: static zero placeholder, no ticking.
         var diff_days: f64 = 0.0;
         if (self.is_days_counter_set) {
-            var ts: std.c.timespec = undefined;
-            _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
-            const unix_ms: f64 = @as(f64, @floatFromInt(ts.sec)) * 1000.0 + @as(f64, @floatFromInt(ts.nsec)) / 1_000_000.0;
-            diff_days = (unix_ms - self.days_counter_start_ms) / (1000.0 * 60.0 * 60.0 * 24.0);
+            diff_days = (platform_time.unix_ms() - self.days_counter_start_ms) / (1000.0 * 60.0 * 60.0 * 24.0);
         }
         const int_part: u64 = @intFromFloat(@floor(diff_days));
         const frac: f64 = diff_days - @floor(diff_days);
@@ -868,96 +903,84 @@ pub const App = struct {
 
             const prev_x = p.pos_x();
             const prev_y = p.pos_y();
-
-            switch (cm.state) {
-                .flying => {
-                    // Ease-out braking: speed follows v0·(remaining/path)^((n-1)/n),
-                    // a pure function of the remaining distance. Scaling both
-                    // components equally keeps the trajectory a straight line.
-                    const rdx = cm.target_x - p.pos_x();
-                    const rdy = cm.target_y - p.pos_y();
-                    const remaining = @sqrt(rdx * rdx + rdy * rdy);
-                    const sp = @sqrt(p.vel_x() * p.vel_x() + p.vel_y() * p.vel_y());
-                    const nsp = core_math.ease_out_speed(cm.fly_v0, remaining, cm.path_len, FLY_EASE_POWER, FLY_CRUISE_FRAC);
-                    const ratio = nsp / sp;
-                    p.set_vel(p.vel_x() * ratio, p.vel_y() * ratio);
-                    p.translate_by_vel();
-                },
-                .settling => {
-                    const s = core_math.spring_step(p.pos_x(), p.pos_y(), p.vel_x(), p.vel_y(), cm.target_x, cm.target_y, SETTLE_OMEGA, SETTLE_ZETA);
-                    p.set_pos(s.x, s.y);
-                    p.set_vel(s.vx, s.vy);
-                },
-            }
-
-            const step_x = p.pos_x() - prev_x;
-            const step_y = p.pos_y() - prev_y;
-            const step_dist = @sqrt(step_x * step_x + step_y * step_y);
-
-            // Evenly spaced trail dots along the whole path: the sub-gap
-            // remainder carries across frames, so dot spacing never jitters
-            // as the speed changes.
-            if (step_dist > 0.0) {
-                const gap = TRAIL_GAP * dpr;
-                cm.trail_carry += step_dist;
-                while (cm.trail_carry >= gap) {
-                    cm.trail_carry -= gap;
-                    const f = 1.0 - cm.trail_carry / step_dist;
-                    const trail = self.pool.alloc_particle(
-                        Vec2{ .x = prev_x + step_x * f, .y = prev_y + step_y * f },
-                        elapsed,
-                        .{ .size = meteor_sys.TRAIL_SIZE * dpr },
-                        &self.rng,
-                    );
-                    trail.set_vel(0, 0);
-                    trail.set_acc(0, 0);
-                    trail.set_lifespan(meteor_sys.TRAIL_LIFESPAN);
-                }
-            }
-
-            const tx = cm.target_x;
-            const ty = cm.target_y;
-            const adx = tx - p.pos_x();
-            const ady = ty - p.pos_y();
-            const dist = @sqrt(adx * adx + ady * ady);
-
-            switch (cm.state) {
-                .flying => {
-                    // Each fresh contact with the big heart's contour fires one
-                    // meteor shower travelling parallel to this heart's own
-                    // trajectory, towards the same destination. Slower and
-                    // dimmer than the heart so it stays visibly in the lead.
-                    const touching = self.heart.touches_contour(p.pos_x(), p.pos_y(), p.get_size());
-                    if (touching and !cm.was_touching_contour) {
-                        self.meteor_from_heart(p.vel_x(), p.vel_y(), .{
-                            .force = true,
-                            .opacity = 0.65,
-                            .speed_scale = 0.6,
-                        });
-                    }
-                    cm.was_touching_contour = touching;
-
-                    const past_target = (p.vel_x() * adx + p.vel_y() * ady) < 0;
-                    if (dist < 20.0 * dpr or past_target) {
-                        // Hand the arrival velocity straight to the spring —
-                        // no speed cut, so the braking continues seamlessly
-                        // through the follow-through overshoot.
-                        cm.state = .settling;
-                        cm.settle_start_sec = elapsed;
-                    }
-                },
-                .settling => {
-                    const speed = @sqrt(p.vel_x() * p.vel_x() + p.vel_y() * p.vel_y());
-                    const timed_out = elapsed - cm.settle_start_sec > SETTLE_TIMEOUT_SEC;
-                    if ((dist < SETTLE_DONE_DIST * dpr and speed < SETTLE_DONE_SPEED * dpr) or timed_out) {
-                        self.transition_incoming_heart(i, elapsed);
-                        continue;
-                    }
-                },
-            }
+            move_incoming_heart(cm);
+            self.lay_incoming_trail(cm, prev_x, prev_y, elapsed, dpr);
+            if (self.check_incoming_landing(cm, i, elapsed, dpr)) continue;
 
             i += 1;
         }
+    }
+
+    /// Evenly spaced trail dots along the whole path: the sub-gap
+    /// remainder carries across frames, so dot spacing never jitters
+    /// as the speed changes.
+    fn lay_incoming_trail(self: *Self, cm: *IncomingHeart, prev_x: f32, prev_y: f32, elapsed: f32, dpr: f32) void {
+        const p = cm.particle;
+        const step_x = p.pos_x() - prev_x;
+        const step_y = p.pos_y() - prev_y;
+        const step_dist = @sqrt(step_x * step_x + step_y * step_y);
+        if (step_dist == 0.0) return;
+
+        const gap = TRAIL_GAP * dpr;
+        cm.trail_carry += step_dist;
+        while (cm.trail_carry >= gap) {
+            cm.trail_carry -= gap;
+            const f = 1.0 - cm.trail_carry / step_dist;
+            const trail = self.pool.alloc_particle(
+                Vec2{ .x = prev_x + step_x * f, .y = prev_y + step_y * f },
+                elapsed,
+                .{ .size = meteor_sys.TRAIL_SIZE * dpr },
+                &self.rng,
+            );
+            trail.set_vel(0, 0);
+            trail.set_acc(0, 0);
+            trail.set_lifespan(meteor_sys.TRAIL_LIFESPAN);
+        }
+    }
+
+    /// Contour showers, flying→settling handoff, and landing detection.
+    /// Returns true when the heart transitioned (item `index` removed).
+    fn check_incoming_landing(self: *Self, cm: *IncomingHeart, index: usize, elapsed: f32, dpr: f32) bool {
+        const p = cm.particle;
+        const adx = cm.target_x - p.pos_x();
+        const ady = cm.target_y - p.pos_y();
+        const dist = @sqrt(adx * adx + ady * ady);
+
+        switch (cm.state) {
+            .flying => {
+                // Each fresh contact with the big heart's contour fires one
+                // meteor shower travelling parallel to this heart's own
+                // trajectory, towards the same destination. Slower and
+                // dimmer than the heart so it stays visibly in the lead.
+                const touching = self.heart.touches_contour(p.pos_x(), p.pos_y(), p.get_size());
+                if (touching and !cm.was_touching_contour) {
+                    self.meteor_from_heart(p.vel_x(), p.vel_y(), .{
+                        .force = true,
+                        .opacity = 0.65,
+                        .speed_scale = 0.6,
+                    });
+                }
+                cm.was_touching_contour = touching;
+
+                const past_target = (p.vel_x() * adx + p.vel_y() * ady) < 0;
+                if (dist < 20.0 * dpr or past_target) {
+                    // Hand the arrival velocity straight to the spring —
+                    // no speed cut, so the braking continues seamlessly
+                    // through the follow-through overshoot.
+                    cm.state = .settling;
+                    cm.settle_start_sec = elapsed;
+                }
+            },
+            .settling => {
+                const speed = @sqrt(p.vel_x() * p.vel_x() + p.vel_y() * p.vel_y());
+                const timed_out = elapsed - cm.settle_start_sec > SETTLE_TIMEOUT_SEC;
+                if ((dist < SETTLE_DONE_DIST * dpr and speed < SETTLE_DONE_SPEED * dpr) or timed_out) {
+                    self.transition_incoming_heart(index, elapsed);
+                    return true;
+                }
+            },
+        }
+        return false;
     }
 
     fn transition_incoming_heart(self: *Self, index: usize, elapsed: f32) void {
@@ -997,6 +1020,30 @@ pub const App = struct {
         _ = self.incoming_hearts.swapRemove(index);
     }
 };
+
+fn move_incoming_heart(cm: *IncomingHeart) void {
+    const p = cm.particle;
+    switch (cm.state) {
+        .flying => {
+            // Ease-out braking: speed follows v0·(remaining/path)^((n-1)/n),
+            // a pure function of the remaining distance. Scaling both
+            // components equally keeps the trajectory a straight line.
+            const rdx = cm.target_x - p.pos_x();
+            const rdy = cm.target_y - p.pos_y();
+            const remaining = @sqrt(rdx * rdx + rdy * rdy);
+            const sp = @sqrt(p.vel_x() * p.vel_x() + p.vel_y() * p.vel_y());
+            const nsp = core_math.ease_out_speed(cm.fly_v0, remaining, cm.path_len, FLY_EASE_POWER, FLY_CRUISE_FRAC);
+            const ratio = nsp / sp;
+            p.set_vel(p.vel_x() * ratio, p.vel_y() * ratio);
+            p.translate_by_vel();
+        },
+        .settling => {
+            const s = core_math.spring_step(p.pos_x(), p.pos_y(), p.vel_x(), p.vel_y(), cm.target_x, cm.target_y, SETTLE_OMEGA, SETTLE_ZETA);
+            p.set_pos(s.x, s.y);
+            p.set_vel(s.vx, s.vy);
+        },
+    }
+}
 
 fn format_uint(buf: []u8, len: *usize, n: u64) void {
     if (n == 0) {

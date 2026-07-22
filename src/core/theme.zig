@@ -1,8 +1,6 @@
 //! Theme definitions and animated theme transitions.
 
 const std = @import("std");
-const assert = std.debug.assert;
-const log = std.log.scoped(.theme);
 
 const Rgba = @import("types.zig").Rgba;
 

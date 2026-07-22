@@ -1,9 +1,5 @@
 //! Particle instance with position, velocity, lifecycle, and rendering flags.
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const assert = std.debug.assert;
-const log = std.log.scoped(.particle);
 
 const Vec2 = @import("../core/types.zig").Vec2;
 const Rng = @import("../random.zig").Rng;
