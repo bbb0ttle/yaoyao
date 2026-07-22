@@ -106,9 +106,9 @@ pub fn build(b: *Build) !void {
         lib.step.dependOn(shd_step);
 
         const em_extra_args: []const []const u8 = if (optimize == .Debug)
-            &.{ "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower']" }
+            &.{ "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower','_oayao_set_days_counter_start_ms']" }
         else
-            &.{ "-O3", "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower']" };
+            &.{ "-O3", "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower','_oayao_set_days_counter_start_ms']" };
 
         const link_step = try sokol_build.emLinkStep(b, .{
             .lib_main = lib,
