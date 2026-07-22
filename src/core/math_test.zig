@@ -41,3 +41,51 @@ test "scale linear" {
     try testing.expectApproxEqAbs(0.0, math.scale(0.0, 200.0, 100.0), 1e-6);
     try testing.expectApproxEqAbs(75.0, math.scale(150.0, 200.0, 100.0), 1e-6);
 }
+
+test "drag_step decays speed exponentially with distance travelled" {
+    // Quadratic drag over path length D lands at exactly v0·e^(-k·D):
+    // blazing entry, gentle final approach, like a meteor braking.
+    const v0: f32 = 8.0;
+    const v_end: f32 = 3.0;
+    const dist: f32 = 1200.0;
+    const k = @log(v0 / v_end) / dist;
+
+    var v = v0;
+    var x: f32 = 0.0;
+    var max_step_drop: f32 = 0.0;
+    while (x < dist) {
+        const nv = math.drag_step(v, k);
+        max_step_drop = @max(max_step_drop, v - nv);
+        x += nv;
+        v = nv;
+    }
+    try testing.expectApproxEqAbs(v_end, v, 0.05);
+    // Deceleration is sharpest at entry (drag ∝ v²), never later.
+    try testing.expect(max_step_drop > 0.0);
+    try testing.expect(max_step_drop < 0.2);
+}
+
+test "spring_step converges to target and rests" {
+    var s = math.SpringState{ .x = 0.0, .y = 0.0, .vx = 0.0, .vy = 0.0 };
+    for (0..600) |_| {
+        s = math.spring_step(s.x, s.y, s.vx, s.vy, 100.0, 50.0, 0.15, 0.3);
+    }
+    try testing.expectApproxEqAbs(100.0, s.x, 0.01);
+    try testing.expectApproxEqAbs(50.0, s.y, 0.01);
+    try testing.expectApproxEqAbs(0.0, s.vx, 0.01);
+    try testing.expectApproxEqAbs(0.0, s.vy, 0.01);
+}
+
+test "spring_step overshoots along incoming velocity, then settles back" {
+    // At the target with inward velocity: inertia carries the position past
+    // the target (follow-through) before the spring pulls it back to rest.
+    var s = math.SpringState{ .x = 100.0, .y = 50.0, .vx = 2.0, .vy = 0.0 };
+    var max_x: f32 = 100.0;
+    for (0..600) |_| {
+        s = math.spring_step(s.x, s.y, s.vx, s.vy, 100.0, 50.0, 0.15, 0.3);
+        max_x = @max(max_x, s.x);
+    }
+    try testing.expect(max_x > 105.0);
+    try testing.expectApproxEqAbs(100.0, s.x, 0.01);
+    try testing.expectApproxEqAbs(0.0, s.vx, 0.01);
+}

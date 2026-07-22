@@ -22,6 +22,7 @@ const MAX_PARTICLE_SIZE = @import("particles/particle.zig").MAX_PARTICLE_SIZE;
 const Rng = @import("random.zig").Rng;
 const Vec2 = @import("core/types.zig").Vec2;
 const theme_mod = @import("core/theme.zig");
+const core_math = @import("core/math.zig");
 const Theme = theme_mod.Theme;
 const ThemeTransition = theme_mod.ThemeTransition;
 
@@ -42,6 +43,24 @@ const CLUSTER_BIAS: f32 = 0.6;
 // Older hearts shrink as new ones land, like stars receding into depth,
 // keeping the newest event the most prominent.
 const HEART_SHRINK_FACTOR: f32 = 0.94;
+
+// Atmospheric drag on the fly-in: a real meteor is braked by the air, its
+// speed decaying exponentially with distance travelled (quadratic drag).
+// The heart enters at METEOR_SPEED and eases to this terminal approach
+// speed exactly as it reaches its landing spot.
+const FLY_DRAG_END_SPEED: f32 = 3.0; // px/frame × dpr
+
+// Follow-through settle: an arriving heart keeps a share of its incoming
+// velocity, and a damped spring carries it past the target before easing
+// back to rest — inertia, not a hard stop (follow-through and overlapping
+// action).
+const SETTLE_VEL_KEEP: f32 = 0.15;
+const SETTLE_MAX_SPEED: f32 = 1.0; // px/frame × dpr
+const SETTLE_OMEGA: f32 = 0.35; // rad/frame
+const SETTLE_ZETA: f32 = 0.55; // slight underdamping: tiny overshoot, decisive snap back
+const SETTLE_DONE_DIST: f32 = 1.5; // × dpr
+const SETTLE_DONE_SPEED: f32 = 0.2; // × dpr
+const SETTLE_TIMEOUT_SEC: f32 = 1.5;
 const HEART_MIN_SIZE_SCALE: f32 = 0.38;
 
 // Spawn bursts (initial calendar sync) beyond this budget skip the fly-in
@@ -69,12 +88,17 @@ pub const CounterHeartsFrame = extern struct {
     h: f32,
 };
 
+const IncomingState = enum { flying, settling };
+
 const IncomingHeart = struct {
     particle: *Particle,
     event_id: []const u8,
     target_x: f32,
     target_y: f32,
     was_touching_contour: bool,
+    state: IncomingState,
+    settle_start_sec: f32,
+    drag_k: f32,
 };
 
 /// C ABI callback invoked when a tagged heart is tapped.
@@ -363,12 +387,20 @@ pub const App = struct {
         );
         particle.set_vel(vx, vy);
 
+        // Path length from spawn to target; k solved so quadratic drag
+        // lands the heart at FLY_DRAG_END_SPEED right at the target.
+        const path_len = t * speed;
+        const drag_k = @log(speed / (FLY_DRAG_END_SPEED * dpr)) / path_len;
+
         try self.incoming_hearts.append(self.allocator, .{
             .particle = particle,
             .event_id = id_dup,
             .target_x = dest.x,
             .target_y = dest.y,
             .was_touching_contour = false,
+            .state = .flying,
+            .settle_start_sec = 0.0,
+            .drag_k = drag_k,
         });
     }
 
@@ -821,16 +853,33 @@ pub const App = struct {
         const dpr = self.dpr;
         var i: usize = 0;
         while (i < self.incoming_hearts.items.len) {
-            const p = self.incoming_hearts.items[i].particle;
+            const cm = &self.incoming_hearts.items[i];
+            const p = cm.particle;
             if (!p.is_alive()) {
-                self.allocator.free(self.incoming_hearts.items[i].event_id);
+                self.allocator.free(cm.event_id);
                 _ = self.incoming_hearts.swapRemove(i);
                 continue;
             }
 
             const prev_x = p.pos_x();
             const prev_y = p.pos_y();
-            p.translate_by_vel();
+
+            switch (cm.state) {
+                .flying => {
+                    // Brake along the trajectory, clamped at the terminal
+                    // approach speed so the heart always keeps closing in.
+                    const sp = @sqrt(p.vel_x() * p.vel_x() + p.vel_y() * p.vel_y());
+                    const nsp = @max(core_math.drag_step(sp, cm.drag_k), FLY_DRAG_END_SPEED * dpr);
+                    const ratio = nsp / sp;
+                    p.set_vel(p.vel_x() * ratio, p.vel_y() * ratio);
+                    p.translate_by_vel();
+                },
+                .settling => {
+                    const s = core_math.spring_step(p.pos_x(), p.pos_y(), p.vel_x(), p.vel_y(), cm.target_x, cm.target_y, SETTLE_OMEGA, SETTLE_ZETA);
+                    p.set_pos(s.x, s.y);
+                    p.set_vel(s.vx, s.vy);
+                },
+            }
 
             const trail = self.pool.alloc_particle(
                 Vec2{ .x = prev_x, .y = prev_y },
@@ -842,31 +891,53 @@ pub const App = struct {
             trail.set_acc(0, 0);
             trail.set_lifespan(meteor_sys.TRAIL_LIFESPAN);
 
-            const tx = self.incoming_hearts.items[i].target_x;
-            const ty = self.incoming_hearts.items[i].target_y;
-
-            // Each fresh contact with the big heart's contour fires one meteor
-            // shower travelling parallel to this heart's own trajectory,
-            // towards the same destination. Slower and dimmer than the heart
-            // so it stays visibly in the lead.
-            const touching = self.heart.touches_contour(p.pos_x(), p.pos_y(), p.get_size());
-            if (touching and !self.incoming_hearts.items[i].was_touching_contour) {
-                self.meteor_from_heart(p.vel_x(), p.vel_y(), .{
-                    .force = true,
-                    .opacity = 0.65,
-                    .speed_scale = 0.6,
-                });
-            }
-            self.incoming_hearts.items[i].was_touching_contour = touching;
-
+            const tx = cm.target_x;
+            const ty = cm.target_y;
             const adx = tx - p.pos_x();
             const ady = ty - p.pos_y();
             const dist = @sqrt(adx * adx + ady * ady);
-            const past_target = (p.vel_x() * adx + p.vel_y() * ady) < 0;
 
-            if (dist < 20.0 * dpr or past_target) {
-                self.transition_incoming_heart(i, elapsed);
-                continue;
+            switch (cm.state) {
+                .flying => {
+                    // Each fresh contact with the big heart's contour fires one
+                    // meteor shower travelling parallel to this heart's own
+                    // trajectory, towards the same destination. Slower and
+                    // dimmer than the heart so it stays visibly in the lead.
+                    const touching = self.heart.touches_contour(p.pos_x(), p.pos_y(), p.get_size());
+                    if (touching and !cm.was_touching_contour) {
+                        self.meteor_from_heart(p.vel_x(), p.vel_y(), .{
+                            .force = true,
+                            .opacity = 0.65,
+                            .speed_scale = 0.6,
+                        });
+                    }
+                    cm.was_touching_contour = touching;
+
+                    const past_target = (p.vel_x() * adx + p.vel_y() * ady) < 0;
+                    if (dist < 20.0 * dpr or past_target) {
+                        // Enter the settle phase: keep a share of the incoming
+                        // speed so inertia carries the heart through the target.
+                        cm.state = .settling;
+                        cm.settle_start_sec = elapsed;
+                        var svx = p.vel_x() * SETTLE_VEL_KEEP;
+                        var svy = p.vel_y() * SETTLE_VEL_KEEP;
+                        const sp = @sqrt(svx * svx + svy * svy);
+                        const max_sp = SETTLE_MAX_SPEED * dpr;
+                        if (sp > max_sp) {
+                            svx *= max_sp / sp;
+                            svy *= max_sp / sp;
+                        }
+                        p.set_vel(svx, svy);
+                    }
+                },
+                .settling => {
+                    const speed = @sqrt(p.vel_x() * p.vel_x() + p.vel_y() * p.vel_y());
+                    const timed_out = elapsed - cm.settle_start_sec > SETTLE_TIMEOUT_SEC;
+                    if ((dist < SETTLE_DONE_DIST * dpr and speed < SETTLE_DONE_SPEED * dpr) or timed_out) {
+                        self.transition_incoming_heart(i, elapsed);
+                        continue;
+                    }
+                },
             }
 
             i += 1;

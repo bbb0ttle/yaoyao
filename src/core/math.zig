@@ -33,3 +33,23 @@ pub fn breath(sec: f32, min: f32, max: f32) f32 {
 pub fn scale(val: f32, a: f32, b: f32) f32 {
     return val * b / a;
 }
+
+pub const SpringState = struct { x: f32, y: f32, vx: f32, vy: f32 };
+
+/// One frame of quadratic (atmospheric) drag, dv/dt = -k·v², solved exactly
+/// over the 1-frame step. Speed then decays exponentially with distance
+/// travelled, v(x) = v0·e^(-k·x) — a meteor braking as it descends.
+pub fn drag_step(v: f32, k: f32) f32 {
+    return v / (1.0 + k * v);
+}
+
+/// One semi-implicit Euler step of a damped harmonic oscillator toward
+/// (tx, ty). omega is angular frequency in rad/frame; zeta < 1 underdamps
+/// the spring, giving the overshoot-and-settle of follow-through motion.
+pub fn spring_step(x: f32, y: f32, vx: f32, vy: f32, tx: f32, ty: f32, omega: f32, zeta: f32) SpringState {
+    const ax = -omega * omega * (x - tx) - 2.0 * zeta * omega * vx;
+    const ay = -omega * omega * (y - ty) - 2.0 * zeta * omega * vy;
+    const nvx = vx + ax;
+    const nvy = vy + ay;
+    return .{ .x = x + nvx, .y = y + nvy, .vx = nvx, .vy = nvy };
+}
