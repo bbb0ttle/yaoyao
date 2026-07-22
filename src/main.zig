@@ -82,6 +82,8 @@ export fn oayao_trigger_meteor_shower(x: f32, y: f32) void {
     trigger_meteor_shower(x, y);
 }
 
+/// `event_id` is borrowed by the call and copied internally; the caller
+/// retains ownership and may free it afterwards.
 export fn oayao_spawn_heart(event_id: [*:0]const u8) void {
     if (g_app) |app| {
         const len = std.mem.sliceTo(event_id, 0).len;
@@ -91,6 +93,7 @@ export fn oayao_spawn_heart(event_id: [*:0]const u8) void {
     }
 }
 
+/// `event_id` is borrowed by the call; the caller retains ownership.
 export fn oayao_remove_heart(event_id: [*:0]const u8) void {
     if (g_app) |app| {
         const len = std.mem.sliceTo(event_id, 0).len;
@@ -111,6 +114,8 @@ export fn oayao_counter_hearts_frame() CounterHeartsFrame {
     return .{ .x = 0, .y = 0, .w = 0, .h = 0 };
 }
 
+/// `active_ids` is borrowed by the call: a '\n'-separated list of event
+/// ids, never retained after return.
 export fn oayao_sync_hearts(active_ids: [*:0]const u8) void {
     if (g_app) |app| {
         const slice: [:0]const u8 = std.mem.span(active_ids);

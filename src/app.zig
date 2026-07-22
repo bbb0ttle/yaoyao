@@ -21,6 +21,7 @@ const Rng = @import("random.zig").Rng;
 const Vec2 = @import("core/types.zig").Vec2;
 const theme_mod = @import("core/theme.zig");
 const core_math = @import("core/math.zig");
+const days_fmt = @import("core/days.zig");
 const platform_time = @import("platform/time.zig");
 const Theme = theme_mod.Theme;
 const ThemeTransition = theme_mod.ThemeTransition;
@@ -109,6 +110,7 @@ const IncomingHeart = struct {
 };
 
 /// C ABI callback invoked when a tagged heart is tapped.
+/// `event_id` is borrowed: valid only for the duration of the call.
 pub const HeartTapCallback = ?*const fn (event_id: [*:0]const u8) callconv(.c) void;
 
 /// C ABI callback invoked when either counter-pair heart is tapped.
@@ -819,40 +821,7 @@ pub const App = struct {
         if (self.is_days_counter_set) {
             diff_days = (platform_time.unix_ms() - self.days_counter_start_ms) / (1000.0 * 60.0 * 60.0 * 24.0);
         }
-        const int_part: u64 = @intFromFloat(@floor(diff_days));
-        const frac: f64 = diff_days - @floor(diff_days);
-
-        self.days_text_len = 0;
-        format_uint(&self.days_text_buf, &self.days_text_len, int_part);
-
-        if (self.days_text_len < self.days_text_buf.len) {
-            self.days_text_buf[self.days_text_len] = '.';
-            self.days_text_len += 1;
-        }
-
-        var f = frac;
-        var digits: usize = 0;
-        while (digits < 10) : (digits += 1) {
-            f *= 10.0;
-            const d: u8 = @intFromFloat(@floor(f));
-            f -= @floor(f);
-            if (self.days_text_len < self.days_text_buf.len) {
-                self.days_text_buf[self.days_text_len] = '0' + d;
-                self.days_text_len += 1;
-            }
-        }
-
-        const suffix = " DAYS";
-        for (suffix) |byte| {
-            if (self.days_text_len < self.days_text_buf.len) {
-                self.days_text_buf[self.days_text_len] = byte;
-                self.days_text_len += 1;
-            }
-        }
-
-        if (self.days_text_len < self.days_text_buf.len) {
-            self.days_text_buf[self.days_text_len] = 0;
-        }
+        self.days_text_len = days_fmt.format_days(&self.days_text_buf, diff_days);
     }
 
     fn meteor_from_heart(self: *Self, dir_x: f32, dir_y: f32, opts: meteor_sys.MeteorOpts) void {
@@ -1042,30 +1011,5 @@ fn move_incoming_heart(cm: *IncomingHeart) void {
             p.set_pos(s.x, s.y);
             p.set_vel(s.vx, s.vy);
         },
-    }
-}
-
-fn format_uint(buf: []u8, len: *usize, n: u64) void {
-    if (n == 0) {
-        if (len.* < buf.len) {
-            buf[len.*] = '0';
-            len.* += 1;
-        }
-        return;
-    }
-    var tmp: [20]u8 = undefined;
-    var tlen: usize = 0;
-    var v = n;
-    while (v > 0) : (v /= 10) {
-        tmp[tlen] = @as(u8, @intCast(v % 10)) + '0';
-        tlen += 1;
-    }
-    var j: usize = tlen;
-    while (j > 0) {
-        j -= 1;
-        if (len.* < buf.len) {
-            buf[len.*] = tmp[j];
-            len.* += 1;
-        }
     }
 }
