@@ -15,6 +15,7 @@ const meteor_sys = @import("systems/meteor_system.zig");
 const MeteorSystem = meteor_sys.MeteorSystem;
 const NebulaSystem = @import("systems/nebula_system.zig").NebulaSystem;
 const HeartCooling = @import("systems/heart_cooling.zig").HeartCooling;
+const ArchiveList = @import("systems/event_archive.zig").ArchiveList;
 const Particle = @import("particles/particle.zig").Particle;
 const MAX_PARTICLE_SIZE = @import("particles/particle.zig").MAX_PARTICLE_SIZE;
 const Rng = @import("random.zig").Rng;
@@ -76,6 +77,22 @@ const HEART_MIN_SIZE_SCALE: f32 = 0.38;
 const MAX_FLY_IN_HEARTS: usize = 3;
 const SPAWN_BATCH_WINDOW_SEC: f32 = 1.0;
 
+// Tagged hearts are capped at the visual comfort capacity of the canvas:
+// past the cap, the oldest landed heart fades out and its event retires
+// to the archive — the present stays readable, the past is not lost.
+const MAX_TAGGED_HEARTS: usize = 200;
+const MAX_ARCHIVE: usize = 10_000;
+
+// Memory replay: every few minutes a small wave of archived events flies
+// back in as dimmer, smaller ghosts. Waves are sparse on purpose —
+// reminiscing is taxing. Each new wave gently fades the previous one.
+const REPLAY_INTERVAL_MIN_SEC: f32 = 150.0;
+const REPLAY_INTERVAL_MAX_SEC: f32 = 300.0;
+const REPLAY_WAVE_MIN: usize = 4;
+const REPLAY_WAVE_MAX: usize = 8;
+const REPLAY_ALPHA: f32 = 0.55;
+const REPLAY_SIZE_SCALE: f32 = 0.55;
+
 // Tap feedback pulse for the counter-pair hearts: a quick scale pop that
 // eases back to normal.
 const COUNTER_TAP_PULSE_SEC: f32 = 0.35;
@@ -96,14 +113,17 @@ pub const CounterHeartsFrame = extern struct {
 
 const IncomingState = enum { flying, settling };
 
+const IncomingKind = enum { tagged, replay };
+
 const IncomingHeart = struct {
     particle: *Particle,
-    event_id: []const u8,
+    event_id: ?[]const u8,
     target_x: f32,
     target_y: f32,
     was_touching_contour: bool,
     state: IncomingState,
     settle_start_sec: f32,
+    kind: IncomingKind,
     fly_v0: f32,
     path_len: f32,
     trail_carry: f32,
@@ -153,6 +173,10 @@ pub const App = struct {
     tagged_hearts: std.StringHashMap(*Particle),
     incoming_hearts: std.ArrayList(IncomingHeart),
     cooling: HeartCooling,
+    archive: ArchiveList,
+    landed_order: std.ArrayList([]const u8),
+    replay_wave: std.ArrayList(*Particle),
+    next_replay_sec: f32,
     spawn_batch_count: usize,
     last_spawn_sec: f32,
     days_counter_start_ms: f64,
@@ -199,6 +223,10 @@ pub const App = struct {
             .tagged_hearts = std.StringHashMap(*Particle).init(allocator),
             .incoming_hearts = .empty,
             .cooling = HeartCooling.init(allocator),
+            .archive = ArchiveList.init(allocator, MAX_ARCHIVE),
+            .landed_order = .empty,
+            .replay_wave = .empty,
+            .next_replay_sec = 0.0,
             .spawn_batch_count = 0,
             .last_spawn_sec = -1.0e9,
             .days_counter_start_ms = DAYS_COUNTER_DEFAULT_START_MS,
@@ -212,10 +240,13 @@ pub const App = struct {
 
     pub fn deinit(self: *Self) void {
         for (self.incoming_hearts.items) |cm| {
-            self.allocator.free(cm.event_id);
+            if (cm.event_id) |id| self.allocator.free(id);
         }
         self.incoming_hearts.deinit(self.allocator);
         self.cooling.deinit();
+        self.archive.deinit();
+        self.landed_order.deinit(self.allocator);
+        self.replay_wave.deinit(self.allocator);
         var key_it = self.tagged_hearts.keyIterator();
         while (key_it.next()) |key| {
             self.allocator.free(key.*);
@@ -310,6 +341,7 @@ pub const App = struct {
         self.update_incoming_hearts(elapsed);
         self.cooling.update(elapsed, &self.pool, &self.rng, dpr);
         self.update_counter_tap_pulse(elapsed);
+        self.update_replay(elapsed);
 
         // Simulation step for every alive particle, exactly once per frame,
         // before compaction and rendering.
@@ -362,13 +394,16 @@ pub const App = struct {
         // particle pointer held in these containers — drop them now so a
         // later remove/update can never touch a recycled slot. Landed
         // hearts vanish with the pool, as they already did implicitly.
+        // The archive owns plain strings and survives the reset.
+        self.landed_order.clearRetainingCapacity();
+        self.replay_wave.clearRetainingCapacity();
         var key_it = self.tagged_hearts.keyIterator();
         while (key_it.next()) |key| {
             self.allocator.free(key.*);
         }
         self.tagged_hearts.clearRetainingCapacity();
         for (self.incoming_hearts.items) |cm| {
-            self.allocator.free(cm.event_id);
+            if (cm.event_id) |id| self.allocator.free(id);
         }
         self.incoming_hearts.clearRetainingCapacity();
         if (self.is_meteor_ready) {
@@ -384,8 +419,13 @@ pub const App = struct {
         if (self.tagged_hearts.contains(event_id)) return;
 
         for (self.incoming_hearts.items) |cm| {
-            if (std.mem.eql(u8, cm.event_id, event_id)) return;
+            if (cm.event_id) |id| {
+                if (std.mem.eql(u8, id, event_id)) return;
+            }
         }
+
+        // Re-adding an archived event brings it back to the present.
+        _ = self.archive.remove(event_id);
 
         const id_dup = try self.allocator.allocSentinel(u8, event_id.len, 0);
         @memcpy(id_dup[0..event_id.len], event_id);
@@ -409,6 +449,13 @@ pub const App = struct {
             return;
         }
 
+        try self.spawn_fly_in(.tagged, id_dup, dest, w, h, dpr, elapsed);
+    }
+
+    /// Launch a meteor heart towards `dest` on the shared ease-out
+    /// trajectory. For `.tagged`, `event_id` ownership moves into the
+    /// incoming list; for `.replay` it must be null.
+    fn spawn_fly_in(self: *Self, kind: IncomingKind, event_id: ?[]const u8, dest: Vec2, w: f32, h: f32, dpr: f32, elapsed: f32) !void {
         const speed = FLY_START_SPEED * dpr;
         const angle = std.math.atan2(h, w);
         const vx = -@cos(angle) * speed;
@@ -429,12 +476,13 @@ pub const App = struct {
 
         try self.incoming_hearts.append(self.allocator, .{
             .particle = particle,
-            .event_id = id_dup,
+            .event_id = event_id,
             .target_x = dest.x,
             .target_y = dest.y,
             .was_touching_contour = false,
             .state = .flying,
             .settle_start_sec = 0.0,
+            .kind = kind,
             .fly_v0 = speed,
             .path_len = t * speed,
             .trail_carry = 0.0,
@@ -524,14 +572,41 @@ pub const App = struct {
             log.warn("tagged_hearts.put failed, discarding heart for event_id", .{});
             self.allocator.free(event_id);
             p.set_alive(false);
+            return;
         };
+        self.track_landed(event_id);
+    }
+
+    /// Record a landing for cap enforcement: the oldest heart past the cap
+    /// fades out and its event retires to the archive.
+    fn track_landed(self: *Self, event_id: []const u8) void {
+        self.landed_order.append(self.allocator, event_id) catch {
+            log.warn("landed_order.append failed, heart will not age out", .{});
+        };
+        while (self.tagged_hearts.count() > MAX_TAGGED_HEARTS and self.landed_order.items.len > 0) {
+            const oldest_id = self.landed_order.orderedRemove(0);
+            const kv = self.tagged_hearts.fetchRemove(oldest_id) orelse continue;
+            kv.value.set_fading_out(true);
+            self.cooling.cancel(oldest_id);
+            self.archive.put(kv.key) catch {
+                log.warn("archive.put failed, dropping archived event_id", .{});
+            };
+        }
     }
 
     fn convert_incoming_to_fade_in(self: *Self, elapsed: f32) void {
-        for (self.incoming_hearts.items) |cm| {
-            self.fade_in_heart_at(cm.particle, cm.event_id, cm.target_x, cm.target_y, elapsed);
+        var i: usize = 0;
+        while (i < self.incoming_hearts.items.len) {
+            const cm = self.incoming_hearts.items[i];
+            // Replay hearts are not part of the batch budget: they keep
+            // flying while tagged arrivals convert to fade-in.
+            if (cm.kind != .tagged) {
+                i += 1;
+                continue;
+            }
+            self.fade_in_heart_at(cm.particle, cm.event_id.?, cm.target_x, cm.target_y, elapsed);
+            _ = self.incoming_hearts.swapRemove(i);
         }
-        self.incoming_hearts.clearRetainingCapacity();
     }
 
     fn shrink_tagged_hearts(self: *Self) void {
@@ -548,7 +623,14 @@ pub const App = struct {
             kv.value.set_fading_out(true);
             self.cooling.cancel(event_id);
             self.allocator.free(kv.key);
+            for (self.landed_order.items, 0..) |id, i| {
+                if (std.mem.eql(u8, id, event_id)) {
+                    _ = self.landed_order.orderedRemove(i);
+                    break;
+                }
+            }
         }
+        _ = self.archive.remove(event_id);
     }
 
     pub fn sync_hearts(self: *Self, active_ids: [:0]const u8) void {
@@ -585,14 +667,16 @@ pub const App = struct {
         var mi: usize = 0;
         while (mi < self.incoming_hearts.items.len) {
             const cm = self.incoming_hearts.items[mi];
-            if (!active_set.contains(cm.event_id)) {
+            if (cm.kind == .tagged and !active_set.contains(cm.event_id.?)) {
                 cm.particle.set_alive(false);
-                self.allocator.free(cm.event_id);
+                self.allocator.free(cm.event_id.?);
                 _ = self.incoming_hearts.swapRemove(mi);
             } else {
                 mi += 1;
             }
         }
+
+        self.archive.retain_only(&active_set);
     }
 
     pub fn set_heart_tap_callback(self: *Self, cb: HeartTapCallback) void {
@@ -824,6 +908,42 @@ pub const App = struct {
         self.days_text_len = days_fmt.format_days(&self.days_text_buf, diff_days);
     }
 
+    /// Memory replay scheduler: sparse waves only — reminiscing is taxing.
+    fn update_replay(self: *Self, elapsed: f32) void {
+        if (self.archive.len() == 0) return;
+        if (self.next_replay_sec == 0.0) {
+            self.next_replay_sec = elapsed + self.rng.random_range(REPLAY_INTERVAL_MIN_SEC, REPLAY_INTERVAL_MAX_SEC);
+            return;
+        }
+        if (elapsed < self.next_replay_sec) return;
+        self.next_replay_sec = elapsed + self.rng.random_range(REPLAY_INTERVAL_MIN_SEC, REPLAY_INTERVAL_MAX_SEC);
+        self.spawn_replay_wave(elapsed);
+    }
+
+    /// A wave of memories: the previous wave fades out as the new one
+    /// flies in, each heart on the shared ease-out trajectory.
+    fn spawn_replay_wave(self: *Self, elapsed: f32) void {
+        for (self.replay_wave.items) |p| {
+            if (p.is_alive()) p.set_fading_out(true);
+        }
+        self.replay_wave.clearRetainingCapacity();
+
+        var indices: [REPLAY_WAVE_MAX]usize = undefined;
+        const want = REPLAY_WAVE_MIN + self.rng.random_index(REPLAY_WAVE_MAX - REPLAY_WAVE_MIN + 1);
+        const count = self.archive.sample_indices(want, &self.rng, &indices);
+
+        const dpr = self.dpr;
+        const w = sapp.widthf();
+        const h = sapp.heightf();
+        for (indices[0..count]) |_| {
+            const dest = self.pick_landing_spot(w, h, dpr);
+            self.spawn_fly_in(.replay, null, dest, w, h, dpr, elapsed) catch |err| {
+                log.warn("replay fly-in failed: {}", .{err});
+                return;
+            };
+        }
+    }
+
     fn meteor_from_heart(self: *Self, dir_x: f32, dir_y: f32, opts: meteor_sys.MeteorOpts) void {
         var spawns: [30]Vec2 = undefined;
         self.heart.fill_contour_positions(&spawns);
@@ -865,7 +985,7 @@ pub const App = struct {
             const cm = &self.incoming_hearts.items[i];
             const p = cm.particle;
             if (!p.is_alive()) {
-                self.allocator.free(cm.event_id);
+                if (cm.event_id) |id| self.allocator.free(id);
                 _ = self.incoming_hearts.swapRemove(i);
                 continue;
             }
@@ -955,7 +1075,6 @@ pub const App = struct {
     fn transition_incoming_heart(self: *Self, index: usize, elapsed: f32) void {
         const cm = self.incoming_hearts.items[index];
         const p = cm.particle;
-        const event_id = cm.event_id;
 
         p.set_pos(cm.target_x, cm.target_y);
         p.set_immortal(false);
@@ -964,12 +1083,27 @@ pub const App = struct {
         p.set_beat(true);
         p.set_lifespan(self.rng.random_range(75.0, 110.0));
         p.set_birth_sec(elapsed);
-        p.set_size_scale(self.rng.random_range(0.8, 1.0));
         p.set_size(MAX_PARTICLE_SIZE * self.dpr);
         p.set_vel(
             self.rng.random_range(-0.5, 0.5) * self.dpr,
             self.rng.random_range(-2.5, -1.5) * self.dpr,
         );
+
+        if (cm.kind == .replay) {
+            // A memory, not a resident: dimmer and smaller than a real
+            // heart, untracked, unfading until the next wave replaces it.
+            p.set_size_scale(REPLAY_SIZE_SCALE * self.rng.random_range(0.9, 1.1));
+            p.set_alpha_scale(REPLAY_ALPHA);
+            self.replay_wave.append(self.allocator, p) catch {
+                log.warn("replay_wave.append failed, discarding replay heart", .{});
+                p.set_alive(false);
+            };
+            _ = self.incoming_hearts.swapRemove(index);
+            return;
+        }
+
+        const event_id = cm.event_id.?;
+        p.set_size_scale(self.rng.random_range(0.8, 1.0));
 
         // Older hearts recede a step so the newest stays the brightest star.
         self.shrink_tagged_hearts();
@@ -987,6 +1121,7 @@ pub const App = struct {
         };
 
         _ = self.incoming_hearts.swapRemove(index);
+        self.track_landed(event_id);
     }
 };
 
