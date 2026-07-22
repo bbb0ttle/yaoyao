@@ -36,11 +36,14 @@ pub fn scale(val: f32, a: f32, b: f32) f32 {
 
 pub const SpringState = struct { x: f32, y: f32, vx: f32, vy: f32 };
 
-/// One frame of quadratic (atmospheric) drag, dv/dt = -k·v², solved exactly
-/// over the 1-frame step. Speed then decays exponentially with distance
-/// travelled, v(x) = v0·e^(-k·x) — a meteor braking as it descends.
-pub fn drag_step(v: f32, k: f32) f32 {
-    return v / (1.0 + k * v);
+/// Ease-out power-curve speed profile with a cruise floor: velocity along
+/// p(u) = 1 - (1-u)^power, expressed against the remaining distance, but
+/// never dropping below v0·floor_frac. Starts at v0, brakes only late and
+/// only down to the floor — a meteor that barely slows before it lands.
+/// Frame-rate independent, no timekeeping needed.
+pub fn ease_out_speed(v0: f32, remaining: f32, total: f32, power: f32, floor_frac: f32) f32 {
+    const r = @max(remaining, 0.0) / total;
+    return v0 * (floor_frac + (1.0 - floor_frac) * std.math.pow(f32, r, (power - 1.0) / power));
 }
 
 /// One semi-implicit Euler step of a damped harmonic oscillator toward

@@ -44,21 +44,25 @@ const CLUSTER_BIAS: f32 = 0.6;
 // keeping the newest event the most prominent.
 const HEART_SHRINK_FACTOR: f32 = 0.94;
 
-// Atmospheric drag on the fly-in: a real meteor is braked by the air, its
-// speed decaying exponentially with distance travelled (quadratic drag).
-// The heart enters at twice the background meteor speed — a blazing streak
-// that the atmosphere brakes hard over the first third of the path — then
-// glides in at the terminal approach speed, reached exactly at the target.
+// Ease-out deceleration on the fly-in: the heart enters at twice the
+// background meteor speed and stays fast — the power ease-out brakes only
+// late and only down to the cruise floor, so the landing itself is the
+// payoff: the spring catches the arrival energy in a punchy recoil.
 const FLY_START_SPEED: f32 = 16.0; // px/frame × dpr
-const FLY_DRAG_END_SPEED: f32 = 2.5; // px/frame × dpr
+const FLY_EASE_POWER: f32 = 3.0; // cubic ease-out; higher = later, sharper braking
+const FLY_CRUISE_FRAC: f32 = 0.5; // arrival speed as a fraction of entry speed
 
-// Follow-through settle: an arriving heart keeps a share of its incoming
-// velocity, and a damped spring carries it past the target before easing
-// back to rest — inertia, not a hard stop (follow-through and overlapping
-// action).
-const SETTLE_VEL_KEEP: f32 = 0.15;
-const SETTLE_MAX_SPEED: f32 = 1.0; // px/frame × dpr
-const SETTLE_OMEGA: f32 = 0.35; // rad/frame
+// Trail dots are laid at this spacing along the flight path, carried
+// across frames, so the streak stays evenly dotted no matter how the
+// per-frame speed changes (each dot is TRAIL_SIZE wide; half-width
+// overlap keeps the trail continuous).
+const TRAIL_GAP: f32 = 8.0; // px × dpr
+
+// Follow-through settle: the arrival velocity carries straight into a
+// damped spring — no speed cut at the handoff. The stiff spring catches
+// the high-speed arrival in a short recoil (overshoot ≈ speed/omega)
+// before easing back to rest.
+const SETTLE_OMEGA: f32 = 0.8; // rad/frame
 const SETTLE_ZETA: f32 = 0.55; // slight underdamping: tiny overshoot, decisive snap back
 const SETTLE_DONE_DIST: f32 = 1.5; // × dpr
 const SETTLE_DONE_SPEED: f32 = 0.2; // × dpr
@@ -100,7 +104,9 @@ const IncomingHeart = struct {
     was_touching_contour: bool,
     state: IncomingState,
     settle_start_sec: f32,
-    drag_k: f32,
+    fly_v0: f32,
+    path_len: f32,
+    trail_carry: f32,
 };
 
 /// C ABI callback invoked when a tagged heart is tapped.
@@ -389,11 +395,6 @@ pub const App = struct {
         );
         particle.set_vel(vx, vy);
 
-        // Path length from spawn to target; k solved so quadratic drag
-        // lands the heart at FLY_DRAG_END_SPEED right at the target.
-        const path_len = t * speed;
-        const drag_k = @log(speed / (FLY_DRAG_END_SPEED * dpr)) / path_len;
-
         try self.incoming_hearts.append(self.allocator, .{
             .particle = particle,
             .event_id = id_dup,
@@ -402,7 +403,9 @@ pub const App = struct {
             .was_touching_contour = false,
             .state = .flying,
             .settle_start_sec = 0.0,
-            .drag_k = drag_k,
+            .fly_v0 = speed,
+            .path_len = t * speed,
+            .trail_carry = 0.0,
         });
     }
 
@@ -868,10 +871,14 @@ pub const App = struct {
 
             switch (cm.state) {
                 .flying => {
-                    // Brake along the trajectory, clamped at the terminal
-                    // approach speed so the heart always keeps closing in.
+                    // Ease-out braking: speed follows v0·(remaining/path)^((n-1)/n),
+                    // a pure function of the remaining distance. Scaling both
+                    // components equally keeps the trajectory a straight line.
+                    const rdx = cm.target_x - p.pos_x();
+                    const rdy = cm.target_y - p.pos_y();
+                    const remaining = @sqrt(rdx * rdx + rdy * rdy);
                     const sp = @sqrt(p.vel_x() * p.vel_x() + p.vel_y() * p.vel_y());
-                    const nsp = @max(core_math.drag_step(sp, cm.drag_k), FLY_DRAG_END_SPEED * dpr);
+                    const nsp = core_math.ease_out_speed(cm.fly_v0, remaining, cm.path_len, FLY_EASE_POWER, FLY_CRUISE_FRAC);
                     const ratio = nsp / sp;
                     p.set_vel(p.vel_x() * ratio, p.vel_y() * ratio);
                     p.translate_by_vel();
@@ -883,15 +890,30 @@ pub const App = struct {
                 },
             }
 
-            const trail = self.pool.alloc_particle(
-                Vec2{ .x = prev_x, .y = prev_y },
-                elapsed,
-                .{ .size = meteor_sys.TRAIL_SIZE * dpr },
-                &self.rng,
-            );
-            trail.set_vel(0, 0);
-            trail.set_acc(0, 0);
-            trail.set_lifespan(meteor_sys.TRAIL_LIFESPAN);
+            const step_x = p.pos_x() - prev_x;
+            const step_y = p.pos_y() - prev_y;
+            const step_dist = @sqrt(step_x * step_x + step_y * step_y);
+
+            // Evenly spaced trail dots along the whole path: the sub-gap
+            // remainder carries across frames, so dot spacing never jitters
+            // as the speed changes.
+            if (step_dist > 0.0) {
+                const gap = TRAIL_GAP * dpr;
+                cm.trail_carry += step_dist;
+                while (cm.trail_carry >= gap) {
+                    cm.trail_carry -= gap;
+                    const f = 1.0 - cm.trail_carry / step_dist;
+                    const trail = self.pool.alloc_particle(
+                        Vec2{ .x = prev_x + step_x * f, .y = prev_y + step_y * f },
+                        elapsed,
+                        .{ .size = meteor_sys.TRAIL_SIZE * dpr },
+                        &self.rng,
+                    );
+                    trail.set_vel(0, 0);
+                    trail.set_acc(0, 0);
+                    trail.set_lifespan(meteor_sys.TRAIL_LIFESPAN);
+                }
+            }
 
             const tx = cm.target_x;
             const ty = cm.target_y;
@@ -917,19 +939,11 @@ pub const App = struct {
 
                     const past_target = (p.vel_x() * adx + p.vel_y() * ady) < 0;
                     if (dist < 20.0 * dpr or past_target) {
-                        // Enter the settle phase: keep a share of the incoming
-                        // speed so inertia carries the heart through the target.
+                        // Hand the arrival velocity straight to the spring —
+                        // no speed cut, so the braking continues seamlessly
+                        // through the follow-through overshoot.
                         cm.state = .settling;
                         cm.settle_start_sec = elapsed;
-                        var svx = p.vel_x() * SETTLE_VEL_KEEP;
-                        var svy = p.vel_y() * SETTLE_VEL_KEEP;
-                        const sp = @sqrt(svx * svx + svy * svy);
-                        const max_sp = SETTLE_MAX_SPEED * dpr;
-                        if (sp > max_sp) {
-                            svx *= max_sp / sp;
-                            svy *= max_sp / sp;
-                        }
-                        p.set_vel(svx, svy);
                     }
                 },
                 .settling => {

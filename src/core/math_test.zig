@@ -42,27 +42,27 @@ test "scale linear" {
     try testing.expectApproxEqAbs(75.0, math.scale(150.0, 200.0, 100.0), 1e-6);
 }
 
-test "drag_step decays speed exponentially with distance travelled" {
-    // Quadratic drag over path length D lands at exactly v0·e^(-k·D):
-    // blazing entry, gentle final approach, like a meteor braking.
-    const v0: f32 = 8.0;
-    const v_end: f32 = 3.0;
-    const dist: f32 = 1200.0;
-    const k = @log(v0 / v_end) / dist;
-
-    var v = v0;
-    var x: f32 = 0.0;
-    var max_step_drop: f32 = 0.0;
-    while (x < dist) {
-        const nv = math.drag_step(v, k);
-        max_step_drop = @max(max_step_drop, v - nv);
-        x += nv;
-        v = nv;
+test "ease_out_speed brakes late and never below the cruise floor" {
+    const v0: f32 = 16.0;
+    const dist: f32 = 750.0;
+    const floor: f32 = 0.5;
+    // Full speed at the start, floor speed on arrival.
+    try testing.expectApproxEqAbs(v0, math.ease_out_speed(v0, dist, dist, 3.0, floor), 1e-6);
+    try testing.expectApproxEqAbs(v0 * floor, math.ease_out_speed(v0, 0.0, dist, 3.0, floor), 1e-6);
+    // Still near cruise speed halfway in: braking is concentrated late.
+    try testing.expectApproxEqAbs(
+        v0 * (floor + (1.0 - floor) * std.math.pow(f32, 0.5, 2.0 / 3.0)),
+        math.ease_out_speed(v0, dist / 2.0, dist, 3.0, floor),
+        1e-6,
+    );
+    // Monotonic all the way in.
+    var r = dist;
+    var prev = v0 + 1.0;
+    while (r > 0.0) : (r -= 10.0) {
+        const v = math.ease_out_speed(v0, r, dist, 3.0, floor);
+        try testing.expect(v < prev);
+        prev = v;
     }
-    try testing.expectApproxEqAbs(v_end, v, 0.05);
-    // Deceleration is sharpest at entry (drag ∝ v²), never later.
-    try testing.expect(max_step_drop > 0.0);
-    try testing.expect(max_step_drop < 0.2);
 }
 
 test "spring_step converges to target and rests" {
