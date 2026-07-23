@@ -1,6 +1,5 @@
 //! Text and particle instance buffer filling for GPU upload.
 
-
 const GpuInstance = @import("gpu_state.zig").GpuInstance;
 const GpuState = @import("gpu_state.zig").GpuState;
 const MAX_INSTANCES = @import("gpu_state.zig").MAX_INSTANCES;
@@ -83,7 +82,6 @@ pub fn fill_text_instances(
     start_inst: u32,
     cache: *const TextLayout,
 ) u32 {
-
     const pixel_size = cache.pixel_size;
     const char_stride = cache.char_stride;
     const text_x = cache.text_x;

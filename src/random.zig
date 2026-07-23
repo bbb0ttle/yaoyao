@@ -1,6 +1,5 @@
 //! Pseudorandom number generator using a linear congruential engine.
 
-
 /// Pseudorandom number generator with seedable LCG state.
 pub const Rng = struct {
     const Self = @This();

@@ -1,6 +1,5 @@
 //! GPU backend detection and simulator workaround.
 
-
 const sokol = @import("sokol");
 const sg = sokol.gfx;
 

@@ -1,6 +1,5 @@
 //! Shared primitive types: color, 2D vector.
 
-
 /// 8-bit RGBA color with named palette constants.
 pub const Rgba = struct {
     const Self = @This();

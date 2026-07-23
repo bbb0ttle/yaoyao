@@ -153,6 +153,8 @@ pub fn build(b: *Build) !void {
     const fmt_step = b.step("fmt", "Check formatting with zig fmt");
     const fmt = b.addFmt(.{
         .paths = &.{ b.path("src"), b.path("build.zig"), b.path("build.zig.zon") },
+        // particle.glsl.zig is shdc-generated: excluded per AGENTS.md.
+        .exclude_paths = &.{b.path("src/shaders/particle.glsl.zig")},
         .check = true,
     });
     fmt_step.dependOn(&fmt.step);

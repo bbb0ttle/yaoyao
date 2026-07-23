@@ -1,6 +1,5 @@
 //! Particle instance with position, velocity, lifecycle, and rendering flags.
 
-
 const Vec2 = @import("../core/types.zig").Vec2;
 const Rng = @import("../random.zig").Rng;
 

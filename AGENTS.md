@@ -7,6 +7,7 @@
 ```bash
 zig build test                                   # 单元测试（全量）
 zig build test -Dtest-filter="pool"              # 过滤测试（推荐日常使用）
+zig build fmt                                    # 格式检查（提交前必过）
 zig build run                                    # 桌面运行
 zig build -Dtarget=aarch64-ios                   # iOS 静态库
 zig build -Dtarget=aarch64-ios ios-app           # iOS .app 包

@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsSheet: View {
     @AppStorage(SettingsStore.calendarNameKey) private var calendarName = SettingsStore.defaultCalendarName
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
-    @State private var skyMode = 0
+    @State private var skyMode = 2
     @ObservedObject private var languageManager = LanguageManager.shared
     @ObservedObject private var calendarManager = CalendarManager.shared
     @State private var counterStart: Date? = nil

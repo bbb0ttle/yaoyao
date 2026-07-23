@@ -1,6 +1,5 @@
 //! Meteor shower effect with edge-fade, trail particles, and head compaction.
 
-
 const Vec2 = @import("../core/types.zig").Vec2;
 const Particle = @import("../particles/particle.zig").Particle;
 const MAX_LIFESPAN = @import("../particles/particle.zig").MAX_LIFESPAN;
