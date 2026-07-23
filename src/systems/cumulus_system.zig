@@ -49,7 +49,7 @@ pub const CumulusSystem = struct {
             self.speeds[i] = (if (near) rng.random_range(0.22, 0.4) else rng.random_range(0.08, 0.18)) * dpr;
             self.phases[i] = rng.random_range(0.0, 2.0 * std.math.pi);
             self.breath_speeds[i] = rng.random_range(0.06, 0.15);
-            self.base_alphas[i] = if (near) 0.85 else 0.55;
+            self.base_alphas[i] = if (near) 0.75 else 0.45;
         }
         return self;
     }

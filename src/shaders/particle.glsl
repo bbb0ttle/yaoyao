@@ -125,9 +125,11 @@ void main() {
         float dome = 1.0 - dot(uv * vec2(1.0, 1.25), uv * vec2(1.0, 1.25));
         dome -= smoothstep(0.15, 0.75, uv.y) * 0.5; // flatten and fade the base
         float n = fbm(uv * 2.8 + v_stroke_a) * 0.85 + dome * 0.9 - 0.28;
-        float a = smoothstep(0.22, 0.5, n) * v_fill_a;
-        float lit = clamp(dome * 0.9 - uv.y * 0.9 + (n - 0.4) * 1.2, 0.0, 1.0);
-        frag_color = vec4(mix(stroke_color.rgb, fill_color.rgb, lit), a);
+        // Monochrome puff: depth comes from alpha alone — dense crests read
+        // solid, the thin base and rims fade away.
+        float body = smoothstep(0.22, 0.5, n);
+        float crest = clamp(dome * 0.85 - uv.y * 1.05 + (n - 0.45) * 1.2, 0.0, 1.0);
+        frag_color = vec4(fill_color.rgb, body * (0.55 + 0.45 * crest) * v_fill_a);
         return;
     }
 
