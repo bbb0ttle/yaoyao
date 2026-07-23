@@ -319,6 +319,105 @@ import Combine
             .caseInsensitiveCompare(counterStartTitle) == .orderedSame
     }
 
+    #if DEBUG
+    // MARK: - Stress Testing (DEBUG only)
+
+    /// Title prefix for calendar-seeded stress events, so they can be
+    /// found and wiped without touching real events.
+    private let stressTitlePrefix = "压测事件"
+
+    /// Drive the renderer directly with synthetic events, bypassing
+    /// EventKit: validates the spawn queue, progressive fade-in, and the
+    /// tagged-heart cap. `stress-` ids never touch the real calendar.
+    func stressSpawn(count: Int) {
+        let ids = (0..<count).map { "stress-\($0)" }
+        for id in ids { oayao_spawn_heart(id) }
+        oayao_sync_hearts(ids.joined(separator: "\n"))
+    }
+
+    /// Remove every synthetic stress heart (including archived ones).
+    func stressClearRenderer(count: Int) {
+        for i in 0..<count { oayao_remove_heart("stress-\(i)") }
+    }
+
+    /// Write `count` synthetic events into the app's calendar with a single
+    /// commit, for the real cold-start sync path. Completion runs on main
+    /// with the number of events actually saved.
+    func stressSeedCalendar(count: Int, completion: @escaping (Int) -> Void) {
+        guard hasAccess, let calendar = writableCalendar else {
+            DispatchQueue.main.async { completion(0) }
+            return
+        }
+        workQueue.async { [weak self] in
+            guard let self else {
+                DispatchQueue.main.async { completion(0) }
+                return
+            }
+            let today = Calendar.current.startOfDay(for: Date())
+            var saved = 0
+            for i in 0..<count {
+                let event = EKEvent(eventStore: self.eventStore)
+                event.title = "\(self.stressTitlePrefix)-\(i)"
+                event.calendar = calendar
+                // Spread over the day in half-hour slots so all land in
+                // today's sync window.
+                event.startDate = today.addingTimeInterval(TimeInterval((i % 48) * 1800))
+                event.endDate = event.startDate.addingTimeInterval(1500)
+                do {
+                    try self.eventStore.save(event, span: .thisEvent, commit: false)
+                    saved += 1
+                } catch {
+                    print("[Oayao] Stress seed save failed at \(i): \(error)")
+                    break
+                }
+            }
+            do {
+                try self.eventStore.commit()
+            } catch {
+                print("[Oayao] Stress seed commit failed: \(error)")
+            }
+            DispatchQueue.main.async { completion(saved) }
+        }
+    }
+
+    /// Delete every calendar event created by stressSeedCalendar, with a
+    /// single commit. Completion runs on main with the removal count.
+    func stressClearCalendar(completion: @escaping (Int) -> Void) {
+        workQueue.async { [weak self] in
+            guard let self else {
+                DispatchQueue.main.async { completion(0) }
+                return
+            }
+            let today = Calendar.current.startOfDay(for: Date())
+            guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) else {
+                DispatchQueue.main.async { completion(0) }
+                return
+            }
+            var removed = 0
+            for calendar in self.oayaoCalendars {
+                let predicate = self.eventStore.predicateForEvents(
+                    withStart: today, end: tomorrow, calendars: [calendar]
+                )
+                for event in self.eventStore.events(matching: predicate)
+                where event.title?.hasPrefix(self.stressTitlePrefix) == true {
+                    do {
+                        try self.eventStore.remove(event, span: .thisEvent, commit: false)
+                        removed += 1
+                    } catch {
+                        print("[Oayao] Stress clear remove failed: \(error)")
+                    }
+                }
+            }
+            do {
+                try self.eventStore.commit()
+            } catch {
+                print("[Oayao] Stress clear commit failed: \(error)")
+            }
+            DispatchQueue.main.async { completion(removed) }
+        }
+    }
+    #endif
+
     // MARK: - CRUD
 
     func addEvent(

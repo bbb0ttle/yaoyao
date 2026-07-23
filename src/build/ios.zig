@@ -55,7 +55,9 @@ pub fn createAppBundle(
     const platform = if (target.result.abi == .simulator) "iphonesimulator" else "iphoneos";
     const sdk_root = sdkRoot(b, target);
     const developer_dir = xcodeDeveloperDir(b);
-    const swift_opt: []const u8 = if (optimize == .Debug) "-Onone" else "-O";
+    // Plain swiftc does not define DEBUG on its own; pass it so #if DEBUG
+    // sections (e.g. the stress-test UI) compile in debug builds only.
+    const swift_flags: []const u8 = if (optimize == .Debug) "-Onone -D DEBUG" else "-O";
 
     // Construct clang target triple from resolved target.
     const clang_arch: []const u8 = if (target.result.cpu.arch == .aarch64) "arm64" else @tagName(target.result.cpu.arch);
@@ -155,7 +157,7 @@ pub fn createAppBundle(
         \\  -c "Add :DTXcodeBuild string $XCODE_BUILD" \
         \\  "$APP/Info.plist"
         \\echo "Created Oayao.app bundle at zig-out/Oayao.app"
-    , .{ sdk_root, swift_target, platform, clang_target, developer_dir, platform, swift_opt });
+    , .{ sdk_root, swift_target, platform, clang_target, developer_dir, platform, swift_flags });
 
     const cmd = b.addSystemCommand(&.{ "sh", "-c" });
     cmd.addArg(script);

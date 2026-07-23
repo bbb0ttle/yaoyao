@@ -8,12 +8,14 @@ cd "$PROJECT_DIR"
 # --- Argument parsing ---
 DEVICE="${PREVIEW_DEVICE:-iPhone 17}"
 NO_BUILD=false
+RELEASE=false
 
 usage() {
-    echo "Usage: $0 [--device <name>] [--no-build]"
+    echo "Usage: $0 [--device <name>] [--no-build] [--release]"
     echo "  --device <name>  Target simulator device (default: iPhone 17)"
     echo "                    Override with PREVIEW_DEVICE env var"
     echo "  --no-build       Skip zig build steps, reuse existing zig-out/Oayao.app"
+    echo "  --release        Build ReleaseFast (no #if DEBUG stress-test UI)"
     exit 1
 }
 
@@ -25,6 +27,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-build)
             NO_BUILD=true
+            shift
+            ;;
+        --release)
+            RELEASE=true
             shift
             ;;
         --help|-h)
@@ -39,13 +45,20 @@ done
 
 echo "==> Preview target device: $DEVICE"
 
+# Debug is the default so #if DEBUG entries (stress-test UI) are present;
+# pass --release for a ReleaseFast preview.
+RELEASE_FLAGS=()
+if [ "$RELEASE" = true ]; then
+    RELEASE_FLAGS=(-Drelease=true)
+fi
+
 # --- Build ---
 if [ "$NO_BUILD" = false ]; then
     echo "==> Building oayao for iOS Simulator (aarch64)..."
-    zig build -Dtarget=aarch64-ios-simulator -Drelease=true
+    zig build -Dtarget=aarch64-ios-simulator "${RELEASE_FLAGS[@]}"
 
     echo "==> Creating Oayao.app bundle..."
-    zig build ios-app -Dtarget=aarch64-ios-simulator -Drelease=true
+    zig build ios-app -Dtarget=aarch64-ios-simulator "${RELEASE_FLAGS[@]}"
 else
     if [ ! -d "zig-out/Oayao.app" ]; then
         echo "Error: --no-build specified but zig-out/Oayao.app does not exist."

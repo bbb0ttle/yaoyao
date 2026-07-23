@@ -663,6 +663,18 @@ pub const App = struct {
     }
 
     pub fn remove_heart(self: *Self, event_id: []const u8) void {
+        // Queued spawns for this event are dropped too — otherwise a
+        // removed heart would still appear once the drain reaches it.
+        var qi: usize = self.spawn_queue_head;
+        while (qi < self.spawn_queue.items.len) {
+            if (std.mem.eql(u8, self.spawn_queue.items[qi], event_id)) {
+                self.allocator.free(self.spawn_queue.items[qi]);
+                _ = self.spawn_queue.orderedRemove(qi);
+            } else {
+                qi += 1;
+            }
+        }
+
         if (self.tagged_hearts.fetchRemove(event_id)) |kv| {
             kv.value.set_fading_out(true);
             self.cooling.cancel(event_id);

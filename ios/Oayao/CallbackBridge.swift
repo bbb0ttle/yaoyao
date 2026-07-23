@@ -57,6 +57,9 @@ func oayao_swift_bootstrap() {
 
         addOverlayButtons()
         addCounterHeartsAccessElement()
+        #if DEBUG
+        addStressPanel()
+        #endif
 
         // Pre-warm SwiftUI view caches after the initial Metal render completes.
         // NavigationView + Form create UIKit backing views (UINavigationController,
@@ -201,6 +204,104 @@ private struct OverlayButtons: View {
         }
     }
 }
+
+#if DEBUG
+/// Floating stress-test panel over the canvas (debug builds only): the
+/// effect of every action is visible live without leaving the canvas.
+/// The hosting view uses a fixed frame — SwiftUI hit-testing is
+/// content-aware, so empty areas fall through to the canvas while the
+/// buttons always stay in bounds.
+private struct StressPanel: View {
+    @ObservedObject private var calendarManager = CalendarManager.shared
+    @State private var expanded = false
+    @State private var status: String? = nil
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            Button {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                    expanded.toggle()
+                }
+            } label: {
+                Image(systemName: "ant")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                    .frame(width: 44, height: 44)
+                    .modifier(GlassModifier(cornerRadius: 22))
+            }
+            .buttonStyle(ScaleButtonStyle())
+
+            if expanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    StressButton(title: "生成 2000 心") {
+                        calendarManager.stressSpawn(count: 2000)
+                        status = "已推送 2000，观察分批淡入"
+                    }
+                    StressButton(title: "清除压测心") {
+                        calendarManager.stressClearRenderer(count: 2000)
+                        status = "已清除"
+                    }
+                    StressButton(title: "写入日历 2000") {
+                        status = "写入中…"
+                        calendarManager.stressSeedCalendar(count: 2000) { saved in
+                            status = "已写入 \(saved) 条，杀进程冷启动验证"
+                        }
+                    }
+                    StressButton(title: "清除日历压测") {
+                        status = "清除中…"
+                        calendarManager.stressClearCalendar { removed in
+                            status = "已删除 \(removed) 条"
+                        }
+                    }
+                    if let status {
+                        Text(status)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .font(.caption)
+                .padding(10)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
+}
+
+/// Full-width row button with an explicit hit shape, so taps anywhere on
+/// the row register — the default borderless hit area is label-only.
+private struct StressButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+    }
+}
+
+private func addStressPanel() {
+    guard let window = keyWindow() else { return }
+
+    let host = UIHostingController(rootView: StressPanel())
+    host.view.backgroundColor = .clear
+    host.view.translatesAutoresizingMaskIntoConstraints = false
+    window.addSubview(host.view)
+
+    NSLayoutConstraint.activate([
+        host.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+        host.view.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor, constant: 16),
+        host.view.widthAnchor.constraint(equalToConstant: 200),
+        host.view.heightAnchor.constraint(equalToConstant: 300),
+    ])
+}
+#endif
 
 private func addOverlayButtons() {
     guard let window = keyWindow() else { return }
