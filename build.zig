@@ -7,7 +7,10 @@ const sokol_clib = @import("src/build/sokol.zig");
 
 pub fn build(b: *Build) !void {
     var target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
+    // Production default is ReleaseSafe: bounds/overflow violations stay
+    // panics instead of silent UB. ReleaseFast is opt-in via -Drelease=fast
+    // for benchmark-verified builds only.
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSafe });
     const is_web = target.result.cpu.arch.isWasm();
 
     // Override iOS deployment target: min 12.0, SDK 26.5 (required by App Store Connect).
@@ -145,4 +148,12 @@ pub fn build(b: *Build) !void {
     });
     const run_tests = b.addRunArtifact(tests);
     test_step.dependOn(&run_tests.step);
+
+    // --- Format check ---
+    const fmt_step = b.step("fmt", "Check formatting with zig fmt");
+    const fmt = b.addFmt(.{
+        .paths = &.{ b.path("src"), b.path("build.zig"), b.path("build.zig.zon") },
+        .check = true,
+    });
+    fmt_step.dependOn(&fmt.step);
 }
