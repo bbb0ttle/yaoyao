@@ -57,8 +57,8 @@ enum L10n {
         case notes, location, event, close, deleteEvent, loading
         case date
         case heart, opacity, motion, motionBeat, motionBreath, positionY, resetDefaults
-        case size, nebula
-        case sky, skyOff, cumulus
+        case size
+        case sky, skyOff, cumulus, cirrus
     }
 
     static func tr(_ key: Key) -> String {
@@ -174,9 +174,9 @@ enum L10n {
         .positionY: ("Vertical Position", "垂直位置"),
         .resetDefaults: ("Reset to Defaults", "恢复默认"),
         .size: ("Size", "尺寸"),
-        .nebula: ("Nebula", "星云"),
         .sky: ("Sky", "天空"),
         .skyOff: ("Off", "关闭"),
         .cumulus: ("Cumulus", "浓积云"),
+        .cirrus: ("Cirrus", "卷云"),
     ]
 }

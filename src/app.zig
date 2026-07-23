@@ -13,8 +13,8 @@ const HeartSystem = @import("systems/heart_system.zig").HeartSystem;
 const MotionMode = @import("systems/heart_system.zig").MotionMode;
 const meteor_sys = @import("systems/meteor_system.zig");
 const MeteorSystem = meteor_sys.MeteorSystem;
-const NebulaSystem = @import("systems/nebula_system.zig").NebulaSystem;
 const CumulusSystem = @import("systems/cumulus_system.zig").CumulusSystem;
+const CirrusSystem = @import("systems/cirrus_system.zig").CirrusSystem;
 const HeartCooling = @import("systems/heart_cooling.zig").HeartCooling;
 const ArchiveList = @import("systems/event_archive.zig").ArchiveList;
 const Particle = @import("particles/particle.zig").Particle;
@@ -120,8 +120,8 @@ pub const CounterHeartsFrame = extern struct {
 /// Sky backdrop mode; values are part of the C ABI.
 pub const SkyMode = enum(u32) {
     off = 0,
-    nebula = 1,
-    cumulus = 2,
+    cumulus = 1,
+    cirrus = 2,
 };
 
 const IncomingState = enum { flying, settling };
@@ -157,8 +157,8 @@ pub const App = struct {
     pool: ParticlePool,
     heart: HeartSystem,
     meteor: MeteorSystem,
-    nebula: NebulaSystem,
     cumulus: CumulusSystem,
+    cirrus: CirrusSystem,
     rng: Rng,
     allocator: std.mem.Allocator,
 
@@ -214,8 +214,8 @@ pub const App = struct {
             .pool = pool,
             .heart = undefined,
             .meteor = undefined,
-            .nebula = undefined,
             .cumulus = undefined,
+            .cirrus = undefined,
             .rng = rng,
             .allocator = allocator,
             .is_heart_ready = false,
@@ -351,16 +351,16 @@ pub const App = struct {
 
         if (self.sky_mode != .off and !self.sky_ready) {
             switch (self.sky_mode) {
-                .nebula => self.nebula = NebulaSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
                 .cumulus => self.cumulus = CumulusSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
+                .cirrus => self.cirrus = CirrusSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
                 .off => unreachable,
             }
             self.sky_ready = true;
         }
         if (self.sky_ready) {
             switch (self.sky_mode) {
-                .nebula => self.nebula.update(elapsed, w, h),
                 .cumulus => self.cumulus.update(elapsed, w, h),
+                .cirrus => self.cirrus.update(elapsed, w, h),
                 .off => {},
             }
         }
@@ -852,8 +852,8 @@ pub const App = struct {
         if (mode == self.sky_mode) return;
         if (self.sky_ready) {
             switch (self.sky_mode) {
-                .nebula => self.nebula.clear(),
                 .cumulus => self.cumulus.clear(),
+                .cirrus => self.cirrus.clear(),
                 .off => {},
             }
             self.sky_ready = false;
@@ -862,7 +862,7 @@ pub const App = struct {
     }
 
     /// Legacy toggle kept for the existing bridge callers: on maps to
-    /// nebula, off to off.
+    /// cumulus, off to off.
     pub fn set_nebula_enabled(self: *Self, enabled: bool) void {
         self.set_sky_mode(if (enabled) 1 else 0);
     }

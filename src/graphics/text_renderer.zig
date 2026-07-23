@@ -160,7 +160,7 @@ fn fill_pass(
 
     for (alive) |idx| {
         const p = pool.get_particle(idx);
-        if ((p.is_cooling() or p.is_cumulus()) != background_pass) continue;
+        if ((p.is_cooling() or p.is_sky()) != background_pass) continue;
 
         const alpha_scale = p.get_alpha_scale();
         const max_alpha: f32 = if (p.is_immortal()) 1.0 else math.scale(p.get_lifespan(), MAX_LIFESPAN, 200.0) / 255.0;
@@ -174,15 +174,15 @@ fn fill_pass(
 
         const fill_alpha = max_alpha * t * alpha_scale;
         const stroke_alpha = @min(1.0, p.get_lifespan() / 255.0) * t * alpha_scale;
-        const shape: f32 = if (p.is_blob()) 3.0 else if (p.is_cumulus()) 4.0 else if (display_size + stroke_width < 8.0) 0.0 else 1.0;
+        const shape: f32 = if (p.is_sky()) 4.0 + @as(f32, @floatFromInt(@intFromEnum(p.get_sky_kind()) - 1)) else if (display_size + stroke_width < 8.0) 0.0 else 1.0;
 
         gpu.write_instance(inst_count, .{
             .pos_x = p.pos_x(),
             .pos_y = p.pos_y(),
             .stroke_size = display_size + stroke_width,
             .fill_size = display_size,
-            // Cumulus puffs carry their fbm seed (birth_sec) in stroke_a.
-            .stroke_a = if (p.is_blob()) 0.0 else if (p.is_cumulus()) p.get_birth_sec() else if (stroke_alpha > 10.0 / 255.0) stroke_alpha else 0.0,
+            // Sky clouds carry their fbm seed (birth_sec) in stroke_a.
+            .stroke_a = if (p.is_sky()) p.get_birth_sec() else if (stroke_alpha > 10.0 / 255.0) stroke_alpha else 0.0,
             .fill_a = if (fill_alpha > 0.0) fill_alpha else 0.0,
             .shape = shape,
         });

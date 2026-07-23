@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsSheet: View {
     @AppStorage(SettingsStore.calendarNameKey) private var calendarName = SettingsStore.defaultCalendarName
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
-    @State private var skyMode = 2
+    @State private var skyMode = 1
     @ObservedObject private var languageManager = LanguageManager.shared
     @ObservedObject private var calendarManager = CalendarManager.shared
     @State private var counterStart: Date? = nil
@@ -88,8 +88,8 @@ struct SettingsSheet: View {
                     }
                     Picker(L10n.tr(.sky), selection: $skyMode) {
                         Text(L10n.tr(.skyOff)).tag(0)
-                        Text(L10n.tr(.nebula)).tag(1)
-                        Text(L10n.tr(.cumulus)).tag(2)
+                        Text(L10n.tr(.cumulus)).tag(1)
+                        Text(L10n.tr(.cirrus)).tag(2)
                     }
                     .onChange(of: skyMode) { mode in
                         SettingsStore.skyMode = mode

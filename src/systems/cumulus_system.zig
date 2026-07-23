@@ -37,7 +37,7 @@ pub const CumulusSystem = struct {
             const puff = pool.alloc_particle(Vec2{
                 .x = rng.random_range(0.0, w),
                 .y = rng.random_range(h * 0.05, h * 0.45),
-            }, elapsed, .{ .immortal = true, .cumulus = true, .size = size }, rng);
+            }, elapsed, .{ .immortal = true, .sky = .cumulus, .size = size }, rng);
             puff.set_vel(0, 0);
             puff.set_acc(0, 0);
             // birth_sec doubles as the puff's fbm seed (carried to the

@@ -88,7 +88,7 @@ enum SettingsStore {
         set { UserDefaults.standard.set(newValue, forKey: heartSizeScaleKey) }
     }
 
-    /// Sky backdrop mode (0 = off, 1 = nebula, 2 = cumulus); defaults to
+    /// Sky backdrop mode (0 = off, 1 = cumulus, 2 = cirrus); defaults to
     /// cumulus. Migrates the legacy nebulaEnabled bool on first read.
     static var skyMode: Int {
         get {
@@ -98,7 +98,7 @@ enum SettingsStore {
             if UserDefaults.standard.object(forKey: nebulaEnabledKey) != nil {
                 return UserDefaults.standard.bool(forKey: nebulaEnabledKey) ? 1 : 0
             }
-            return 2
+            return 1
         }
         set { UserDefaults.standard.set(newValue, forKey: skyModeKey) }
     }

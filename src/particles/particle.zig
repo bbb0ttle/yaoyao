@@ -7,15 +7,22 @@ pub const MAX_LIFESPAN: f32 = 155.0;
 pub const MAX_PARTICLE_SIZE: f32 = 12.0;
 const FADE_IN_PER_FRAME: f32 = 1.0 / 45.0;
 
+/// Sky backdrop cloud kinds; doubles as the shader shape offset (shape =
+/// 4 + @intFromEnum(kind) - 1) and the background-pass grouping.
+pub const SkyKind = enum(u2) {
+    none,
+    cumulus,
+    cirrus,
+};
+
 /// Optional configuration for particle creation with sensible defaults.
 pub const ParticleOpts = struct {
     immortal: bool = false,
     floating: bool = false,
     beat: bool = false,
     meteor: bool = false,
-    blob: bool = false,
     cooling: bool = false,
-    cumulus: bool = false,
+    sky: SkyKind = .none,
     size: f32 = MAX_PARTICLE_SIZE,
 };
 
@@ -26,10 +33,9 @@ const ParticleFlags = packed struct(u16) {
     is_beat: bool,
     is_meteor: bool,
     is_fading_out: bool,
-    is_blob: bool,
     is_fading_in: bool,
     is_cooling: bool,
-    is_cumulus: bool,
+    sky_kind: SkyKind,
     _pad: u6 = 0,
 };
 
@@ -66,10 +72,9 @@ pub const Particle = struct {
                 .is_beat = opts.beat,
                 .is_meteor = opts.meteor,
                 .is_fading_out = false,
-                .is_blob = opts.blob,
                 .is_fading_in = false,
                 .is_cooling = opts.cooling,
-                .is_cumulus = opts.cumulus,
+                .sky_kind = opts.sky,
             },
             ._storage = .{ .birth_sec = birth_sec },
             .size_scale = 1.0,
@@ -229,12 +234,12 @@ pub const Particle = struct {
         return self.flags.is_fading_out;
     }
 
-    pub fn is_blob(self: Self) bool {
-        return self.flags.is_blob;
+    pub fn is_sky(self: Self) bool {
+        return self.flags.sky_kind != .none;
     }
 
-    pub fn is_cumulus(self: Self) bool {
-        return self.flags.is_cumulus;
+    pub fn get_sky_kind(self: Self) SkyKind {
+        return self.flags.sky_kind;
     }
 
     pub fn is_fading_in(self: Self) bool {

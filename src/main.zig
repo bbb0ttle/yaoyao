@@ -193,7 +193,7 @@ export fn oayao_reset_heart_config() void {
     }
 }
 
-/// Sky backdrop mode: 0 = off, 1 = nebula, 2 = cumulus. Unknown ids are
+/// Sky backdrop mode: 0 = off, 1 = cumulus, 2 = cirrus. Unknown ids are
 /// ignored.
 export fn oayao_set_sky_mode(mode: u32) void {
     if (g_app) |app| {
@@ -201,7 +201,7 @@ export fn oayao_set_sky_mode(mode: u32) void {
     }
 }
 
-/// Legacy alias for oayao_set_sky_mode: nonzero maps to nebula.
+/// Legacy alias for oayao_set_sky_mode: nonzero maps to cumulus.
 export fn oayao_set_nebula_enabled(enabled: u32) void {
     if (g_app) |app| {
         app.set_nebula_enabled(enabled != 0);

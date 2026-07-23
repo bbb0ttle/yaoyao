@@ -116,6 +116,19 @@ float eval_sdf(vec2 uv, float shape) {
 }
 
 void main() {
+    // Cirrus streak (shape 5): wind-sheared ice filaments — ridged fbm
+    // sampled with a y-shear so the wisps hook, inside a long horizontal
+    // envelope. Thin and translucent.
+    if (v_shape > 4.5) {
+        vec2 uv = v_uv;
+        float e = 1.0 - (uv.x * uv.x + (4.0 * uv.y) * (4.0 * uv.y));
+        vec2 sp = vec2(uv.x * 1.5, uv.y * 8.0) + vec2(uv.y * 2.0, 0.0) + v_stroke_a;
+        float wisp = 1.0 - abs(2.0 * fbm(sp) - 1.0);
+        float a = smoothstep(0.55, 0.9, wisp) * clamp(e, 0.0, 1.0) * 0.5;
+        frag_color = vec4(fill_color.rgb, a * v_fill_a);
+        return;
+    }
+
     // Cumulus puff (shape 4): a dome-enveloped fbm blob — bright billowing
     // crests, shaded flat base, like a summer afternoon cloud. v_stroke_a
     // carries the puff's fbm seed so the pattern stays rigid while the
@@ -130,16 +143,6 @@ void main() {
         float body = smoothstep(0.22, 0.5, n);
         float crest = clamp(dome * 0.85 - uv.y * 1.05 + (n - 0.45) * 1.2, 0.0, 1.0);
         frag_color = vec4(fill_color.rgb, body * (0.55 + 0.45 * crest) * v_fill_a);
-        return;
-    }
-
-    // Nebula layer (shape 3): an fbm density field spanning the whole screen.
-    // The field is continuous, so there are no quad-edge seams; each layer's
-    // world position offsets and warps its own patch of sky.
-    if (v_shape > 2.5) {
-        float n = fbm(v_uv * 2.6 + v_pos * 0.003);
-        float a = smoothstep(0.36, 0.72, n) * v_fill_a;
-        frag_color = vec4(fill_color.rgb, a);
         return;
     }
 
