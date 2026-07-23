@@ -14,6 +14,7 @@ const MotionMode = @import("systems/heart_system.zig").MotionMode;
 const meteor_sys = @import("systems/meteor_system.zig");
 const MeteorSystem = meteor_sys.MeteorSystem;
 const NebulaSystem = @import("systems/nebula_system.zig").NebulaSystem;
+const CumulusSystem = @import("systems/cumulus_system.zig").CumulusSystem;
 const HeartCooling = @import("systems/heart_cooling.zig").HeartCooling;
 const ArchiveList = @import("systems/event_archive.zig").ArchiveList;
 const Particle = @import("particles/particle.zig").Particle;
@@ -116,6 +117,13 @@ pub const CounterHeartsFrame = extern struct {
     h: f32,
 };
 
+/// Sky backdrop mode; values are part of the C ABI.
+pub const SkyMode = enum(u32) {
+    off = 0,
+    nebula = 1,
+    cumulus = 2,
+};
+
 const IncomingState = enum { flying, settling };
 
 const IncomingKind = enum { tagged, replay };
@@ -150,13 +158,14 @@ pub const App = struct {
     heart: HeartSystem,
     meteor: MeteorSystem,
     nebula: NebulaSystem,
+    cumulus: CumulusSystem,
     rng: Rng,
     allocator: std.mem.Allocator,
 
     is_heart_ready: bool,
     is_meteor_ready: bool,
-    is_nebula_ready: bool,
-    nebula_enabled: bool,
+    sky_ready: bool,
+    sky_mode: SkyMode,
     transition_start: f32,
     resize_cooldown: u32,
     dpr: f32,
@@ -206,12 +215,13 @@ pub const App = struct {
             .heart = undefined,
             .meteor = undefined,
             .nebula = undefined,
+            .cumulus = undefined,
             .rng = rng,
             .allocator = allocator,
             .is_heart_ready = false,
             .is_meteor_ready = false,
-            .is_nebula_ready = false,
-            .nebula_enabled = false,
+            .sky_ready = false,
+            .sky_mode = .off,
             .transition_start = 0.0,
             .resize_cooldown = 0,
             .dpr = sapp.dpiScale(),
@@ -320,9 +330,9 @@ pub const App = struct {
             self.is_meteor_ready = true;
         }
 
-        // Heart init resets the pool, wiping any nebula blobs; the next
-        // update respawns them when nebula is enabled.
-        self.is_nebula_ready = false;
+        // Heart init resets the pool, wiping any sky backdrop; the next
+        // update respawns the active mode's system.
+        self.sky_ready = false;
     }
 
     pub fn update_and_fill_buffers(self: *Self, w: f32, h: f32, elapsed: f32, dpr: f32) void {
@@ -339,12 +349,20 @@ pub const App = struct {
             text_renderer.update_counter_layout(&self.heart, w, h, dpr, self.days_text_len, &self.text_layout);
         }
 
-        if (self.nebula_enabled and !self.is_nebula_ready) {
-            self.nebula = NebulaSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed);
-            self.is_nebula_ready = true;
+        if (self.sky_mode != .off and !self.sky_ready) {
+            switch (self.sky_mode) {
+                .nebula => self.nebula = NebulaSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
+                .cumulus => self.cumulus = CumulusSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
+                .off => unreachable,
+            }
+            self.sky_ready = true;
         }
-        if (self.is_nebula_ready) {
-            self.nebula.update(elapsed, w, h);
+        if (self.sky_ready) {
+            switch (self.sky_mode) {
+                .nebula => self.nebula.update(elapsed, w, h),
+                .cumulus => self.cumulus.update(elapsed, w, h),
+                .off => {},
+            }
         }
 
         self.heart.update(elapsed, &self.pool, &self.rng);
@@ -826,12 +844,27 @@ pub const App = struct {
         self.heart_y_fraction = null;
     }
 
-    pub fn set_nebula_enabled(self: *Self, enabled: bool) void {
-        self.nebula_enabled = enabled;
-        if (!enabled and self.is_nebula_ready) {
-            self.nebula.clear();
-            self.is_nebula_ready = false;
+    pub fn set_sky_mode(self: *Self, mode_id: u32) void {
+        const mode = std.enums.fromInt(SkyMode, mode_id) orelse {
+            log.warn("unknown sky mode={d}, ignoring", .{mode_id});
+            return;
+        };
+        if (mode == self.sky_mode) return;
+        if (self.sky_ready) {
+            switch (self.sky_mode) {
+                .nebula => self.nebula.clear(),
+                .cumulus => self.cumulus.clear(),
+                .off => {},
+            }
+            self.sky_ready = false;
         }
+        self.sky_mode = mode;
+    }
+
+    /// Legacy toggle kept for the existing bridge callers: on maps to
+    /// nebula, off to off.
+    pub fn set_nebula_enabled(self: *Self, enabled: bool) void {
+        self.set_sky_mode(if (enabled) 1 else 0);
     }
 
     /// Built-in vertical position as a fraction of the current canvas height.

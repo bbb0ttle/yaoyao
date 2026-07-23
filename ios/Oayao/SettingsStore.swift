@@ -11,6 +11,7 @@ enum SettingsStore {
     static let heartYKey = "oayao.heartY"
     static let heartSizeScaleKey = "oayao.heartSizeScale"
     static let nebulaEnabledKey = "oayao.nebulaEnabled"
+    static let skyModeKey = "oayao.skyMode"
     static let defaultCalendarName = "oayao"
 
     /// Name of the calendar the app reads and writes events in.
@@ -87,10 +88,16 @@ enum SettingsStore {
         set { UserDefaults.standard.set(newValue, forKey: heartSizeScaleKey) }
     }
 
-    /// Nebula background toggle; defaults to off.
-    static var nebulaEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: nebulaEnabledKey) }
-        set { UserDefaults.standard.set(newValue, forKey: nebulaEnabledKey) }
+    /// Sky backdrop mode (0 = off, 1 = nebula, 2 = cumulus); defaults to
+    /// off. Migrates the legacy nebulaEnabled bool on first read.
+    static var skyMode: Int {
+        get {
+            if let mode = UserDefaults.standard.object(forKey: skyModeKey) as? Int {
+                return mode
+            }
+            return UserDefaults.standard.bool(forKey: nebulaEnabledKey) ? 1 : 0
+        }
+        set { UserDefaults.standard.set(newValue, forKey: skyModeKey) }
     }
 
     /// Big heart vertical position as a fraction of canvas height.

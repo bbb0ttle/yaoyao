@@ -16,6 +16,7 @@ pub const ParticleOpts = struct {
     meteor: bool = false,
     blob: bool = false,
     cooling: bool = false,
+    cumulus: bool = false,
     size: f32 = MAX_PARTICLE_SIZE,
 };
 
@@ -29,7 +30,8 @@ const ParticleFlags = packed struct(u16) {
     is_blob: bool,
     is_fading_in: bool,
     is_cooling: bool,
-    _pad: u7 = 0,
+    is_cumulus: bool,
+    _pad: u6 = 0,
 };
 
 /// A pooled particle with position, velocity, flags, and tagged union storage.
@@ -68,6 +70,7 @@ pub const Particle = struct {
                 .is_blob = opts.blob,
                 .is_fading_in = false,
                 .is_cooling = opts.cooling,
+                .is_cumulus = opts.cumulus,
             },
             ._storage = .{ .birth_sec = birth_sec },
             .size_scale = 1.0,
@@ -229,6 +232,10 @@ pub const Particle = struct {
 
     pub fn is_blob(self: Self) bool {
         return self.flags.is_blob;
+    }
+
+    pub fn is_cumulus(self: Self) bool {
+        return self.flags.is_cumulus;
     }
 
     pub fn is_fading_in(self: Self) bool {

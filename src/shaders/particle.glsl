@@ -116,6 +116,21 @@ float eval_sdf(vec2 uv, float shape) {
 }
 
 void main() {
+    // Cumulus puff (shape 4): a dome-enveloped fbm blob — bright billowing
+    // crests, shaded flat base, like a summer afternoon cloud. v_stroke_a
+    // carries the puff's fbm seed so the pattern stays rigid while the
+    // puff drifts across the sky.
+    if (v_shape > 3.5) {
+        vec2 uv = v_uv;
+        float dome = 1.0 - dot(uv * vec2(1.0, 1.25), uv * vec2(1.0, 1.25));
+        dome -= smoothstep(0.15, 0.75, uv.y) * 0.5; // flatten and fade the base
+        float n = fbm(uv * 2.8 + v_stroke_a) * 0.85 + dome * 0.9 - 0.28;
+        float a = smoothstep(0.22, 0.5, n) * v_fill_a;
+        float lit = clamp(dome * 0.9 - uv.y * 0.9 + (n - 0.4) * 1.2, 0.0, 1.0);
+        frag_color = vec4(mix(stroke_color.rgb, fill_color.rgb, lit), a);
+        return;
+    }
+
     // Nebula layer (shape 3): an fbm density field spanning the whole screen.
     // The field is continuous, so there are no quad-edge seams; each layer's
     // world position offsets and warps its own patch of sky.

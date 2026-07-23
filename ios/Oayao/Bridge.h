@@ -69,6 +69,10 @@ void oayao_reset_heart_y(void);
 // to their defaults.
 void oayao_reset_heart_config(void);
 
+// Sky backdrop mode: 0 = off, 1 = nebula, 2 = cumulus.
+void oayao_set_sky_mode(uint32_t mode);
+
+// Legacy alias for oayao_set_sky_mode (nonzero maps to nebula).
 // Toggle the nebula background effect (0 = off, 1 = on). Default off.
 void oayao_set_nebula_enabled(uint32_t enabled);
 

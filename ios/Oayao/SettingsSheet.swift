@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsSheet: View {
     @AppStorage(SettingsStore.calendarNameKey) private var calendarName = SettingsStore.defaultCalendarName
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
-    @AppStorage(SettingsStore.nebulaEnabledKey) private var nebulaEnabled = false
+    @State private var skyMode = 0
     @ObservedObject private var languageManager = LanguageManager.shared
     @ObservedObject private var calendarManager = CalendarManager.shared
     @State private var counterStart: Date? = nil
@@ -86,8 +86,15 @@ struct SettingsSheet: View {
                     } label: {
                         Text(L10n.tr(.heart))
                     }
-                    Toggle(L10n.tr(.nebula), isOn: $nebulaEnabled)
-                        .onChange(of: nebulaEnabled) { oayao_set_nebula_enabled($0 ? 1 : 0) }
+                    Picker(L10n.tr(.sky), selection: $skyMode) {
+                        Text(L10n.tr(.skyOff)).tag(0)
+                        Text(L10n.tr(.nebula)).tag(1)
+                        Text(L10n.tr(.cumulus)).tag(2)
+                    }
+                    .onChange(of: skyMode) { mode in
+                        SettingsStore.skyMode = mode
+                        oayao_set_sky_mode(UInt32(mode))
+                    }
                 } footer: {
                     Text(L10n.tr(.themeFooter))
                 }
@@ -115,6 +122,7 @@ struct SettingsSheet: View {
         }
         .onAppear {
             counterStart = CalendarManager.shared.counterStartDate()
+            skyMode = SettingsStore.skyMode
         }
     }
 }
