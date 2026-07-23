@@ -58,7 +58,7 @@ enum L10n {
         case date
         case heart, opacity, motion, motionBeat, motionBreath, positionY, resetDefaults
         case size
-        case sky, skyOff, cumulus, cirrus
+        case sky, skyOff, cumulus, cirrus, lenticular
     }
 
     static func tr(_ key: Key) -> String {
@@ -178,5 +178,6 @@ enum L10n {
         .skyOff: ("Off", "关闭"),
         .cumulus: ("Cumulus", "浓积云"),
         .cirrus: ("Cirrus", "卷云"),
+        .lenticular: ("Lenticular", "荚状云"),
     ]
 }

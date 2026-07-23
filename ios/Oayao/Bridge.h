@@ -69,11 +69,11 @@ void oayao_reset_heart_y(void);
 // to their defaults.
 void oayao_reset_heart_config(void);
 
-// Sky backdrop mode: 0 = off, 1 = nebula, 2 = cumulus.
+// Sky backdrop mode: 0 = off, 1 = cumulus, 2 = cirrus, 3 = lenticular.
 void oayao_set_sky_mode(uint32_t mode);
 
-// Legacy alias for oayao_set_sky_mode (nonzero maps to nebula).
-// Toggle the nebula background effect (0 = off, 1 = on). Default off.
+// Legacy alias for oayao_set_sky_mode (nonzero maps to cumulus).
+// Toggle the sky backdrop (0 = off, 1 = cumulus). Default off.
 void oayao_set_nebula_enabled(uint32_t enabled);
 
 // Built-in vertical position as a fraction of the current canvas height.

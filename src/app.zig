@@ -15,6 +15,7 @@ const meteor_sys = @import("systems/meteor_system.zig");
 const MeteorSystem = meteor_sys.MeteorSystem;
 const CumulusSystem = @import("systems/cumulus_system.zig").CumulusSystem;
 const CirrusSystem = @import("systems/cirrus_system.zig").CirrusSystem;
+const LenticularSystem = @import("systems/lenticular_system.zig").LenticularSystem;
 const HeartCooling = @import("systems/heart_cooling.zig").HeartCooling;
 const ArchiveList = @import("systems/event_archive.zig").ArchiveList;
 const Particle = @import("particles/particle.zig").Particle;
@@ -122,6 +123,7 @@ pub const SkyMode = enum(u32) {
     off = 0,
     cumulus = 1,
     cirrus = 2,
+    lenticular = 3,
 };
 
 const IncomingState = enum { flying, settling };
@@ -159,6 +161,7 @@ pub const App = struct {
     meteor: MeteorSystem,
     cumulus: CumulusSystem,
     cirrus: CirrusSystem,
+    lenticular: LenticularSystem,
     rng: Rng,
     allocator: std.mem.Allocator,
 
@@ -216,6 +219,7 @@ pub const App = struct {
             .meteor = undefined,
             .cumulus = undefined,
             .cirrus = undefined,
+            .lenticular = undefined,
             .rng = rng,
             .allocator = allocator,
             .is_heart_ready = false,
@@ -353,6 +357,7 @@ pub const App = struct {
             switch (self.sky_mode) {
                 .cumulus => self.cumulus = CumulusSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
                 .cirrus => self.cirrus = CirrusSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
+                .lenticular => self.lenticular = LenticularSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
                 .off => unreachable,
             }
             self.sky_ready = true;
@@ -361,6 +366,7 @@ pub const App = struct {
             switch (self.sky_mode) {
                 .cumulus => self.cumulus.update(elapsed, w, h),
                 .cirrus => self.cirrus.update(elapsed, w, h),
+                .lenticular => self.lenticular.update(elapsed, w, h),
                 .off => {},
             }
         }
@@ -854,6 +860,7 @@ pub const App = struct {
             switch (self.sky_mode) {
                 .cumulus => self.cumulus.clear(),
                 .cirrus => self.cirrus.clear(),
+                .lenticular => self.lenticular.clear(),
                 .off => {},
             }
             self.sky_ready = false;

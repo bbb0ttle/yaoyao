@@ -116,6 +116,42 @@ float eval_sdf(vec2 uv, float shape) {
 }
 
 void main() {
+    // Lenticular lens (shape 6): a flat, polished lens with stacked
+    // internal tonal bands — the smooth, elongated saucer shape of
+    // standing-wave clouds. No FBM on the envelope: lenticulars are
+    // defined by their glassy smoothness. v_stroke_a carries the
+    // per-lens seed.
+    if (v_shape > 5.5) {
+        vec2 uv = v_uv;
+        // Lens reaches zero at |x|=1 and |y|≈1/3 — ~3:1 width-to-height,
+        // fully contained within the quad so edges fade naturally.
+        float lens = 1.0 - (uv.x * uv.x * 1.0 + uv.y * uv.y * 9.0);
+        float lens_c = clamp(lens, 0.0, 1.0);
+        // Bend band samples along the lens arc (yy offsets up to ~4× the
+        // half-height) so the stacked-plate stripes follow the saucer curve
+        // instead of running flat.
+        float yy = uv.y + 1.4 * uv.x * uv.x;
+        float band1 = sin(yy * 18.0 + v_stroke_a * 0.08) * 0.5 + 0.5;
+        float band2 = sin(yy * 7.0 + v_stroke_a * 0.15 + 1.2) * 0.5 + 0.5;
+        // Low-frequency layer deepens the plate pile.
+        float band3 = sin(yy * 2.5 + v_stroke_a * 0.05) * 0.5 + 0.5;
+        float bands = band1 * 0.5 + band2 * 0.3 + band3 * 0.25;
+        bands = mix(1.0, bands, smoothstep(0.0, 0.5, lens) * 0.4);
+        // Sharp outer rim + concave interior highlight; sun-above lighting —
+        // bright crown, shaded base (uv.y is down).
+        float body = smoothstep(0.0, 0.22, lens) * pow(lens_c, 0.5) * (0.5 + 0.3 * bands);
+        body *= mix(1.18, 0.62, smoothstep(-0.33, 0.33, uv.y));
+        // Crown rim light pinched to a narrow band along the upper curve
+        float crown = smoothstep(0.0, 0.22, lens) * smoothstep(0.30, 0.06, lens);
+        crown *= (1.0 - abs(uv.x) * 1.05) * 0.35;
+        float a = body + crown;
+        // Faint iridescence confined to the thin edge band
+        float rim = smoothstep(0.02, 0.12, lens) * smoothstep(0.30, 0.10, lens);
+        vec3 irid = 1.0 + 0.08 * rim * sin(yy * 24.0 + v_stroke_a * 0.1 + vec3(0.0, 2.09, 4.19));
+        frag_color = vec4(fill_color.rgb * irid, a * v_fill_a);
+        return;
+    }
+
     // Cirrus streak (shape 5): wind-sheared ice filaments — ridged fbm
     // sampled with a y-shear so the wisps hook, inside a long horizontal
     // envelope. Thin and translucent.
