@@ -123,8 +123,9 @@ void main() {
     // both the fbm offset and the coverage so no two patches match.
     if (v_shape > 6.5) {
         vec2 uv = v_uv;
-        // Wide flat envelope, faded before the quad border.
-        float env = 1.0 - dot(uv * vec2(0.9, 1.6), uv * vec2(0.9, 1.6));
+        // Wide flat envelope; x factor > 1 so it reaches zero inside the
+        // quad — otherwise patches clip hard at the quad's vertical edges.
+        float env = 1.0 - dot(uv * vec2(1.15, 1.7), uv * vec2(1.15, 1.7));
         // Seed-driven coverage: some patches dense, some broken.
         float cov = 0.28 + 0.45 * fract(v_stroke_a * 0.618);
         float n = fbm(uv * 1.6 + v_stroke_a);
