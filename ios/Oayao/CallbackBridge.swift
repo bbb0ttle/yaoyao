@@ -223,14 +223,15 @@ private struct StressPanel: View {
                     expanded.toggle()
                 }
             } label: {
-                Image(systemName: "ant")
-                    .font(.system(size: 18, weight: .semibold))
+                Image("DebugIcon")
+                    .resizable()
+                    .frame(width: 18, height: 18)
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                     .frame(width: 44, height: 44)
-                    .modifier(GlassModifier(cornerRadius: 22))
+                    // .modifier(GlassModifier(cornerRadius: 22))
             }
-            .buttonStyle(ScaleButtonStyle())
+            // .buttonStyle(ScaleButtonStyle())
 
             if expanded {
                 VStack(alignment: .leading, spacing: 8) {
