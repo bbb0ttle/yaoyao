@@ -16,6 +16,7 @@ const MeteorSystem = meteor_sys.MeteorSystem;
 const CumulusSystem = @import("systems/cumulus_system.zig").CumulusSystem;
 const CirrusSystem = @import("systems/cirrus_system.zig").CirrusSystem;
 const LenticularSystem = @import("systems/lenticular_system.zig").LenticularSystem;
+const StratocumulusSystem = @import("systems/stratocumulus_system.zig").StratocumulusSystem;
 const HeartCooling = @import("systems/heart_cooling.zig").HeartCooling;
 const ArchiveList = @import("systems/event_archive.zig").ArchiveList;
 const Particle = @import("particles/particle.zig").Particle;
@@ -124,6 +125,7 @@ pub const SkyMode = enum(u32) {
     cumulus = 1,
     cirrus = 2,
     lenticular = 3,
+    stratocumulus = 4,
 };
 
 const IncomingState = enum { flying, settling };
@@ -162,6 +164,7 @@ pub const App = struct {
     cumulus: CumulusSystem,
     cirrus: CirrusSystem,
     lenticular: LenticularSystem,
+    stratocumulus: StratocumulusSystem,
     rng: Rng,
     allocator: std.mem.Allocator,
 
@@ -220,6 +223,7 @@ pub const App = struct {
             .cumulus = undefined,
             .cirrus = undefined,
             .lenticular = undefined,
+            .stratocumulus = undefined,
             .rng = rng,
             .allocator = allocator,
             .is_heart_ready = false,
@@ -358,6 +362,7 @@ pub const App = struct {
                 .cumulus => self.cumulus = CumulusSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
                 .cirrus => self.cirrus = CirrusSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
                 .lenticular => self.lenticular = LenticularSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
+                .stratocumulus => self.stratocumulus = StratocumulusSystem.init(&self.pool, &self.rng, w, h, dpr, elapsed),
                 .off => unreachable,
             }
             self.sky_ready = true;
@@ -367,6 +372,7 @@ pub const App = struct {
                 .cumulus => self.cumulus.update(elapsed, w, h),
                 .cirrus => self.cirrus.update(elapsed, w, h),
                 .lenticular => self.lenticular.update(elapsed, w, h),
+                .stratocumulus => self.stratocumulus.update(elapsed, w, h),
                 .off => {},
             }
         }
@@ -861,6 +867,7 @@ pub const App = struct {
                 .cumulus => self.cumulus.clear(),
                 .cirrus => self.cirrus.clear(),
                 .lenticular => self.lenticular.clear(),
+                .stratocumulus => self.stratocumulus.clear(),
                 .off => {},
             }
             self.sky_ready = false;

@@ -9,11 +9,12 @@ const FADE_IN_PER_FRAME: f32 = 1.0 / 45.0;
 
 /// Sky backdrop cloud kinds; doubles as the shader shape offset (shape =
 /// 4 + @intFromEnum(kind) - 1) and the background-pass grouping.
-pub const SkyKind = enum(u2) {
+pub const SkyKind = enum(u3) {
     none,
     cumulus,
     cirrus,
     lenticular,
+    stratocumulus,
 };
 
 /// Optional configuration for particle creation with sensible defaults.
@@ -37,7 +38,7 @@ const ParticleFlags = packed struct(u16) {
     is_fading_in: bool,
     is_cooling: bool,
     sky_kind: SkyKind,
-    _pad: u6 = 0,
+    _pad: u5 = 0,
 };
 
 /// A pooled particle with position, velocity, flags, and tagged union storage.

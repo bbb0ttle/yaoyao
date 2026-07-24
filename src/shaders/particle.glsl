@@ -116,6 +116,30 @@ float eval_sdf(vec2 uv, float shape) {
 }
 
 void main() {
+    // Stratocumulus deck (shape 7): a rolling layer of cloud patches with
+    // sharp, coverage-thresholded edges and bright gaps between them. Each
+    // particle is one large patch of the deck; overlapping instances tile
+    // into a broken sheet. v_stroke_a carries the per-patch seed, driving
+    // both the fbm offset and the coverage so no two patches match.
+    if (v_shape > 6.5) {
+        vec2 uv = v_uv;
+        // Wide flat envelope, faded before the quad border.
+        float env = 1.0 - dot(uv * vec2(0.9, 1.6), uv * vec2(0.9, 1.6));
+        // Seed-driven coverage: some patches dense, some broken.
+        float cov = 0.28 + 0.45 * fract(v_stroke_a * 0.618);
+        float n = fbm(uv * 1.6 + v_stroke_a);
+        float s = 0.06;
+        float m = smoothstep(cov - s, cov + s, n);
+        // Seen from below: shaded base, lighter tops (uv.y is down).
+        float shade = mix(1.0, 0.45, smoothstep(-0.4, 0.8, uv.y));
+        // Silver lining: a narrow ring where n hugs the coverage threshold —
+        // light catching the thin edge around each gap.
+        float ring = smoothstep(cov - s * 1.8, cov, n) * (1.0 - smoothstep(cov, cov + s * 1.8, n));
+        float a = (m * shade * 0.85 + ring * 0.3) * clamp(env, 0.0, 1.0);
+        frag_color = vec4(fill_color.rgb, a * v_fill_a);
+        return;
+    }
+
     // Lenticular lens (shape 6): a flat, polished lens with stacked
     // internal tonal bands — the smooth, elongated saucer shape of
     // standing-wave clouds. No FBM on the envelope: lenticulars are
@@ -159,8 +183,16 @@ void main() {
         vec2 uv = v_uv;
         float e = 1.0 - (uv.x * uv.x + (4.0 * uv.y) * (4.0 * uv.y));
         vec2 sp = vec2(uv.x * 1.5, uv.y * 8.0) + vec2(uv.y * 2.0, 0.0) + v_stroke_a;
+        // Domain warp: a low-frequency fbm bends the sample coords so the
+        // filaments curl into hooks and mare's tails.
+        float q = fbm(sp * 0.35 + v_stroke_a);
+        sp += (q - 0.5) * 2.2;
         float wisp = 1.0 - abs(2.0 * fbm(sp) - 1.0);
         float a = smoothstep(0.55, 0.9, wisp) * clamp(e, 0.0, 1.0) * 0.5;
+        // Large-scale clustering: a very-low-frequency mask gathers the
+        // streaks into banks instead of spreading them evenly.
+        float bank = smoothstep(0.35, 0.75, vnoise(uv * vec2(0.8, 1.2) + v_stroke_a * 0.7));
+        a *= 0.3 + 0.7 * bank;
         frag_color = vec4(fill_color.rgb, a * v_fill_a);
         return;
     }
@@ -175,10 +207,19 @@ void main() {
         dome -= smoothstep(0.15, 0.75, uv.y) * 0.5; // flatten and fade the base
         float n = fbm(uv * 2.8 + v_stroke_a) * 0.85 + dome * 0.9 - 0.28;
         // Monochrome puff: depth comes from alpha alone — dense crests read
-        // solid, the thin base and rims fade away.
-        float body = smoothstep(0.22, 0.5, n);
+        // solid, the thin base and rims fade away. The tight threshold band
+        // turns the silhouette from smooth blob into clustered billows.
+        float c = smoothstep(0.30, 0.48, n);
         float crest = clamp(dome * 0.85 - uv.y * 1.05 + (n - 0.45) * 1.2, 0.0, 1.0);
-        frag_color = vec4(fill_color.rgb, body * (0.55 + 0.45 * crest) * v_fill_a);
+        // Silver lining: the transition band catches light on the upper-right
+        // edge; the shadowed opposite edge dims slightly.
+        float edge = c * (1.0 - c) * 4.0;
+        vec2 L = normalize(vec2(0.7, -0.7));
+        float dl = dot(normalize(uv + vec2(1e-4)), L);
+        float rim = edge * max(dl, 0.0) * 0.4;
+        float shade = 1.0 - edge * max(-dl, 0.0) * 0.25;
+        float a = (c * (0.55 + 0.45 * crest) + rim) * shade;
+        frag_color = vec4(fill_color.rgb, a * v_fill_a);
         return;
     }
 

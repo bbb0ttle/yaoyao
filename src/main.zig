@@ -193,8 +193,8 @@ export fn oayao_reset_heart_config() void {
     }
 }
 
-/// Sky backdrop mode: 0 = off, 1 = cumulus, 2 = cirrus, 3 = lenticular.
-/// Unknown ids are ignored.
+/// Sky backdrop mode: 0 = off, 1 = cumulus, 2 = cirrus, 3 = lenticular,
+/// 4 = stratocumulus. Unknown ids are ignored.
 export fn oayao_set_sky_mode(mode: u32) void {
     if (g_app) |app| {
         app.set_sky_mode(mode);

@@ -69,7 +69,8 @@ void oayao_reset_heart_y(void);
 // to their defaults.
 void oayao_reset_heart_config(void);
 
-// Sky backdrop mode: 0 = off, 1 = cumulus, 2 = cirrus, 3 = lenticular.
+// Sky backdrop mode: 0 = off, 1 = cumulus, 2 = cirrus, 3 = lenticular,
+// 4 = stratocumulus.
 void oayao_set_sky_mode(uint32_t mode);
 
 // Legacy alias for oayao_set_sky_mode (nonzero maps to cumulus).
