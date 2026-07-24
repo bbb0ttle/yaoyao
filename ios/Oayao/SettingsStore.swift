@@ -89,8 +89,8 @@ enum SettingsStore {
     }
 
     /// Sky backdrop mode (0 = off, 1 = cumulus, 2 = cirrus, 3 = lenticular,
-    /// 4 = stratocumulus); defaults to cumulus. Migrates the legacy
-    /// nebulaEnabled bool on first read.
+    /// 4 = stratocumulus, 5 = cumulonimbus); defaults to cumulus. Migrates
+    /// the legacy nebulaEnabled bool on first read.
     static var skyMode: Int {
         get {
             if let mode = UserDefaults.standard.object(forKey: skyModeKey) as? Int {

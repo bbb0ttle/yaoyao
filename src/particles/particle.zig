@@ -15,6 +15,7 @@ pub const SkyKind = enum(u3) {
     cirrus,
     lenticular,
     stratocumulus,
+    cumulonimbus,
 };
 
 /// Optional configuration for particle creation with sensible defaults.

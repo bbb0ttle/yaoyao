@@ -92,6 +92,7 @@ struct SettingsSheet: View {
                         Text(L10n.tr(.cirrus)).tag(2)
                         Text(L10n.tr(.lenticular)).tag(3)
                         Text(L10n.tr(.stratocumulus)).tag(4)
+                        Text(L10n.tr(.cumulonimbus)).tag(5)
                     }
                     .onChange(of: skyMode) { mode in
                         SettingsStore.skyMode = mode

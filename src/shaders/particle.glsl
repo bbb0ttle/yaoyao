@@ -116,6 +116,34 @@ float eval_sdf(vec2 uv, float shape) {
 }
 
 void main() {
+    // Cumulonimbus tower (shape 8): a narrow trunk flaring into a wide
+    // anvil crown, filled with cauliflower billows — shape noise multiplied
+    // by ridged noise (f * (r + f)) stacks puffy lobes along the edges and
+    // carves dark crevices between them. v_stroke_a carries the seed.
+    if (v_shape > 7.5) {
+        vec2 uv = v_uv;
+        // Anvil silhouette: trunk half-width ~0.43, crown fills the quad
+        // (uv.y is down; spread grows toward the top).
+        float spread = 1.0 - smoothstep(-0.8, 0.2, uv.y);
+        float xw = mix(2.3, 1.0, spread);
+        vec2 p = vec2(uv.x * xw, uv.y * 1.05);
+        float env = 1.0 - dot(p, p);
+        env -= smoothstep(0.3, 0.9, uv.y) * 0.5; // flat, shaded base
+        // Domain warp gives the billow field a slow swirl.
+        vec2 sp = uv * 2.0 + v_stroke_a;
+        sp += (fbm(sp * 0.5) - 0.5) * 1.4;
+        // The cauliflower signature: billows = shape × (ridge + shape).
+        float f = fbm(sp);
+        float r = 1.0 - abs(2.0 * fbm(sp * 1.7 + 3.1) - 1.0);
+        float billow = f * (r * 0.8 + f);
+        float c = smoothstep(0.18, 0.42, billow) * clamp(env, 0.0, 1.0);
+        // Self-shading: crevices follow the ridge, crowns stay bright.
+        float crest = clamp(billow * 2.2 - 0.25 - uv.y * 0.35, 0.0, 1.0);
+        float a = c * (0.45 + 0.55 * crest) * 0.9;
+        frag_color = vec4(fill_color.rgb, a * v_fill_a);
+        return;
+    }
+
     // Stratocumulus deck (shape 7): a rolling layer of cloud patches with
     // sharp, coverage-thresholded edges and bright gaps between them. Each
     // particle is one large patch of the deck; overlapping instances tile
