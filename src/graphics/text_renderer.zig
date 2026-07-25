@@ -75,12 +75,15 @@ pub fn update_counter_layout(
 
 /// Fill GPU instance buffer with 3x5 bitmap text glyph instances.
 /// The layout cache must be fresh — call update_counter_layout first.
+/// `pulse_scale` pops each glyph around its own centre as tap feedback
+/// (1.0 = rest); per-glyph so the edges never drift into the counter hearts.
 pub fn fill_text_instances(
     gpu: *GpuState,
     days_text_buf: []const u8,
     days_text_len: usize,
     start_inst: u32,
     cache: *const TextLayout,
+    pulse_scale: f32,
 ) u32 {
     const pixel_size = cache.pixel_size;
     const char_stride = cache.char_stride;
@@ -95,6 +98,9 @@ pub fn fill_text_instances(
         const glyph = font.FONT_3X5[char_idx];
 
         const cx: f32 = text_x + @as(f32, @floatFromInt(ci)) * char_stride;
+        // Glyph centre: pixels sit at cx+ps … cx+5ps, rows text_y+ps … +9ps.
+        const gcx = cx + 3.0 * pixel_size;
+        const gcy = text_y + 5.0 * pixel_size;
 
         var row: usize = 0;
         while (row < 5) : (row += 1) {
@@ -106,9 +112,11 @@ pub fn fill_text_instances(
                 }
                 if (inst_count >= MAX_INSTANCES) return inst_count;
 
+                const px = cx + @as(f32, @floatFromInt(col)) * pixel_size * 2.0 + pixel_size;
+                const py = text_y + @as(f32, @floatFromInt(row)) * pixel_size * 2.0 + pixel_size;
                 gpu.write_instance(inst_count, .{
-                    .pos_x = cx + @as(f32, @floatFromInt(col)) * pixel_size * 2.0 + pixel_size,
-                    .pos_y = text_y + @as(f32, @floatFromInt(row)) * pixel_size * 2.0 + pixel_size,
+                    .pos_x = gcx + (px - gcx) * pulse_scale,
+                    .pos_y = gcy + (py - gcy) * pulse_scale,
                     .stroke_size = pixel_size,
                     .fill_size = pixel_size,
                     .stroke_a = 0.0,

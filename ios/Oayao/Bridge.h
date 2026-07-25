@@ -29,6 +29,10 @@ void oayao_set_heart_tap_callback(oayao_heart_tap_callback_t callback);
 typedef void (*oayao_counter_tap_callback_t)(void);
 void oayao_set_counter_tap_callback(oayao_counter_tap_callback_t callback);
 
+// Register a callback invoked when the user taps the day-counter text.
+typedef void (*oayao_days_tap_callback_t)(void);
+void oayao_set_days_tap_callback(oayao_days_tap_callback_t callback);
+
 // Set the start timestamp (Unix epoch ms) for the day counter display.
 void oayao_set_days_counter_start_ms(double ms);
 

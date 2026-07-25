@@ -19,6 +19,18 @@ let counterTapCallback: oayao_counter_tap_callback_t = {
     }
 }
 
+let daysTapCallback: oayao_days_tap_callback_t = {
+    // Immediate tactile feedback: the glyph pulse is subtle and the sheet is
+    // deferred, so a light impact confirms the tap landed.
+    DispatchQueue.main.async {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+    // Same deferral as the counter hearts: let the burst play out first.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+        presentSettings()
+    }
+}
+
 // MARK: - Bootstrap (global, called from Zig init)
 
 @_cdecl("oayao_swift_bootstrap")
@@ -26,6 +38,7 @@ func oayao_swift_bootstrap() {
     DispatchQueue.main.async {
         oayao_set_heart_tap_callback(heartTapCallback)
         oayao_set_counter_tap_callback(counterTapCallback)
+        oayao_set_days_tap_callback(daysTapCallback)
 
         let customColors = SettingsStore.customThemeColors
         for (role, key) in [(0, "background"), (1, "heartFill"), (2, "heartStroke"), (3, "timerText")] {

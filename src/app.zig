@@ -107,6 +107,10 @@ const REPLAY_SIZE_SCALE: f32 = 0.55;
 const COUNTER_TAP_PULSE_SEC: f32 = 0.35;
 const COUNTER_TAP_PULSE_SCALE: f32 = 0.6;
 
+// Same pop for the day-counter text; smaller amplitude — the glyphs are
+// tiny, a full 0.6 pop would read as a glitch.
+const DAYS_TAP_PULSE_SCALE: f32 = 0.35;
+
 // VoiceOver proxy frame padding around the counter pair, in points; covers
 // the largest pulsing hit circle.
 const COUNTER_ACCESS_PAD_PT: f32 = 30.0;
@@ -154,6 +158,9 @@ pub const HeartTapCallback = ?*const fn (event_id: [*:0]const u8) callconv(.c) v
 
 /// C ABI callback invoked when either counter-pair heart is tapped.
 pub const CounterTapCallback = ?*const fn () callconv(.c) void;
+
+/// C ABI callback invoked when the day-counter text is tapped.
+pub const DaysTapCallback = ?*const fn () callconv(.c) void;
 
 /// Core application: owns GPU state, particle pool, heart/meteor systems, and tagged heart map.
 pub const App = struct {
@@ -208,7 +215,10 @@ pub const App = struct {
     is_days_counter_set: bool,
     heart_tap_callback: HeartTapCallback,
     counter_tap_callback: CounterTapCallback,
+    days_tap_callback: DaysTapCallback,
     counter_tap_pulse_sec: ?f32,
+    days_tap_pulse_sec: ?f32,
+    days_text_pulse_scale: f32,
 
     pub fn init(allocator: std.mem.Allocator) !*Self {
         var gpu = try GpuState.init(allocator);
@@ -264,7 +274,10 @@ pub const App = struct {
             .is_days_counter_set = false,
             .heart_tap_callback = null,
             .counter_tap_callback = null,
+            .days_tap_callback = null,
             .counter_tap_pulse_sec = null,
+            .days_tap_pulse_sec = null,
+            .days_text_pulse_scale = 1.0,
         };
         return self;
     }
@@ -391,6 +404,7 @@ pub const App = struct {
         self.drain_spawn_queue(elapsed);
         self.cooling.update(elapsed, &self.pool, &self.rng, dpr);
         self.update_counter_tap_pulse(elapsed);
+        self.update_days_tap_pulse(elapsed);
         self.update_replay(elapsed);
 
         // Simulation step for every alive particle, exactly once per frame,
@@ -417,6 +431,7 @@ pub const App = struct {
                 self.days_text_len,
                 inst_count,
                 &self.text_layout,
+                self.days_text_pulse_scale,
             );
         }
 
@@ -428,6 +443,9 @@ pub const App = struct {
         self.spawn_burst(x, y);
 
         if (self.handle_counter_hearts_tap(x, y)) {
+            return;
+        }
+        if (self.handle_days_text_tap(x, y)) {
             return;
         }
         if (self.handle_heart_tap(x, y)) {
@@ -793,6 +811,10 @@ pub const App = struct {
         self.counter_tap_callback = cb;
     }
 
+    pub fn set_days_tap_callback(self: *Self, cb: DaysTapCallback) void {
+        self.days_tap_callback = cb;
+    }
+
     pub fn set_days_counter_start_ms(self: *Self, ms: f64) void {
         self.days_counter_start_ms = ms;
         self.is_days_counter_set = true;
@@ -921,11 +943,48 @@ pub const App = struct {
             const dy = y - p.pos_y();
             if (@sqrt(dx * dx + dy * dy) < p.get_size() * 2.5) {
                 self.counter_tap_pulse_sec = self.last_elapsed;
+                // Counter group reads as one widget: text pops with the hearts.
+                self.days_tap_pulse_sec = self.last_elapsed;
                 cb();
                 return true;
             }
         }
         return false;
+    }
+
+    /// Rect hit-test over the cached day-counter text layout; the rect is
+    /// padded so a fingertip need not land on a glyph pixel.
+    fn handle_days_text_tap(self: *Self, x: f32, y: f32) bool {
+        const cb = self.days_tap_callback orelse return false;
+        const layout = &self.text_layout;
+        if (layout.text_len == 0) return false;
+        // Generous pad for fat fingers; the counter hearts are tested
+        // first, so overlap with their circles is harmless.
+        const pad = 20.0 * layout.dpr;
+        const text_w = @as(f32, @floatFromInt(layout.text_len)) * layout.char_stride;
+        const text_h = 10.0 * layout.pixel_size; // 5 glyph rows × 2 px units
+        if (x >= layout.text_x - pad and x <= layout.text_x + text_w + pad and
+            y >= layout.text_y - pad and y <= layout.text_y + text_h + pad)
+        {
+            self.days_tap_pulse_sec = self.last_elapsed;
+            // Counter group reads as one widget: hearts pop with the text.
+            self.counter_tap_pulse_sec = self.last_elapsed;
+            cb();
+            return true;
+        }
+        return false;
+    }
+
+    fn update_days_tap_pulse(self: *Self, elapsed: f32) void {
+        const start = self.days_tap_pulse_sec orelse {
+            self.days_text_pulse_scale = 1.0;
+            return;
+        };
+        const k = @max(0.0, 1.0 - (elapsed - start) / COUNTER_TAP_PULSE_SEC);
+        self.days_text_pulse_scale = 1.0 + DAYS_TAP_PULSE_SCALE * k;
+        if (k == 0.0) {
+            self.days_tap_pulse_sec = null;
+        }
     }
 
     fn update_counter_tap_pulse(self: *Self, elapsed: f32) void {

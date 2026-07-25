@@ -135,6 +135,12 @@ export fn oayao_set_counter_tap_callback(cb: ?*const fn () callconv(.c) void) vo
     }
 }
 
+export fn oayao_set_days_tap_callback(cb: ?*const fn () callconv(.c) void) void {
+    if (g_app) |app| {
+        app.set_days_tap_callback(cb);
+    }
+}
+
 export fn oayao_set_days_counter_start_ms(ms: f64) void {
     if (g_app) |app| {
         app.set_days_counter_start_ms(ms);
