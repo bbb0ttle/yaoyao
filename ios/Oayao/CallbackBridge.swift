@@ -90,10 +90,6 @@ func oayao_swift_bootstrap() {
 /// Forces SwiftUI to build and layout backing UIKit views so that the first
 /// real sheet presentation doesn't stall the CADisplayLink-driven render loop.
 private func prewarmSheetViews() {
-    let addVC = UIHostingController(rootView: AddEventSheet())
-    addVC.view.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
-    addVC.view.layoutIfNeeded()
-
     let settingsVC = UIHostingController(rootView: SettingsSheet())
     settingsVC.view.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
     settingsVC.view.layoutIfNeeded()
@@ -109,27 +105,6 @@ private func presentEventDetail(eventId: String) {
         sheet.prefersGrabberVisible = true
     }
     rootVC.present(sheet, animated: true)
-}
-
-private func presentAddEvent() {
-    // Defer to next runloop iteration so the CADisplayLink-driven
-    // Metal render loop can finish its current frame before UIKit
-    // presentation work blocks the main thread.
-    DispatchQueue.main.async {
-        guard CalendarManager.shared.hasAccess else {
-            presentCalendarAccessAlert()
-            return
-        }
-        guard let rootVC = rootViewController() else { return }
-        let sheet = UIHostingController(
-            rootView: AddEventSheet()
-        )
-        if let sheet = sheet.sheetPresentationController {
-            sheet.detents = [.medium()]
-            sheet.prefersGrabberVisible = true
-        }
-        rootVC.present(sheet, animated: true)
-    }
 }
 
 /// Denied access can't be re-prompted by iOS; the only fix is the system's
@@ -162,22 +137,165 @@ private func presentSettings() {
     }
 }
 
+/// Publishes keyboard height for the quick-add overlay: window-level
+/// overlays get no automatic keyboard avoidance, so the capsule's bottom
+/// padding tracks the keyboard frame. `keyboardWillChangeFrame` covers
+/// both show and hide (the hide end frame sits below the window, clamping
+/// the overlap to zero).
+private final class QuickAddKeyboardObserver: ObservableObject {
+    @Published private(set) var height: CGFloat = 0
+    @Published private(set) var duration: Double = 0.25
+
+    init() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(frameWillChange(_:)),
+            name: UIResponder.keyboardWillChangeFrameNotification,
+            object: nil
+        )
+    }
+
+    @objc private func frameWillChange(_ note: Notification) {
+        guard let window = keyWindow(),
+              let info = note.userInfo,
+              let endFrame = info[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        else { return }
+        duration = info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
+        height = max(0, window.bounds.maxY - endFrame.minY - window.safeAreaInsets.bottom)
+    }
+}
+
+/// Shared editing state for the quick-add overlay: the hosting view is
+/// only as big as the collapsed circle (canvas taps pass everywhere else);
+/// it grows to full screen while editing so the tap-anywhere-to-cancel
+/// shim can exist. UIKit flips the constraint sets off this publisher.
+private final class QuickAddState: ObservableObject {
+    @Published var editing = false {
+        didSet { onEditingChanged?(editing) }
+    }
+    var onEditingChanged: ((Bool) -> Void)?
+}
+
 // MARK: - Overlay Buttons
 
-// SwiftUI glass add button for iOS 26+, fallback for older versions
-private struct GlassAddButton: View {
-    let action: () -> Void
+// Settings opens by tapping the floating hearts beside the day counter;
+// only the quick-add control floats over the canvas.
+private struct OverlayButtons: View {
+    let state: QuickAddState
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "plus")
-                .font(.system(size: 24, weight: .semibold))
+        QuickAddOverlay(state: state)
+    }
+}
+
+/// Quick-add overlay: a glass circle fixed at the bottom-right corner.
+/// Tapping it swaps in a full-width input capsule that rises with the
+/// keyboard — the keyboard's return key sends, a tap anywhere else
+/// cancels. Title only, no sheet; saving flows through the same
+/// CalendarManager.addEvent path, so the canvas heart fly-in remains the
+/// confirmation.
+private struct QuickAddOverlay: View {
+    @ObservedObject var state: QuickAddState
+    @StateObject private var keyboard = QuickAddKeyboardObserver()
+    @State private var title = ""
+    @FocusState private var fieldFocused: Bool
+
+    private static let swap = Animation.spring(response: 0.35, dampingFraction: 0.8)
+
+    private var trimmed: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        ZStack {
+            if state.editing {
+                // Tap-anywhere-to-cancel shim; only exists while editing so
+                // canvas taps stay free otherwise.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { collapse() }
+            }
+            // One stable container, anchored bottom-trailing: the circle
+            // and the capsule share geometry, so the swap animates in
+            // place instead of flying across a resizing layout.
+            ZStack(alignment: .bottomTrailing) {
+                if state.editing {
+                    inputCapsule
+                } else {
+                    addButton
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .padding(16)
+            .padding(.bottom, keyboard.height)
+        }
+        .animation(.easeOut(duration: keyboard.duration), value: keyboard.height)
+    }
+
+    private var addButton: some View {
+        Button(action: expand) {
+            Image("AddIcon")
+                .resizable()
+                .frame(width: 22, height: 22)
                 .foregroundColor(.white)
                 .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                 .frame(width: 56, height: 56)
                 .modifier(GlassModifier(cornerRadius: 28))
+                .contentShape(Rectangle())
         }
         .buttonStyle(ScaleButtonStyle())
+        .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: .bottomTrailing)))
+    }
+
+    private var inputCapsule: some View {
+        TextField(L10n.tr(.eventName), text: $title)
+            .focused($fieldFocused)
+            .foregroundColor(.white)
+            .submitLabel(.send)
+            .onSubmit(send)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .modifier(GlassModifier(cornerRadius: 28))
+            .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: .bottomTrailing)))
+            // Keyboard dismissal (swipe-down) reads as cancel too.
+            .onChange(of: fieldFocused) { focused in
+                if !focused && state.editing { collapse() }
+            }
+    }
+
+    private func expand() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(Self.swap) { state.editing = true }
+        // Let the capsule start before the keyboard joins it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            fieldFocused = true
+        }
+    }
+
+    private func collapse() {
+        fieldFocused = false
+        withAnimation(Self.swap) { state.editing = false }
+        title = ""
+    }
+
+    private func send() {
+        guard !trimmed.isEmpty else { return }
+        guard CalendarManager.shared.hasAccess else {
+            presentCalendarAccessAlert()
+            return
+        }
+        let eventTitle = trimmed
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        collapse()
+        CalendarManager.shared.addEvent(title: eventTitle, startDate: Date(), notes: nil) { ok in
+            if !ok {
+                // Save failed after all: put the draft back.
+                title = eventTitle
+                withAnimation(Self.swap) { state.editing = true }
+                fieldFocused = true
+            }
+        }
     }
 }
 
@@ -204,16 +322,6 @@ private struct GlassModifier: ViewModifier {
                     RoundedRectangle(cornerRadius: cornerRadius)
                         .stroke(.white.opacity(0.35), lineWidth: 0.5)
                 }
-        }
-    }
-}
-
-// Settings opens by tapping the floating hearts beside the day counter;
-// only the add-event button floats over the canvas.
-private struct OverlayButtons: View {
-    var body: some View {
-        GlassAddButton {
-            presentAddEvent()
         }
     }
 }
@@ -320,15 +428,43 @@ private func addStressPanel() {
 private func addOverlayButtons() {
     guard let window = keyWindow() else { return }
 
-    let host = UIHostingController(rootView: OverlayButtons())
+    let state = QuickAddState()
+    let host = UIHostingController(rootView: OverlayButtons(state: state))
     host.view.backgroundColor = .clear
     host.view.translatesAutoresizingMaskIntoConstraints = false
     window.addSubview(host.view)
 
-    NSLayoutConstraint.activate([
-        host.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-        host.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-    ])
+    // Collapsed: the host is just the circle's box at the corner, so every
+    // other canvas tap (hearts, counter, burst) passes through untouched.
+    // Editing: the host fills the screen for the cancel shim + full-width
+    // capsule, and returns to the box afterwards.
+    let guide = window.safeAreaLayoutGuide
+    let collapsed = [
+        host.view.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+        host.view.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+        host.view.widthAnchor.constraint(equalToConstant: 88),
+        host.view.heightAnchor.constraint(equalToConstant: 88),
+    ]
+    let editing = [
+        host.view.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+        host.view.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+        host.view.topAnchor.constraint(equalTo: guide.topAnchor),
+        host.view.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+    ]
+    NSLayoutConstraint.activate(collapsed)
+
+    state.onEditingChanged = { isEditing in
+        // Instant flip: the SwiftUI transitions own the visuals; animating
+        // the frame too would drag the circle across the screen.
+        if isEditing {
+            NSLayoutConstraint.deactivate(collapsed)
+            NSLayoutConstraint.activate(editing)
+        } else {
+            NSLayoutConstraint.deactivate(editing)
+            NSLayoutConstraint.activate(collapsed)
+        }
+        window.layoutIfNeeded()
+    }
 }
 
 // MARK: - Accessibility

@@ -53,7 +53,7 @@ enum L10n {
         case openCalendarApp, calendarNotShareable, sharingUsesIcloud
         case calendarName, calendarNamePlaceholder, calendarNameFooter
         case changesApplyImmediately
-        case cancel, newEvent, title, eventName, notesOptional, saveEvent
+        case cancel, title, eventName, notesOptional
         case notes, location, event, close, deleteEvent, loading
         case date
         case heart, opacity, motion, motionBeat, motionBreath, positionY, resetDefaults
@@ -154,11 +154,9 @@ enum L10n {
         ),
         .changesApplyImmediately: ("Changes apply immediately.", "修改立即生效。"),
         .cancel: ("Cancel", "取消"),
-        .newEvent: ("New Event", "新建事件"),
         .title: ("Title", "标题"),
         .eventName: ("Event name", "添加心事件"),
         .notesOptional: ("Notes (optional)", "备注(可选)"),
-        .saveEvent: ("Save Event", "保存事件"),
         .notes: ("Notes", "备注"),
         .location: ("Location", "位置"),
         .event: ("Event", "事件"),

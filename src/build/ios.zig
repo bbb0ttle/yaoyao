@@ -96,7 +96,6 @@ pub fn createAppBundle(
         \\  "$7"/CallbackBridge.swift \
         \\  "$7"/CalendarManager.swift \
         \\  "$7"/EventDetailSheet.swift \
-        \\  "$7"/AddEventSheet.swift \
         \\  "$7"/SettingsStore.swift \
         \\  "$7"/Localization.swift \
         \\  "$7"/SettingsSheet.swift
