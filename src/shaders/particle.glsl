@@ -129,6 +129,12 @@ void main() {
         vec2 p = vec2(uv.x * xw, uv.y * 1.05);
         float env = 1.0 - dot(p, p);
         env -= smoothstep(0.3, 0.9, uv.y) * 0.5; // flat, shaded base
+        // Early-out: alpha carries a clamp(env,0,1) factor, so outside the
+        // envelope the pixel is transparent — skip all three fbm calls.
+        if (env <= 0.0) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
         // Domain warp gives the billow field a slow swirl.
         vec2 sp = uv * 2.0 + v_stroke_a;
         sp += (fbm(sp * 0.5) - 0.5) * 1.4;
@@ -154,6 +160,12 @@ void main() {
         // Wide flat envelope; x factor > 1 so it reaches zero inside the
         // quad — otherwise patches clip hard at the quad's vertical edges.
         float env = 1.0 - dot(uv * vec2(1.15, 1.7), uv * vec2(1.15, 1.7));
+        // Early-out: alpha multiplies clamp(env,0,1) — transparent outside
+        // the envelope, so skip the fbm.
+        if (env <= 0.0) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
         // Seed-driven coverage: some patches dense, some broken.
         float cov = 0.28 + 0.45 * fract(v_stroke_a * 0.618);
         float n = fbm(uv * 1.6 + v_stroke_a);
@@ -179,6 +191,13 @@ void main() {
         // Lens reaches zero at |x|=1 and |y|≈1/3 — ~3:1 width-to-height,
         // fully contained within the quad so edges fade naturally.
         float lens = 1.0 - (uv.x * uv.x * 1.0 + uv.y * uv.y * 9.0);
+        // Early-out: body/crown/rim all vanish at lens <= 0 and irid reduces
+        // to 1.0, so the pixel is fill_color with zero alpha — skip the sin
+        // band work.
+        if (lens <= 0.0) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
         float lens_c = clamp(lens, 0.0, 1.0);
         // Bend band samples along the lens arc (yy offsets up to ~4× the
         // half-height) so the stacked-plate stripes follow the saucer curve
@@ -211,6 +230,12 @@ void main() {
     if (v_shape > 4.5) {
         vec2 uv = v_uv;
         float e = 1.0 - (uv.x * uv.x + (4.0 * uv.y) * (4.0 * uv.y));
+        // Early-out: alpha multiplies clamp(e,0,1) — transparent outside
+        // the envelope, so skip the warp and both fbm calls.
+        if (e <= 0.0) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
         vec2 sp = vec2(uv.x * 1.5, uv.y * 8.0) + vec2(uv.y * 2.0, 0.0) + v_stroke_a;
         // Domain warp: a low-frequency fbm bends the sample coords so the
         // filaments curl into hooks and mare's tails.
@@ -234,6 +259,12 @@ void main() {
         vec2 uv = v_uv;
         float dome = 1.0 - dot(uv * vec2(1.0, 1.25), uv * vec2(1.0, 1.25));
         dome -= smoothstep(0.15, 0.75, uv.y) * 0.5; // flatten and fade the base
+        // Early-out: n peaks at 0.85*0.875 + dome*0.9 - 0.28, so dome < -0.25
+        // keeps n under the 0.30 threshold — c, edge and alpha are all zero.
+        if (dome < -0.25) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
         float n = fbm(uv * 2.8 + v_stroke_a) * 0.85 + dome * 0.9 - 0.28;
         // Monochrome puff: depth comes from alpha alone — dense crests read
         // solid, the thin base and rims fade away. The tight threshold band

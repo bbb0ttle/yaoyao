@@ -81,8 +81,23 @@ func oayao_swift_bootstrap() {
         // internal caches so the real presentation is fast.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             prewarmSheetViews()
+            prewarmKeyboard()
         }
     }
+}
+
+/// The first real keyboard pop in a process loads QuickType/UIInputSetHost
+/// lazily (a 200–500ms stall on the keyboard's opening frames). Cycling a
+/// hidden field once at launch pays that cost while the app is idle; the
+/// same-runloop resign cancels the keyboard before it animates in.
+private func prewarmKeyboard() {
+    guard let window = keyWindow() else { return }
+    let field = UITextField(frame: CGRect(x: -100, y: -100, width: 10, height: 10))
+    field.isHidden = true
+    window.addSubview(field)
+    field.becomeFirstResponder()
+    field.resignFirstResponder()
+    field.removeFromSuperview()
 }
 
 // MARK: - Sheet Presentation
@@ -250,12 +265,17 @@ private struct QuickAddEditorView: View {
             .padding(.bottom, keyboard.height)
         }
         .animation(.easeOut(duration: keyboard.duration), value: keyboard.height)
-        .onAppear {
-            if let draft = quickAddDraft {
-                title = draft
-                quickAddDraft = nil
+        // Focus follows the editing flag, not appearance: the host is
+        // created hidden at launch, and a hidden host must never summon
+        // the keyboard.
+        .onChange(of: state.editing) { editing in
+            if editing {
+                if let draft = quickAddDraft {
+                    title = draft
+                    quickAddDraft = nil
+                }
+                fieldFocused = true
             }
-            fieldFocused = true
         }
     }
 
@@ -414,11 +434,6 @@ private func addStressPanel() {
 }
 #endif
 
-/// The full-screen editor host, alive only while editing. Removed the
-/// moment editing ends so canvas taps (hearts, counter, burst) are never
-/// intercepted in the resting state.
-private var quickAddEditorHost: UIView?
-
 private func addOverlayButtons() {
     guard let window = keyWindow() else { return }
 
@@ -438,25 +453,25 @@ private func addOverlayButtons() {
         buttonHost.view.heightAnchor.constraint(equalToConstant: 88),
     ])
 
+    // The editor host is built up front and kept hidden: tapping the
+    // circle only flips isHidden, so no view-tree construction or first
+    // layout lands on the keyboard's opening frames. Hidden views don't
+    // hit-test, so canvas taps stay free while collapsed.
+    let editorHost = UIHostingController(rootView: QuickAddEditorView(state: state))
+    editorHost.view.backgroundColor = .clear
+    editorHost.view.isHidden = true
+    editorHost.view.translatesAutoresizingMaskIntoConstraints = false
+    window.addSubview(editorHost.view)
+    NSLayoutConstraint.activate([
+        editorHost.view.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor),
+        editorHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor),
+        editorHost.view.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor),
+        editorHost.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor),
+    ])
+
     state.onEditingChanged = { isEditing in
         buttonHost.view.isHidden = isEditing
-        if isEditing {
-            guard quickAddEditorHost == nil, let window = keyWindow() else { return }
-            let editorHost = UIHostingController(rootView: QuickAddEditorView(state: state))
-            editorHost.view.backgroundColor = .clear
-            editorHost.view.translatesAutoresizingMaskIntoConstraints = false
-            window.addSubview(editorHost.view)
-            NSLayoutConstraint.activate([
-                editorHost.view.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor),
-                editorHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor),
-                editorHost.view.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor),
-                editorHost.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor),
-            ])
-            quickAddEditorHost = editorHost.view
-        } else {
-            quickAddEditorHost?.removeFromSuperview()
-            quickAddEditorHost = nil
-        }
+        editorHost.view.isHidden = !isEditing
     }
 }
 

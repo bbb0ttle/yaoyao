@@ -431,22 +431,31 @@ import Combine
             return
         }
 
-        let event = EKEvent(eventStore: eventStore)
-        event.title = title
-        event.startDate = startDate
-        event.endDate = startDate.addingTimeInterval(3600)
-        event.calendar = calendar
-        if let notes = notes, !notes.isEmpty {
-            event.notes = notes
-        }
+        // eventStore.save(commit:) is a synchronous IPC to calendard
+        // (10–50ms) — keep it off the main thread so a send never stalls
+        // the render loop. The spawn callback and completion hop back to
+        // main: oayao_* mutates renderer state owned by the frame loop.
+        workQueue.async { [self] in
+            let event = EKEvent(eventStore: eventStore)
+            event.title = title
+            event.startDate = startDate
+            event.endDate = startDate.addingTimeInterval(3600)
+            event.calendar = calendar
+            if let notes = notes, !notes.isEmpty {
+                event.notes = notes
+            }
 
-        do {
-            try eventStore.save(event, span: .thisEvent, commit: true)
-            oayao_spawn_heart(event.eventIdentifier)
-            completion(true)
-        } catch {
-            print("[Oayao] Failed to save event: \(error)")
-            completion(false)
+            do {
+                try eventStore.save(event, span: .thisEvent, commit: true)
+                let identifier = event.eventIdentifier
+                DispatchQueue.main.async {
+                    oayao_spawn_heart(identifier)
+                    completion(true)
+                }
+            } catch {
+                print("[Oayao] Failed to save event: \(error)")
+                DispatchQueue.main.async { completion(false) }
+            }
         }
     }
 
