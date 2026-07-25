@@ -165,10 +165,10 @@ private final class QuickAddKeyboardObserver: ObservableObject {
     }
 }
 
-/// Shared editing state for the quick-add overlay: the hosting view is
-/// only as big as the collapsed circle (canvas taps pass everywhere else);
-/// it grows to full screen while editing so the tap-anywhere-to-cancel
-/// shim can exist. UIKit flips the constraint sets off this publisher.
+/// Shared editing state for the quick-add overlay. UIKit swaps hosts off
+/// this publisher: a small static host for the corner circle, and a
+/// full-screen editor host added only while editing (so canvas taps pass
+/// untouched the rest of the time, and nothing ever resizes on screen).
 private final class QuickAddState: ObservableObject {
     @Published var editing = false {
         didSet { onEditingChanged?(editing) }
@@ -178,29 +178,46 @@ private final class QuickAddState: ObservableObject {
 
 // MARK: - Overlay Buttons
 
-// Settings opens by tapping the floating hearts beside the day counter;
-// only the quick-add control floats over the canvas.
-private struct OverlayButtons: View {
-    let state: QuickAddState
+/// The collapsed quick-add affordance: a glass circle fixed at the
+/// bottom-right corner. No animation — adding is frequent, a morph every
+/// time would just be in the way.
+private struct QuickAddButtonView: View {
+    @ObservedObject var state: QuickAddState
 
     var body: some View {
-        QuickAddOverlay(state: state)
+        HStack {
+            Spacer()
+            VStack {
+                Spacer()
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    state.editing = true
+                } label: {
+                    Image("AddIcon")
+                        .resizable()
+                        .frame(width: 22, height: 22)
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                        .frame(width: 56, height: 56)
+                        .modifier(GlassModifier(cornerRadius: 28))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(ScaleButtonStyle())
+            }
+        }
+        .padding(16)
     }
 }
 
-/// Quick-add overlay: a glass circle fixed at the bottom-right corner.
-/// Tapping it swaps in a full-width input capsule that rises with the
-/// keyboard — the keyboard's return key sends, a tap anywhere else
-/// cancels. Title only, no sheet; saving flows through the same
-/// CalendarManager.addEvent path, so the canvas heart fly-in remains the
-/// confirmation.
-private struct QuickAddOverlay: View {
+/// The editing overlay: tap-anywhere-to-cancel shim plus a full-width
+/// input capsule pinned above the keyboard. Title only, no sheet; saving
+/// flows through the same CalendarManager.addEvent path, so the canvas
+/// heart fly-in remains the confirmation.
+private struct QuickAddEditorView: View {
     @ObservedObject var state: QuickAddState
     @StateObject private var keyboard = QuickAddKeyboardObserver()
     @State private var title = ""
     @FocusState private var fieldFocused: Bool
-
-    private static let swap = Animation.spring(response: 0.35, dampingFraction: 0.8)
 
     private var trimmed: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -208,74 +225,43 @@ private struct QuickAddOverlay: View {
 
     var body: some View {
         ZStack {
-            if state.editing {
-                // Tap-anywhere-to-cancel shim; only exists while editing so
-                // canvas taps stay free otherwise.
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { collapse() }
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { collapse() }
+            VStack {
+                Spacer()
+                TextField(L10n.tr(.eventName), text: $title)
+                    .focused($fieldFocused)
+                    // Glass sits over the theme background; use the theme's
+                    // WCAG-AA readable text color instead of stark white.
+                    .foregroundColor(CanvasTheme(storedId: UInt32(SettingsStore.themeId)).readableTextColor)
+                    .submitLabel(.send)
+                    .onSubmit(send)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .modifier(GlassModifier(cornerRadius: 28))
+                    // Keyboard dismissal (swipe-down) reads as cancel too.
+                    .onChange(of: fieldFocused) { focused in
+                        if !focused && state.editing { collapse() }
+                    }
             }
-            // One stable container, anchored bottom-trailing: the circle
-            // and the capsule share geometry, so the swap animates in
-            // place instead of flying across a resizing layout.
-            ZStack(alignment: .bottomTrailing) {
-                if state.editing {
-                    inputCapsule
-                } else {
-                    addButton
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             .padding(16)
             .padding(.bottom, keyboard.height)
         }
         .animation(.easeOut(duration: keyboard.duration), value: keyboard.height)
-    }
-
-    private var addButton: some View {
-        Button(action: expand) {
-            Image("AddIcon")
-                .resizable()
-                .frame(width: 22, height: 22)
-                .foregroundColor(.white)
-                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-                .frame(width: 56, height: 56)
-                .modifier(GlassModifier(cornerRadius: 28))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(ScaleButtonStyle())
-        .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: .bottomTrailing)))
-    }
-
-    private var inputCapsule: some View {
-        TextField(L10n.tr(.eventName), text: $title)
-            .focused($fieldFocused)
-            .foregroundColor(.white)
-            .submitLabel(.send)
-            .onSubmit(send)
-            .padding(.horizontal, 16)
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .modifier(GlassModifier(cornerRadius: 28))
-            .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: .bottomTrailing)))
-            // Keyboard dismissal (swipe-down) reads as cancel too.
-            .onChange(of: fieldFocused) { focused in
-                if !focused && state.editing { collapse() }
+        .onAppear {
+            if let draft = quickAddDraft {
+                title = draft
+                quickAddDraft = nil
             }
-    }
-
-    private func expand() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation(Self.swap) { state.editing = true }
-        // Let the capsule start before the keyboard joins it.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             fieldFocused = true
         }
     }
 
     private func collapse() {
         fieldFocused = false
-        withAnimation(Self.swap) { state.editing = false }
+        state.editing = false
         title = ""
     }
 
@@ -290,14 +276,17 @@ private struct QuickAddOverlay: View {
         collapse()
         CalendarManager.shared.addEvent(title: eventTitle, startDate: Date(), notes: nil) { ok in
             if !ok {
-                // Save failed after all: put the draft back.
-                title = eventTitle
-                withAnimation(Self.swap) { state.editing = true }
-                fieldFocused = true
+                // Save failed after all: reopen with the draft restored.
+                quickAddDraft = eventTitle
+                state.editing = true
             }
         }
     }
 }
+
+/// Draft carry-over for a failed save: the editor view is destroyed on
+/// collapse, so the title can't live in its @State across a reopen.
+private var quickAddDraft: String?
 
 private struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -425,45 +414,49 @@ private func addStressPanel() {
 }
 #endif
 
+/// The full-screen editor host, alive only while editing. Removed the
+/// moment editing ends so canvas taps (hearts, counter, burst) are never
+/// intercepted in the resting state.
+private var quickAddEditorHost: UIView?
+
 private func addOverlayButtons() {
     guard let window = keyWindow() else { return }
 
     let state = QuickAddState()
-    let host = UIHostingController(rootView: OverlayButtons(state: state))
-    host.view.backgroundColor = .clear
-    host.view.translatesAutoresizingMaskIntoConstraints = false
-    window.addSubview(host.view)
 
-    // Collapsed: the host is just the circle's box at the corner, so every
-    // other canvas tap (hearts, counter, burst) passes through untouched.
-    // Editing: the host fills the screen for the cancel shim + full-width
-    // capsule, and returns to the box afterwards.
-    let guide = window.safeAreaLayoutGuide
-    let collapsed = [
-        host.view.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-        host.view.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-        host.view.widthAnchor.constraint(equalToConstant: 88),
-        host.view.heightAnchor.constraint(equalToConstant: 88),
-    ]
-    let editing = [
-        host.view.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-        host.view.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-        host.view.topAnchor.constraint(equalTo: guide.topAnchor),
-        host.view.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-    ]
-    NSLayoutConstraint.activate(collapsed)
+    // Collapsed circle: a small static box at the corner. It never moves
+    // and never resizes — the editor is a separate host, so there is no
+    // layout flip to flash or fly across the screen.
+    let buttonHost = UIHostingController(rootView: QuickAddButtonView(state: state))
+    buttonHost.view.backgroundColor = .clear
+    buttonHost.view.translatesAutoresizingMaskIntoConstraints = false
+    window.addSubview(buttonHost.view)
+    NSLayoutConstraint.activate([
+        buttonHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor),
+        buttonHost.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor),
+        buttonHost.view.widthAnchor.constraint(equalToConstant: 88),
+        buttonHost.view.heightAnchor.constraint(equalToConstant: 88),
+    ])
 
     state.onEditingChanged = { isEditing in
-        // Instant flip: the SwiftUI transitions own the visuals; animating
-        // the frame too would drag the circle across the screen.
+        buttonHost.view.isHidden = isEditing
         if isEditing {
-            NSLayoutConstraint.deactivate(collapsed)
-            NSLayoutConstraint.activate(editing)
+            guard quickAddEditorHost == nil, let window = keyWindow() else { return }
+            let editorHost = UIHostingController(rootView: QuickAddEditorView(state: state))
+            editorHost.view.backgroundColor = .clear
+            editorHost.view.translatesAutoresizingMaskIntoConstraints = false
+            window.addSubview(editorHost.view)
+            NSLayoutConstraint.activate([
+                editorHost.view.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor),
+                editorHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor),
+                editorHost.view.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor),
+                editorHost.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor),
+            ])
+            quickAddEditorHost = editorHost.view
         } else {
-            NSLayoutConstraint.deactivate(editing)
-            NSLayoutConstraint.activate(collapsed)
+            quickAddEditorHost?.removeFromSuperview()
+            quickAddEditorHost = nil
         }
-        window.layoutIfNeeded()
     }
 }
 
