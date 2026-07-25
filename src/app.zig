@@ -49,11 +49,11 @@ const CLUSTER_BIAS: f32 = 0.6;
 // keeping the newest event the most prominent.
 const HEART_SHRINK_FACTOR: f32 = 0.94;
 
-// Ease-out deceleration on the fly-in: the heart enters at twice the
-// background meteor speed and stays fast — the power ease-out brakes only
-// late and only down to the cruise floor, so the landing itself is the
-// payoff: the spring catches the arrival energy in a punchy recoil.
-const FLY_START_SPEED: f32 = 16.0; // px/frame × dpr
+// Ease-out deceleration on the fly-in: the heart enters at the background
+// meteor speed — an even, unhurried glide — and the power ease-out brakes
+// only late and only down to the cruise floor, so the landing itself is
+// the payoff: the spring catches the arrival energy in a gentle recoil.
+const FLY_START_SPEED: f32 = 8.0; // px/frame × dpr — matches meteor_sys.METEOR_SPEED
 const FLY_EASE_POWER: f32 = 3.0; // cubic ease-out; higher = later, sharper braking
 const FLY_CRUISE_FRAC: f32 = 0.5; // arrival speed as a fraction of entry speed
 
@@ -1185,7 +1185,9 @@ pub const App = struct {
 
     /// Evenly spaced trail dots along the whole path: the sub-gap
     /// remainder carries across frames, so dot spacing never jitters
-    /// as the speed changes.
+    /// as the speed changes. Dots fade near the screen edges exactly
+    /// like the ambient meteors', so the ribbon breathes in from the
+    /// border instead of hard-stopping at it.
     fn lay_incoming_trail(self: *Self, cm: *IncomingHeart, prev_x: f32, prev_y: f32, elapsed: f32, dpr: f32) void {
         const p = cm.particle;
         const step_x = p.pos_x() - prev_x;
@@ -1194,19 +1196,27 @@ pub const App = struct {
         if (step_dist == 0.0) return;
 
         const gap = TRAIL_GAP * dpr;
+        const w = sapp.widthf();
+        const h = sapp.heightf();
+        const fade_zone = meteor_sys.FADE_MARGIN * dpr;
         cm.trail_carry += step_dist;
         while (cm.trail_carry >= gap) {
             cm.trail_carry -= gap;
             const f = 1.0 - cm.trail_carry / step_dist;
+            const tx = prev_x + step_x * f;
+            const ty = prev_y + step_y * f;
+            const min_dist = @min(@min(tx, w - tx), @min(ty, h - ty));
+            if (min_dist <= 0.0) continue;
+            const edge_fade: f32 = if (min_dist < fade_zone) min_dist / fade_zone else 1.0;
             const trail = self.pool.alloc_particle(
-                Vec2{ .x = prev_x + step_x * f, .y = prev_y + step_y * f },
+                Vec2{ .x = tx, .y = ty },
                 elapsed,
                 .{ .size = meteor_sys.TRAIL_SIZE * dpr },
                 &self.rng,
             );
             trail.set_vel(0, 0);
             trail.set_acc(0, 0);
-            trail.set_lifespan(meteor_sys.TRAIL_LIFESPAN);
+            trail.set_lifespan(edge_fade * meteor_sys.TRAIL_LIFESPAN);
         }
     }
 
