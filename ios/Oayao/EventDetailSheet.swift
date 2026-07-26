@@ -50,9 +50,9 @@ struct EventDetailSheet: View {
             draftNotes = event.notes ?? ""
             didInitDrafts = true
         }
-        .onChange(of: draftTitle) { _ in scheduleSave() }
-        .onChange(of: draftDate) { _ in scheduleSave() }
-        .onChange(of: draftNotes) { _ in scheduleSave() }
+        .onChange(of: draftTitle) { scheduleSave() }
+        .onChange(of: draftDate) { scheduleSave() }
+        .onChange(of: draftNotes) { scheduleSave() }
         .onDisappear {
             saveTask?.cancel()
             saveNow()

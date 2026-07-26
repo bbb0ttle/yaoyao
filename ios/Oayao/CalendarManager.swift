@@ -47,7 +47,7 @@ import Combine
     }
 
     func requestAccess(completion: @escaping (Bool) -> Void) {
-        eventStore.requestAccess(to: .event) { [weak self] granted, error in
+        eventStore.requestFullAccessToEvents { [weak self] granted, error in
             DispatchQueue.main.async {
                 self?.hasAccess = granted
                 // Show the last known start date immediately; the authoritative

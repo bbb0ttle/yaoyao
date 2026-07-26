@@ -124,9 +124,11 @@ float eval_sdf(vec2 uv, float shape) {
 
 void main() {
     // Baked cloud blit (shape 9): the noise work was done once at bake time.
+    // Clouds are always white (t.rgb holds the static iridescence factor
+    // for lenticular, 1.0 elsewhere) — never tinted by the theme.
     if (v_shape > 8.5) {
         vec4 t = texture(sampler2D(cloud_tex, cloud_smp), v_uv * 0.5 + 0.5);
-        frag_color = vec4(fill_color.rgb * t.rgb, t.a * v_fill_a);
+        frag_color = vec4(t.rgb, t.a * v_fill_a);
         return;
     }
 

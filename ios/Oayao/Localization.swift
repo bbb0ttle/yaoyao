@@ -30,12 +30,35 @@ final class LanguageManager: ObservableObject {
     static let storageKey = "oayao.language"
 
     @Published var language: AppLanguage {
-        didSet { UserDefaults.standard.set(language.rawValue, forKey: Self.storageKey) }
+        didSet {
+            UserDefaults.standard.set(language.rawValue, forKey: Self.storageKey)
+            // Point Foundation/UIKit at the override too: system-provided
+            // UI (the embedded color picker's Grid/Spectrum/Sliders) reads
+            // AppleLanguages, not our table.
+            switch language {
+            case .system:
+                UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+            case .english:
+                UserDefaults.standard.set(["en"], forKey: "AppleLanguages")
+            case .chinese:
+                UserDefaults.standard.set(["zh-Hans"], forKey: "AppleLanguages")
+            }
+        }
     }
 
     private init() {
         let stored = UserDefaults.standard.string(forKey: Self.storageKey) ?? ""
         language = AppLanguage(rawValue: stored) ?? .system
+        // Re-apply the system-UI language override for the stored choice
+        // (didSet only runs on later changes).
+        switch language {
+        case .system:
+            break
+        case .english:
+            UserDefaults.standard.set(["en"], forKey: "AppleLanguages")
+        case .chinese:
+            UserDefaults.standard.set(["zh-Hans"], forKey: "AppleLanguages")
+        }
     }
 }
 
@@ -166,6 +189,6 @@ enum L10n {
         .positionY: ("Vertical Position", "垂直位置"),
         .resetDefaults: ("Reset to Defaults", "恢复默认"),
         .size: ("Size", "尺寸"),
-        .sky: ("Sky", "天空"),
+        .sky: ("Sky", "云朵"),
     ]
 }

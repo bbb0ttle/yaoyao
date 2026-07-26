@@ -11,13 +11,19 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationView {
-            Form {
+        // NavigationStack only: the legacy NavigationView pops a pushed
+        // page whenever a @AppStorage it renders rebuilds mid-stack (the
+        // custom-colors page was unenterable because of it).
+        NavigationStack { settingsForm }
+    }
+
+    private var settingsForm: some View {
+        Form {
                 Section {
                     Toggle(L10n.tr(.sky), isOn: $skyOn)
-                        .onChange(of: skyOn) { on in
-                            SettingsStore.skyMode = on ? 1 : 0
-                            oayao_set_sky_mode(on ? 1 : 0)
+                        .onChange(of: skyOn) {
+                            SettingsStore.skyMode = skyOn ? 1 : 0
+                            oayao_set_sky_mode(skyOn ? 1 : 0)
                         }
                     NavigationLink {
                         ThemeSettingsView()
@@ -102,13 +108,12 @@ struct SettingsSheet: View {
                         }
                     }
                 }
-            }
-            .navigationTitle(L10n.tr(.settings))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L10n.tr(.done)) { dismiss() }
-                }
+        }
+        .navigationTitle(L10n.tr(.settings))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(L10n.tr(.done)) { dismiss() }
             }
         }
         .onAppear {
@@ -274,9 +279,9 @@ private struct CounterStartSettingsView: View {
         .onAppear {
             picked = counterStart ?? Date()
         }
-        .onChange(of: picked) { newValue in
-            counterStart = newValue
-            CalendarManager.shared.setCounterStart(date: newValue)
+        .onChange(of: picked) {
+            counterStart = picked
+            CalendarManager.shared.setCounterStart(date: picked)
         }
     }
 }
@@ -305,7 +310,7 @@ private struct HeartSettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     Slider(value: $sizeScale, in: 0.5...2)
-                        .onChange(of: sizeScale) { oayao_set_heart_size_scale(Float($0)) }
+                        .onChange(of: sizeScale) { oayao_set_heart_size_scale(Float(sizeScale)) }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -315,14 +320,14 @@ private struct HeartSettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     Slider(value: $opacity, in: 0...1)
-                        .onChange(of: opacity) { oayao_set_heart_opacity(Float($0)) }
+                        .onChange(of: opacity) { oayao_set_heart_opacity(Float(opacity)) }
                 }
                 Picker(L10n.tr(.motion), selection: $motion) {
                     Text(L10n.tr(.motionBeat)).tag(0)
                     Text(L10n.tr(.motionBreath)).tag(1)
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: motion) { oayao_set_heart_motion(UInt32($0)) }
+                .onChange(of: motion) { oayao_set_heart_motion(UInt32(motion)) }
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -451,7 +456,7 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
         return v << 16 | v << 8 | v
     }
 
-    private static func rgb(_ packed: Int) -> (r: Double, g: Double, b: Double) {
+    static func rgb(_ packed: Int) -> (r: Double, g: Double, b: Double) {
         (
             Double((packed >> 16) & 0xFF) / 255.0,
             Double((packed >> 8) & 0xFF) / 255.0,
@@ -515,7 +520,7 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
         return make(best)
     }
 
-    private static func hsl(_ c: (r: Double, g: Double, b: Double)) -> (h: Double, s: Double, l: Double) {
+    static func hsl(_ c: (r: Double, g: Double, b: Double)) -> (h: Double, s: Double, l: Double) {
         let maxC = max(c.r, c.g, c.b)
         let minC = min(c.r, c.g, c.b)
         let l = (maxC + minC) / 2
@@ -533,7 +538,7 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
         return (h, s, l)
     }
 
-    private static func packed(hsl c: (h: Double, s: Double, l: Double)) -> Int {
+    static func packed(hsl c: (h: Double, s: Double, l: Double)) -> Int {
         func hueToRgb(_ p: Double, _ q: Double, _ tIn: Double) -> Double {
             var t = tIn
             if t < 0 { t += 1 }
@@ -658,17 +663,24 @@ private struct ThemeSettingsView: View {
 /// knobs can't produce a broken palette.
 private struct CustomColorView: View {
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
-    // Draft colors stay unquantized while dragging the picker; rounding to
-    // 8-bit happens only when persisting and pushing to the renderer,
-    // otherwise the picker readback snaps the slider to coarse steps.
-    @State private var background: Color = .white
-    @State private var heartFill: Color = .white
+    // Read the stored colors at construction: seeding @State later (in
+    // onAppear) would race the child picker's own initialization.
+    @State private var background = Color(packedRGB: SettingsStore.customThemeColors["background"] ?? 0xA9E5D6)
+    @State private var heartFill = Color(packedRGB: SettingsStore.customThemeColors["heartFill"] ?? 0xFFFFFF)
 
     var body: some View {
         Form {
             Section {
-                ColorPicker(L10n.tr(.colorBackground), selection: $background, supportsOpacity: false)
-                ColorPicker(L10n.tr(.colorHeartFill), selection: $heartFill, supportsOpacity: false)
+                NavigationLink {
+                    ColorPickerPage(title: L10n.tr(.colorBackground), color: $background, onPick: push)
+                } label: {
+                    colorRow(L10n.tr(.colorBackground), color: background)
+                }
+                NavigationLink {
+                    ColorPickerPage(title: L10n.tr(.colorHeartFill), color: $heartFill, onPick: push)
+                } label: {
+                    colorRow(L10n.tr(.colorHeartFill), color: heartFill)
+                }
             } footer: {
                 Text(L10n.tr(.customColorsFooter))
             }
@@ -676,19 +688,26 @@ private struct CustomColorView: View {
         .navigationTitle(L10n.tr(.customColors))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            let stored = SettingsStore.customThemeColors
-            background = Color(packedRGB: stored["background"] ?? 0xA9E5D6)
-            heartFill = Color(packedRGB: stored["heartFill"] ?? 0xFFFFFF)
-            // Entering the page means previewing the custom palette live —
-            // deferred one runloop: mutating @AppStorage mid-push makes the
-            // legacy NavigationView bounce the destination straight back.
-            DispatchQueue.main.async {
-                themeId = Int(CanvasTheme.custom.rawValue)
-                oayao_transition_to_theme(CanvasTheme.custom.rawValue)
-            }
+            // Preview goes straight to the renderer; themeId persists on
+            // exit so no mid-stack @AppStorage rebuild can bounce the page.
+            oayao_transition_to_theme(CanvasTheme.custom.rawValue)
         }
-        .onChange(of: background) { _ in push() }
-        .onChange(of: heartFill) { _ in push() }
+        .onDisappear {
+            themeId = Int(CanvasTheme.custom.rawValue)
+        }
+    }
+
+    private func colorRow(_ title: String, color: Color) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Circle()
+                .fill(color)
+                .frame(width: 22, height: 22)
+                .overlay {
+                    Circle().stroke(.primary.opacity(0.15), lineWidth: 0.5)
+                }
+        }
     }
 
     private func push() {
@@ -709,6 +728,94 @@ private struct CustomColorView: View {
                 UInt8((packed >> 8) & 0xFF),
                 UInt8(packed & 0xFF)
             )
+        }
+    }
+}
+
+/// Full-page color editor: the system color picker embedded inline (no
+/// panel, no dimming, no bounce). Edits write straight through to the
+/// parent list's state, so the canvas previews live while dragging.
+private struct ColorPickerPage: View {
+    let title: String
+    @Binding var color: Color
+    let onPick: () -> Void
+    @ObservedObject private var languageManager = LanguageManager.shared
+
+    var body: some View {
+        // Recreate the picker on language change so its built-in labels
+        // (Grid/Spectrum/Sliders) follow the in-app language override.
+        InlineColorPicker(color: $color) { _ in onPick() }
+            .id(languageManager.language)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// The system color picker embedded inline — but its built-in header
+/// ("Colors" title + eyedropper) belongs to the modal presentation, so the
+/// host clips it off the top. No panel, no dimming, no bounce.
+private struct InlineColorPicker: UIViewControllerRepresentable {
+    @Binding var color: Color
+    var onPick: (Color) -> Void = { _ in }
+
+    /// Height of the picker's own title/eyedropper strip, clipped away.
+    private static let headerHeight: CGFloat = 48
+
+    final class HostViewController: UIViewController {
+        let picker = UIColorPickerViewController()
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.clipsToBounds = true
+            addChild(picker)
+            view.addSubview(picker.view)
+            picker.didMove(toParent: self)
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            picker.view.frame = CGRect(
+                x: 0,
+                y: -InlineColorPicker.headerHeight,
+                width: view.bounds.width,
+                height: view.bounds.height + InlineColorPicker.headerHeight
+            )
+        }
+    }
+
+    func makeUIViewController(context: Context) -> HostViewController {
+        let host = HostViewController()
+        host.picker.supportsAlpha = false
+        host.picker.delegate = context.coordinator
+        host.picker.selectedColor = UIColor(color)
+        return host
+    }
+
+    func updateUIViewController(_ host: HostViewController, context: Context) {
+        // Only pull external changes (edit-target switches); user drags
+        // arrive through the delegate and must not be written back.
+        let current = UIColor(color)
+        if !context.coordinator.isDragging, host.picker.selectedColor != current {
+            host.picker.selectedColor = current
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    final class Coordinator: NSObject, UIColorPickerViewControllerDelegate {
+        var parent: InlineColorPicker
+        var isDragging = false
+
+        init(_ parent: InlineColorPicker) {
+            self.parent = parent
+        }
+
+        func colorPickerViewController(_ viewController: UIColorPickerViewController, didSelect color: UIColor, continuously: Bool) {
+            isDragging = continuously
+            parent.color = Color(color)
+            parent.onPick(Color(color))
         }
     }
 }

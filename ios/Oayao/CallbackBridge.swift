@@ -151,12 +151,17 @@ private func presentSettings() {
         }
         guard let sheet = settingsHost else { return }
         if let spc = sheet.sheetPresentationController {
-            spc.detents = [.medium(), .large()]
+            // Half-screen only: with no .large detent the sheet cannot
+            // grow and bounce when the color panel opens, and the top half
+            // stays undimmed for live preview.
+            spc.detents = [.medium()]
             spc.prefersGrabberVisible = true
-            // Half-screen by default, and no dimming over the top half —
-            // the canvas stays fully visible for live color previews.
             spc.selectedDetentIdentifier = .medium
             spc.largestUndimmedDetentIdentifier = .medium
+            // Default behavior expands the sheet to page size while it
+            // presents content (the system color panel) and snaps it back
+            // afterwards — the grow-and-bounce. Pin the detent instead.
+            spc.prefersPageSizing = false
         }
         rootVC.present(sheet, animated: true)
     }
@@ -238,8 +243,8 @@ private struct QuickAddEditorView: View {
                     .frame(height: 56)
                     .modifier(GlassModifier(cornerRadius: 28))
                     // Keyboard dismissal (swipe-down) reads as cancel too.
-                    .onChange(of: fieldFocused) { focused in
-                        if !focused && state.editing { collapse() }
+                    .onChange(of: fieldFocused) {
+                        if !fieldFocused && state.editing { collapse() }
                     }
             }
             .padding(16)
@@ -247,8 +252,8 @@ private struct QuickAddEditorView: View {
         // Focus follows the editing flag, not appearance: the host is
         // created hidden at launch, and a hidden host must never summon
         // the keyboard.
-        .onChange(of: state.editing) { editing in
-            if editing {
+        .onChange(of: state.editing) {
+            if state.editing {
                 if let draft = quickAddDraft {
                     title = draft
                     quickAddDraft = nil
@@ -432,25 +437,24 @@ private func addOverlayButtons() {
         buttonHost.view.heightAnchor.constraint(equalToConstant: 88),
     ])
 
-    // The editor host is built up front and kept hidden: tapping the
-    // circle only flips isHidden, so no view-tree construction or first
-    // layout lands on the keyboard's opening frames. Hidden views don't
-    // hit-test, so canvas taps stay free while collapsed.
-    // The editor host's bottom edge tracks the keyboard via the layout
-    // guide (iOS 15+): UIKit animates it with the keyboard, no manual frame
-    // math — hidden, the guide top is the safe-area bottom, so the capsule
-    // rests exactly where the circle was.
+    // The editor host's bottom edge tracks the keyboard through the root
+    // view controller's layout guide (the window's own guide doesn't track
+    // for plain window subviews — it collapsed the host to zero height at
+    // the top). Hidden, the guide top is the safe-area bottom, so the
+    // capsule rests exactly where the circle was.
     let editorHost = UIHostingController(rootView: QuickAddEditorView(state: state))
     editorHost.view.backgroundColor = .clear
     editorHost.view.isHidden = true
     editorHost.view.translatesAutoresizingMaskIntoConstraints = false
     window.addSubview(editorHost.view)
-    NSLayoutConstraint.activate([
-        editorHost.view.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor),
-        editorHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor),
-        editorHost.view.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor),
-        editorHost.view.bottomAnchor.constraint(equalTo: window.keyboardLayoutGuide.topAnchor),
-    ])
+    if let rootView = rootViewController()?.view {
+        NSLayoutConstraint.activate([
+            editorHost.view.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor),
+            editorHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor),
+            editorHost.view.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor),
+            editorHost.view.bottomAnchor.constraint(equalTo: rootView.keyboardLayoutGuide.topAnchor),
+        ])
+    }
 
     state.onEditingChanged = { isEditing in
         buttonHost.view.isHidden = isEditing

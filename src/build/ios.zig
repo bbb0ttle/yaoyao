@@ -62,14 +62,14 @@ pub fn createAppBundle(
     // Construct clang target triple from resolved target.
     const clang_arch: []const u8 = if (target.result.cpu.arch == .aarch64) "arm64" else @tagName(target.result.cpu.arch);
     const clang_target = if (target.result.abi == .simulator)
-        b.fmt("{s}-apple-ios15.0-simulator", .{clang_arch})
+        b.fmt("{s}-apple-ios17.0-simulator", .{clang_arch})
     else
-        b.fmt("{s}-apple-ios15.0", .{clang_arch});
+        b.fmt("{s}-apple-ios17.0", .{clang_arch});
 
     const swift_target = if (target.result.abi == .simulator)
-        b.fmt("{s}-apple-ios15.0-simulator", .{clang_arch})
+        b.fmt("{s}-apple-ios17.0-simulator", .{clang_arch})
     else
-        b.fmt("{s}-apple-ios15.0", .{clang_arch});
+        b.fmt("{s}-apple-ios17.0", .{clang_arch});
 
     const script = b.fmt(
         \\set -e
@@ -129,7 +129,7 @@ pub fn createAppBundle(
         \\ACTOOL="{s}/usr/bin/actool"
         \\PLISTBUDDY="/usr/libexec/PlistBuddy"
         \\PARTIAL="/tmp/oayao_partial.plist"
-        \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 15.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
+        \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 17.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
         \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
         \\rm -f "$PARTIAL"
         \\
