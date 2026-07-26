@@ -81,23 +81,8 @@ func oayao_swift_bootstrap() {
         // internal caches so the real presentation is fast.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             prewarmSheetViews()
-            prewarmKeyboard()
         }
     }
-}
-
-/// The first real keyboard pop in a process loads QuickType/UIInputSetHost
-/// lazily (a 200–500ms stall on the keyboard's opening frames). Cycling a
-/// hidden field once at launch pays that cost while the app is idle; the
-/// same-runloop resign cancels the keyboard before it animates in.
-private func prewarmKeyboard() {
-    guard let window = keyWindow() else { return }
-    let field = UITextField(frame: CGRect(x: -100, y: -100, width: 10, height: 10))
-    field.isHidden = true
-    window.addSubview(field)
-    field.becomeFirstResponder()
-    field.resignFirstResponder()
-    field.removeFromSuperview()
 }
 
 // MARK: - Sheet Presentation
