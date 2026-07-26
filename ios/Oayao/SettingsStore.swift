@@ -88,9 +88,10 @@ enum SettingsStore {
         set { UserDefaults.standard.set(newValue, forKey: heartSizeScaleKey) }
     }
 
-    /// Sky backdrop mode (0 = off, 1 = cumulus, 2 = cirrus, 3 = lenticular,
-    /// 4 = stratocumulus, 5 = cumulonimbus); defaults to cumulus. Migrates
-    /// the legacy nebulaEnabled bool on first read.
+    /// Sky toggle (0 = off, nonzero = on with automatic cloud-kind
+    /// rotation); defaults to on. Legacy stored values 2–5 (named cloud
+    /// kinds) read as on. Migrates the legacy nebulaEnabled bool on first
+    /// read.
     static var skyMode: Int {
         get {
             if let mode = UserDefaults.standard.object(forKey: skyModeKey) as? Int {

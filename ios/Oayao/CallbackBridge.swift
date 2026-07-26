@@ -153,36 +153,12 @@ private func presentSettings() {
         if let spc = sheet.sheetPresentationController {
             spc.detents = [.medium(), .large()]
             spc.prefersGrabberVisible = true
+            // Half-screen by default, and no dimming over the top half —
+            // the canvas stays fully visible for live color previews.
+            spc.selectedDetentIdentifier = .medium
+            spc.largestUndimmedDetentIdentifier = .medium
         }
         rootVC.present(sheet, animated: true)
-    }
-}
-
-/// Publishes keyboard height for the quick-add overlay: window-level
-/// overlays get no automatic keyboard avoidance, so the capsule's bottom
-/// padding tracks the keyboard frame. `keyboardWillChangeFrame` covers
-/// both show and hide (the hide end frame sits below the window, clamping
-/// the overlap to zero).
-private final class QuickAddKeyboardObserver: ObservableObject {
-    @Published private(set) var height: CGFloat = 0
-    @Published private(set) var duration: Double = 0.25
-
-    init() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(frameWillChange(_:)),
-            name: UIResponder.keyboardWillChangeFrameNotification,
-            object: nil
-        )
-    }
-
-    @objc private func frameWillChange(_ note: Notification) {
-        guard let window = keyWindow(),
-              let info = note.userInfo,
-              let endFrame = info[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
-        else { return }
-        duration = info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-        height = max(0, window.bounds.maxY - endFrame.minY - window.safeAreaInsets.bottom)
     }
 }
 
@@ -236,7 +212,6 @@ private struct QuickAddButtonView: View {
 /// heart fly-in remains the confirmation.
 private struct QuickAddEditorView: View {
     @ObservedObject var state: QuickAddState
-    @StateObject private var keyboard = QuickAddKeyboardObserver()
     @State private var title = ""
     @FocusState private var fieldFocused: Bool
 
@@ -268,9 +243,7 @@ private struct QuickAddEditorView: View {
                     }
             }
             .padding(16)
-            .padding(.bottom, keyboard.height)
         }
-        .animation(.easeOut(duration: keyboard.duration), value: keyboard.height)
         // Focus follows the editing flag, not appearance: the host is
         // created hidden at launch, and a hidden host must never summon
         // the keyboard.
@@ -463,6 +436,10 @@ private func addOverlayButtons() {
     // circle only flips isHidden, so no view-tree construction or first
     // layout lands on the keyboard's opening frames. Hidden views don't
     // hit-test, so canvas taps stay free while collapsed.
+    // The editor host's bottom edge tracks the keyboard via the layout
+    // guide (iOS 15+): UIKit animates it with the keyboard, no manual frame
+    // math — hidden, the guide top is the safe-area bottom, so the capsule
+    // rests exactly where the circle was.
     let editorHost = UIHostingController(rootView: QuickAddEditorView(state: state))
     editorHost.view.backgroundColor = .clear
     editorHost.view.isHidden = true
@@ -472,7 +449,7 @@ private func addOverlayButtons() {
         editorHost.view.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor),
         editorHost.view.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor),
         editorHost.view.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor),
-        editorHost.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor),
+        editorHost.view.bottomAnchor.constraint(equalTo: window.keyboardLayoutGuide.topAnchor),
     ])
 
     state.onEditingChanged = { isEditing in

@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsSheet: View {
     @AppStorage(SettingsStore.calendarNameKey) private var calendarName = SettingsStore.defaultCalendarName
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
-    @State private var skyMode = 1
+    @State private var skyOn = true
     @ObservedObject private var languageManager = LanguageManager.shared
     @ObservedObject private var calendarManager = CalendarManager.shared
     @State private var counterStart: Date? = nil
@@ -14,25 +14,30 @@ struct SettingsSheet: View {
         NavigationView {
             Form {
                 Section {
+                    Toggle(L10n.tr(.sky), isOn: $skyOn)
+                        .onChange(of: skyOn) { on in
+                            SettingsStore.skyMode = on ? 1 : 0
+                            oayao_set_sky_mode(on ? 1 : 0)
+                        }
                     NavigationLink {
-                        CounterStartSettingsView(counterStart: $counterStart)
+                        ThemeSettingsView()
                     } label: {
                         HStack {
-                            Text(L10n.tr(.startDate))
+                            Text(L10n.tr(.colors))
                             Spacer()
-                            if let counterStart {
-                                Text(counterStart, style: .date)
-                                    .foregroundColor(.secondary)
-                            } else {
-                                Text(L10n.tr(.notSet))
-                                    .foregroundColor(.secondary)
-                            }
+                            Text(CanvasTheme(storedId: UInt32(themeId)).name)
+                                .foregroundColor(.secondary)
                         }
                     }
+                    NavigationLink {
+                        HeartSettingsView()
+                    } label: {
+                        Text(L10n.tr(.heart))
+                    }
                 } header: {
-                    Text(L10n.tr(.daysCounter))
+                    Text(L10n.tr(.theme))
                 } footer: {
-                    Text(L10n.tr(.counterFooter))
+                    Text(L10n.tr(.themeFooter))
                 }
 
                 Section {
@@ -64,42 +69,25 @@ struct SettingsSheet: View {
                             }
                         }
                     }
+                    NavigationLink {
+                        CounterStartSettingsView(counterStart: $counterStart)
+                    } label: {
+                        HStack {
+                            Text(L10n.tr(.startDate))
+                            Spacer()
+                            if let counterStart {
+                                Text(counterStart, style: .date)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text(L10n.tr(.notSet))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
                 } header: {
                     Text(L10n.tr(.calendar))
                 } footer: {
                     Text(L10n.tr(.calendarFooter))
-                }
-
-                Section {
-                    NavigationLink {
-                        ThemeSettingsView()
-                    } label: {
-                        HStack {
-                            Text(L10n.tr(.theme))
-                            Spacer()
-                            Text(CanvasTheme(storedId: UInt32(themeId)).name)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    NavigationLink {
-                        HeartSettingsView()
-                    } label: {
-                        Text(L10n.tr(.heart))
-                    }
-                    Picker(L10n.tr(.sky), selection: $skyMode) {
-                        Text(L10n.tr(.skyOff)).tag(0)
-                        Text(L10n.tr(.cumulus)).tag(1)
-                        Text(L10n.tr(.cirrus)).tag(2)
-                        Text(L10n.tr(.lenticular)).tag(3)
-                        Text(L10n.tr(.stratocumulus)).tag(4)
-                        Text(L10n.tr(.cumulonimbus)).tag(5)
-                    }
-                    .onChange(of: skyMode) { mode in
-                        SettingsStore.skyMode = mode
-                        oayao_set_sky_mode(UInt32(mode))
-                    }
-                } footer: {
-                    Text(L10n.tr(.themeFooter))
                 }
 
                 Section {
@@ -125,7 +113,7 @@ struct SettingsSheet: View {
         }
         .onAppear {
             counterStart = CalendarManager.shared.counterStartDate()
-            skyMode = SettingsStore.skyMode
+            skyOn = SettingsStore.skyMode != 0
         }
     }
 }
@@ -335,9 +323,7 @@ private struct HeartSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: motion) { oayao_set_heart_motion(UInt32($0)) }
-            }
 
-            Section {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(L10n.tr(.positionY))
@@ -347,9 +333,7 @@ private struct HeartSettingsView: View {
                     }
                     Slider(value: yBinding, in: 0.1...0.9)
                 }
-            }
 
-            Section {
                 Button(L10n.tr(.resetDefaults)) {
                     sizeScale = 1.0
                     opacity = 1.0
@@ -358,6 +342,7 @@ private struct HeartSettingsView: View {
                     SettingsStore.heartY = nil
                     oayao_reset_heart_config()
                 }
+                .buttonStyle(.borderless)
                 .disabled(allDefaults)
             }
         }
@@ -389,12 +374,6 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
     case midnight = 3
 
     var id: UInt32 { rawValue }
-
-    /// Picker display order: the custom theme always sorts last, regardless
-    /// of raw value or themes added later.
-    static var pickerOrder: [CanvasTheme] {
-        allCases.filter { $0 != .custom } + [.custom]
-    }
 
     init(storedId: UInt32) {
         self = CanvasTheme(rawValue: storedId) ?? .mint
@@ -490,6 +469,96 @@ enum CanvasTheme: UInt32, CaseIterable, Identifiable {
     private static func contrast(_ a: Double, _ b: Double) -> Double {
         (max(a, b) + 0.05) / (min(a, b) + 0.05)
     }
+
+    // MARK: - Derived heart stroke (custom palette)
+
+    /// Stroke for a custom fill/background pair: the fill's own hue (same
+    /// color family, so the canvas never turns into a rainbow), shifted in
+    /// lightness just far enough to outline the heart — never so dark it
+    /// reads as grime against the background.
+    static func derivedStrokePacked(_ fill: Int, on background: Int) -> Int {
+        let hslFill = hsl(rgb(fill))
+        let fillLum = luminance(rgb(fill))
+        let bgLum = luminance(rgb(background))
+
+        func make(_ lightness: Double) -> Int {
+            packed(hsl: (hslFill.h, hslFill.s, min(max(lightness, 0.08), 0.95)))
+        }
+        func meets(_ packedStroke: Int) -> Bool {
+            contrast(luminance(rgb(packedStroke)), fillLum) >= 1.35
+        }
+
+        // Darken by default; if the darkest acceptable candidate already
+        // dips well under the background luminance it would look dirty, so
+        // go lighter instead.
+        let darken = luminance(rgb(make(hslFill.l - 0.2))) >= bgLum * 0.85
+        let lo = darken ? 0.08 : hslFill.l + 0.12
+        let hi = darken ? hslFill.l - 0.12 : 0.95
+
+        // Minimal |ΔL| that still outlines the heart (contrast grows with
+        // distance from the fill, so the compliant point nearest the fill
+        // is the answer; fall back to the far endpoint if none qualifies).
+        var best = darken ? lo : hi
+        if lo <= hi {
+            var a = lo
+            var b = hi
+            for _ in 0..<20 {
+                let mid = (a + b) / 2
+                if meets(make(mid)) {
+                    best = mid
+                    if darken { a = mid } else { b = mid }
+                } else {
+                    if darken { b = mid } else { a = mid }
+                }
+            }
+        }
+        return make(best)
+    }
+
+    private static func hsl(_ c: (r: Double, g: Double, b: Double)) -> (h: Double, s: Double, l: Double) {
+        let maxC = max(c.r, c.g, c.b)
+        let minC = min(c.r, c.g, c.b)
+        let l = (maxC + minC) / 2
+        let d = maxC - minC
+        if d == 0 { return (0, 0, l) }
+        let s = l < 0.5 ? d / (maxC + minC) : d / (2 - maxC - minC)
+        let h: Double
+        if maxC == c.r {
+            h = ((c.g - c.b) / d + (c.g < c.b ? 6 : 0)) / 6
+        } else if maxC == c.g {
+            h = ((c.b - c.r) / d + 2) / 6
+        } else {
+            h = ((c.r - c.g) / d + 4) / 6
+        }
+        return (h, s, l)
+    }
+
+    private static func packed(hsl c: (h: Double, s: Double, l: Double)) -> Int {
+        func hueToRgb(_ p: Double, _ q: Double, _ tIn: Double) -> Double {
+            var t = tIn
+            if t < 0 { t += 1 }
+            if t > 1 { t -= 1 }
+            if t < 1.0 / 6 { return p + (q - p) * 6 * t }
+            if t < 1.0 / 2 { return q }
+            if t < 2.0 / 3 { return p + (q - p) * (2.0 / 3 - t) * 6 }
+            return p
+        }
+        let r: Double
+        let g: Double
+        let b: Double
+        if c.s == 0 {
+            r = c.l
+            g = c.l
+            b = c.l
+        } else {
+            let q = c.l < 0.5 ? c.l * (1 + c.s) : c.l + c.s - c.l * c.s
+            let p = 2 * c.l - q
+            r = hueToRgb(p, q, c.h + 1.0 / 3)
+            g = hueToRgb(p, q, c.h)
+            b = hueToRgb(p, q, c.h - 1.0 / 3)
+        }
+        return Int((r * 255).rounded()) << 16 | Int((g * 255).rounded()) << 8 | Int((b * 255).rounded())
+    }
 }
 
 /// Roles of the custom theme's editable colors; raw values mirror the
@@ -506,15 +575,6 @@ private enum CustomColorRole: UInt32, CaseIterable {
         case .heartFill: return "heartFill"
         case .heartStroke: return "heartStroke"
         case .timerText: return "timerText"
-        }
-    }
-
-    var label: String {
-        switch self {
-        case .background: return L10n.tr(.colorBackground)
-        case .heartFill: return L10n.tr(.colorHeartFill)
-        case .heartStroke: return L10n.tr(.colorHeartStroke)
-        case .timerText: return L10n.tr(.colorTimerText)
         }
     }
 }
@@ -536,19 +596,16 @@ private extension Color {
     }
 }
 
-/// Theme picker; selection persists and applies immediately with an animated fade.
+/// Theme picker ("配色"): the three built-in palettes plus a link to the
+/// custom-color page. Selection persists and applies immediately with an
+/// animated fade.
 private struct ThemeSettingsView: View {
     @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
-    @ObservedObject private var languageManager = LanguageManager.shared
-    // Draft colors stay unquantized while dragging the picker; rounding to
-    // 8-bit happens only when persisting and pushing to the renderer,
-    // otherwise the picker readback snaps the slider to coarse steps.
-    @State private var draftColors: [String: Color] = [:]
 
     var body: some View {
         Form {
             Section {
-                ForEach(CanvasTheme.pickerOrder) { theme in
+                ForEach(CanvasTheme.allCases.filter { $0 != .custom }) { theme in
                     Button {
                         themeId = Int(theme.rawValue)
                         oayao_transition_to_theme(theme.rawValue)
@@ -570,48 +627,88 @@ private struct ThemeSettingsView: View {
                         }
                     }
                 }
-            }
-
-            if CanvasTheme(storedId: UInt32(themeId)) == .custom {
-                Section {
-                    ForEach(CustomColorRole.allCases, id: \.key) { role in
-                        ColorPicker(role.label, selection: customColorBinding(role), supportsOpacity: false)
+                NavigationLink {
+                    CustomColorView()
+                } label: {
+                    HStack {
+                        Circle()
+                            .fill(Color(packedRGB: SettingsStore.customThemeColors["background"] ?? 0xA9E5D6))
+                            .frame(width: 22, height: 22)
+                            .overlay {
+                                Circle().stroke(.primary.opacity(0.15), lineWidth: 0.5)
+                            }
+                        Text(L10n.tr(.customColors))
+                        Spacer()
+                        if themeId == Int(CanvasTheme.custom.rawValue) {
+                            Image(systemName: "checkmark")
+                                .foregroundColor(.accentColor)
+                        }
                     }
-                } header: {
-                    Text(L10n.tr(.customColors))
-                } footer: {
-                    Text(L10n.tr(.customColorsFooter))
                 }
             }
         }
-        .navigationTitle(L10n.tr(.theme))
+        .navigationTitle(L10n.tr(.colors))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Custom colors: background and heart fill only. The heart stroke is
+/// derived from the pair (same hue family as the fill, never grimy, always
+/// a clear outline) and the timer text simply follows the fill — the two
+/// knobs can't produce a broken palette.
+private struct CustomColorView: View {
+    @AppStorage(SettingsStore.themeIdKey) private var themeId = 0
+    // Draft colors stay unquantized while dragging the picker; rounding to
+    // 8-bit happens only when persisting and pushing to the renderer,
+    // otherwise the picker readback snaps the slider to coarse steps.
+    @State private var background: Color = .white
+    @State private var heartFill: Color = .white
+
+    var body: some View {
+        Form {
+            Section {
+                ColorPicker(L10n.tr(.colorBackground), selection: $background, supportsOpacity: false)
+                ColorPicker(L10n.tr(.colorHeartFill), selection: $heartFill, supportsOpacity: false)
+            } footer: {
+                Text(L10n.tr(.customColorsFooter))
+            }
+        }
+        .navigationTitle(L10n.tr(.customColors))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             let stored = SettingsStore.customThemeColors
-            var colors: [String: Color] = [:]
-            for role in CustomColorRole.allCases {
-                colors[role.key] = Color(packedRGB: stored[role.key] ?? 0xFFFFFF)
+            background = Color(packedRGB: stored["background"] ?? 0xA9E5D6)
+            heartFill = Color(packedRGB: stored["heartFill"] ?? 0xFFFFFF)
+            // Entering the page means previewing the custom palette live —
+            // deferred one runloop: mutating @AppStorage mid-push makes the
+            // legacy NavigationView bounce the destination straight back.
+            DispatchQueue.main.async {
+                themeId = Int(CanvasTheme.custom.rawValue)
+                oayao_transition_to_theme(CanvasTheme.custom.rawValue)
             }
-            draftColors = colors
         }
+        .onChange(of: background) { _ in push() }
+        .onChange(of: heartFill) { _ in push() }
     }
 
-    private func customColorBinding(_ role: CustomColorRole) -> Binding<Color> {
-        Binding(
-            get: { draftColors[role.key] ?? .white },
-            set: { newColor in
-                draftColors[role.key] = newColor
-                let packed = newColor.packedRGB
-                var stored = SettingsStore.customThemeColors
-                stored[role.key] = packed
-                SettingsStore.customThemeColors = stored
-                oayao_set_custom_theme_color(
-                    role.rawValue,
-                    UInt8((packed >> 16) & 0xFF),
-                    UInt8((packed >> 8) & 0xFF),
-                    UInt8(packed & 0xFF)
-                )
-            }
-        )
+    private func push() {
+        let bg = background.packedRGB
+        let fill = heartFill.packedRGB
+        let stroke = CanvasTheme.derivedStrokePacked(fill, on: bg)
+        var stored = SettingsStore.customThemeColors
+        stored["background"] = bg
+        stored["heartFill"] = fill
+        stored["heartStroke"] = stroke
+        stored["timerText"] = fill
+        SettingsStore.customThemeColors = stored
+        for role in CustomColorRole.allCases {
+            let packed = stored[role.key]!
+            oayao_set_custom_theme_color(
+                role.rawValue,
+                UInt8((packed >> 16) & 0xFF),
+                UInt8((packed >> 8) & 0xFF),
+                UInt8(packed & 0xFF)
+            )
+        }
     }
 }

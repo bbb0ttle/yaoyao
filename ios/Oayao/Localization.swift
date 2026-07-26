@@ -45,10 +45,10 @@ enum L10n {
         case settings, done, language, followSystem
         case calendar, name, shareWithPartner, calendarFooter
         case calendarAccessTitle, calendarAccessMessage, calendarAccessNeeded, openSettings
-        case daysCounter, startDate, counterFooter, notSet
-        case theme, themeFooter, customColors, customColorsFooter
+        case startDate, notSet
+        case theme, themeFooter, colors, customColors, customColorsFooter
         case themeMint, themePeach, themeCustom, themeMidnight
-        case colorBackground, colorHeartFill, colorHeartStroke, colorTimerText
+        case colorBackground, colorHeartFill
         case howItWorks, guideStep1, guideStep2, guideStep3, guideStep4
         case openCalendarApp, calendarNotShareable, sharingUsesIcloud
         case calendarName, calendarNamePlaceholder, calendarNameFooter
@@ -58,7 +58,7 @@ enum L10n {
         case date
         case heart, opacity, motion, motionBeat, motionBreath, positionY, resetDefaults
         case size
-        case sky, skyOff, cumulus, cirrus, lenticular, stratocumulus, cumulonimbus
+        case sky
     }
 
     static func tr(_ key: Key) -> String {
@@ -95,18 +95,14 @@ enum L10n {
             "日历权限未开启，事件无法显示为爱心。"
         ),
         .openSettings: ("Open Settings", "前往设置"),
-        .daysCounter: ("Days Counter", "天数计数"),
         .startDate: ("Start Date", "开始日期"),
-        .counterFooter: (
-            "Recorded in the calendar so it syncs to your partner when shared.",
-            "记录于日历中,共享后会同步给对方。"
-        ),
         .notSet: ("Not Set", "未设置"),
         .theme: ("Theme", "主题"),
         .themeFooter: (
             "Canvas colors fade smoothly when switching themes.",
             "切换主题时,画布颜色会平滑渐变。"
         ),
+        .colors: ("Colors", "配色"),
         .customColors: ("Custom Colors", "自定义颜色"),
         .customColorsFooter: (
             "Changes fade in immediately on the canvas.",
@@ -118,8 +114,6 @@ enum L10n {
         .themeCustom: ("Custom", "自定义"),
         .colorBackground: ("Background", "背景"),
         .colorHeartFill: ("Heart Fill", "爱心填充"),
-        .colorHeartStroke: ("Heart Stroke", "爱心描边"),
-        .colorTimerText: ("Timer Text", "计数文字"),
         .howItWorks: ("How It Works", "操作步骤"),
         .guideStep1: (
             "Tap \"Open Calendar App\" below to jump to this calendar. If you land on the calendar list, tap the info button next to \"%@\".",
@@ -173,11 +167,5 @@ enum L10n {
         .resetDefaults: ("Reset to Defaults", "恢复默认"),
         .size: ("Size", "尺寸"),
         .sky: ("Sky", "天空"),
-        .skyOff: ("Off", "关闭"),
-        .cumulus: ("Cumulus", "浓积云"),
-        .cirrus: ("Cirrus", "卷云"),
-        .lenticular: ("Lenticular", "荚状云"),
-        .stratocumulus: ("Stratocumulus", "层积云"),
-        .cumulonimbus: ("Cumulonimbus", "积雨云"),
     ]
 }

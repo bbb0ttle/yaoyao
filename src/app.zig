@@ -102,6 +102,16 @@ const REPLAY_WAVE_MAX: usize = 8;
 const REPLAY_ALPHA: f32 = 0.55;
 const REPLAY_SIZE_SCALE: f32 = 0.55;
 
+// Sky auto-rotation: with the sky enabled, the current cloud kind fades
+// out and a different one fades in every few minutes — weather, not
+// wallpaper. The fade is one global alpha multiplier applied at the
+// draw-item level, so the five cloud systems stay untouched.
+const SKY_FADE_PER_FRAME: f32 = 1.0 / 72.0; // 1.2s at 60fps
+const SKY_SWITCH_MIN_SEC: f32 = 180.0;
+const SKY_SWITCH_MAX_SEC: f32 = 480.0;
+
+const SkyPhase = enum { steady, fading_out, fading_in };
+
 // Tap feedback pulse for the counter-pair hearts: a quick scale pop that
 // eases back to normal.
 const COUNTER_TAP_PULSE_SEC: f32 = 0.35;
@@ -182,6 +192,12 @@ pub const App = struct {
     is_meteor_ready: bool,
     sky_ready: bool,
     sky_mode: SkyMode,
+    /// Auto-rotation state: fade multiplier, phase machine, the kind to
+    /// install once the fade-out lands, and the next scheduled switch.
+    sky_fade: f32,
+    sky_phase: SkyPhase,
+    sky_next: SkyMode,
+    next_sky_switch_sec: f32,
     transition_start: f32,
     resize_cooldown: u32,
     dpr: f32,
@@ -244,6 +260,10 @@ pub const App = struct {
             .is_meteor_ready = false,
             .sky_ready = false,
             .sky_mode = .off,
+            .sky_fade = 0.0,
+            .sky_phase = .steady,
+            .sky_next = .off,
+            .next_sky_switch_sec = 0.0,
             .transition_start = 0.0,
             .resize_cooldown = 0,
             .dpr = sapp.dpiScale(),
@@ -356,8 +376,12 @@ pub const App = struct {
         }
 
         // Heart init resets the pool, wiping any sky backdrop; the next
-        // update respawns the active mode's system.
+        // update respawns the active mode's system. A rebuild is not a
+        // mood swing: skip the fade machinery and show the sky at full
+        // alpha as soon as it respawns.
         self.sky_ready = false;
+        self.sky_phase = .steady;
+        self.sky_fade = if (self.sky_mode == .off) 0.0 else 1.0;
     }
 
     pub fn update_and_fill_buffers(self: *Self, w: f32, h: f32, elapsed: f32, dpr: f32) void {
@@ -402,6 +426,7 @@ pub const App = struct {
                 .off => {},
             }
         }
+        self.update_sky_rotation(elapsed);
 
         self.heart.update(elapsed, &self.pool, &self.rng);
         if (self.is_meteor_ready) {
@@ -429,6 +454,7 @@ pub const App = struct {
             dpr,
             t,
             0,
+            self.sky_fade,
         );
 
         if (self.days_text_len > 0) {
@@ -896,7 +922,33 @@ pub const App = struct {
             log.warn("unknown sky mode={d}, ignoring", .{mode_id});
             return;
         };
-        if (mode == self.sky_mode) return;
+        if (mode == self.sky_mode) {
+            // Re-tapping the current kind cancels a pending switch-off.
+            if (self.sky_phase == .fading_out and self.sky_next != mode) {
+                self.sky_phase = .fading_in;
+            }
+            return;
+        }
+        if (mode == .off) {
+            self.sky_next = .off;
+            self.sky_phase = .fading_out;
+            return;
+        }
+        if (self.sky_mode == .off) {
+            // Off → on: the next frame's init branch spawns and bakes the
+            // system while the fade brings it up.
+            self.sky_mode = mode;
+            self.sky_fade = 0.0;
+            self.sky_phase = .fading_in;
+            return;
+        }
+        // Kind switch while on: fade out, the rotation machine installs it.
+        self.sky_next = mode;
+        self.sky_phase = .fading_out;
+    }
+
+    /// Kill the active sky system and free its baked textures.
+    fn clear_sky_system(self: *Self) void {
         if (self.sky_ready) {
             switch (self.sky_mode) {
                 .cumulus => self.cumulus.clear(),
@@ -907,11 +959,46 @@ pub const App = struct {
                 .off => {},
             }
             self.sky_ready = false;
-            // Free the baked textures now; switching to off leaves no
-            // rebuild to clean them up otherwise.
             self.gpu.bake_begin();
         }
-        self.sky_mode = mode;
+    }
+
+    /// The weather machine: fades the current kind out, swaps in the next
+    /// (user request or a scheduled random rotation), fades it back in.
+    fn update_sky_rotation(self: *Self, elapsed: f32) void {
+        switch (self.sky_phase) {
+            .steady => {
+                if (self.sky_mode != .off and self.next_sky_switch_sec > 0.0 and
+                    elapsed >= self.next_sky_switch_sec)
+                {
+                    self.sky_next = self.random_other_sky_mode();
+                    self.sky_phase = .fading_out;
+                }
+            },
+            .fading_out => {
+                self.sky_fade = @max(0.0, self.sky_fade - SKY_FADE_PER_FRAME);
+                if (self.sky_fade == 0.0) {
+                    self.clear_sky_system();
+                    self.sky_mode = self.sky_next;
+                    self.sky_phase = if (self.sky_next == .off) .steady else .fading_in;
+                }
+            },
+            .fading_in => {
+                self.sky_fade = @min(1.0, self.sky_fade + SKY_FADE_PER_FRAME);
+                if (self.sky_fade == 1.0) {
+                    self.sky_phase = .steady;
+                    self.next_sky_switch_sec = elapsed + self.rng.random_range(SKY_SWITCH_MIN_SEC, SKY_SWITCH_MAX_SEC);
+                }
+            },
+        }
+    }
+
+    fn random_other_sky_mode(self: *Self) SkyMode {
+        var next = self.sky_mode;
+        while (next == self.sky_mode) {
+            next = std.enums.fromInt(SkyMode, self.rng.random_index(5) + 1).?;
+        }
+        return next;
     }
 
     /// Legacy toggle kept for the existing bridge callers: on maps to

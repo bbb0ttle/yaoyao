@@ -143,11 +143,12 @@ pub fn fill_particle_instances(
     dpr: f32,
     t: f32,
     start_inst: u32,
+    sky_alpha: f32,
 ) u32 {
     const alive = pool.alive_slice();
     gpu.clear_sky_draws();
-    var inst_count = fill_pass(gpu, pool, alive, true, w, h, dpr, t, start_inst);
-    inst_count = fill_pass(gpu, pool, alive, false, w, h, dpr, t, inst_count);
+    var inst_count = fill_pass(gpu, pool, alive, true, w, h, dpr, t, start_inst, sky_alpha);
+    inst_count = fill_pass(gpu, pool, alive, false, w, h, dpr, t, inst_count, sky_alpha);
     return inst_count;
 }
 
@@ -161,6 +162,7 @@ fn fill_pass(
     dpr: f32,
     t: f32,
     start_inst: u32,
+    sky_alpha: f32,
 ) u32 {
     const stroke_width: f32 = STROKE_WIDTH * dpr;
     const radius_margin: f32 = stroke_width + 3.0;
@@ -182,7 +184,7 @@ fn fill_pass(
                         .bake = slot,
                         .pos_x = p.pos_x(),
                         .pos_y = p.pos_y(),
-                        .fill_a = t * alpha_scale,
+                        .fill_a = t * alpha_scale * sky_alpha,
                     });
                 }
             }
