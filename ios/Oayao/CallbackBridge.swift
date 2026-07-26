@@ -138,15 +138,21 @@ private func presentCalendarAccessAlert() {
     rootVC.present(alert, animated: true)
 }
 
+/// Settings sheet host, created once and reused: rebuilding the
+/// Form/NavigationView tree on every open was a visible stall on the
+/// canvas render loop.
+private var settingsHost: UIHostingController<SettingsSheet>?
+
 private func presentSettings() {
     DispatchQueue.main.async {
         guard let rootVC = rootViewController() else { return }
-        let sheet = UIHostingController(
-            rootView: SettingsSheet()
-        )
-        if let sheet = sheet.sheetPresentationController {
-            sheet.detents = [.medium(), .large()]
-            sheet.prefersGrabberVisible = true
+        if settingsHost == nil {
+            settingsHost = UIHostingController(rootView: SettingsSheet())
+        }
+        guard let sheet = settingsHost else { return }
+        if let spc = sheet.sheetPresentationController {
+            spc.detents = [.medium(), .large()]
+            spc.prefersGrabberVisible = true
         }
         rootVC.present(sheet, animated: true)
     }

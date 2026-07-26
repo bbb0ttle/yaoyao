@@ -54,6 +54,13 @@ layout(binding=1) uniform fs_params {
     vec4 text_color;
 };
 
+// Baked cloud texture (shape 9): one per sky particle, sampled instead of
+// recomputing noise per pixel per frame. rgb is the tint factor (white for
+// most clouds, the static iridescence for lenticular), a is the raw cloud
+// alpha — theme color and breath are applied at blit time.
+layout(binding=0) uniform texture2D cloud_tex;
+layout(binding=0) uniform sampler cloud_smp;
+
 in vec2 v_uv;
 in vec2 v_pos;
 in float v_stroke_size;
@@ -116,6 +123,13 @@ float eval_sdf(vec2 uv, float shape) {
 }
 
 void main() {
+    // Baked cloud blit (shape 9): the noise work was done once at bake time.
+    if (v_shape > 8.5) {
+        vec4 t = texture(sampler2D(cloud_tex, cloud_smp), v_uv * 0.5 + 0.5);
+        frag_color = vec4(fill_color.rgb * t.rgb, t.a * v_fill_a);
+        return;
+    }
+
     // Cumulonimbus tower (shape 8): a narrow trunk flaring into a wide
     // anvil crown, filled with cauliflower billows — shape noise multiplied
     // by ridged noise (f * (r + f)) stacks puffy lobes along the edges and

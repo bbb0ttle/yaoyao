@@ -145,6 +145,7 @@ pub fn fill_particle_instances(
     start_inst: u32,
 ) u32 {
     const alive = pool.alive_slice();
+    gpu.clear_sky_draws();
     var inst_count = fill_pass(gpu, pool, alive, true, w, h, dpr, t, start_inst);
     inst_count = fill_pass(gpu, pool, alive, false, w, h, dpr, t, inst_count);
     return inst_count;
@@ -168,7 +169,26 @@ fn fill_pass(
 
     for (alive) |idx| {
         const p = pool.get_particle(idx);
-        if ((p.is_cooling() or p.is_sky()) != background_pass) continue;
+        // Sky clouds are blitted from baked textures (see gpu_state), not
+        // instanced; emit their per-frame draw items in the background pass.
+        if (p.is_sky()) {
+            if (background_pass) {
+                const alpha_scale = p.get_alpha_scale();
+                const radius: f32 = p.get_size() + radius_margin;
+                if (p.pos_x() + radius < 0.0 or p.pos_x() - radius >= w or
+                    p.pos_y() + radius < 0.0 or p.pos_y() - radius >= h) continue;
+                if (gpu.find_bake(p)) |slot| {
+                    gpu.push_sky_draw(.{
+                        .bake = slot,
+                        .pos_x = p.pos_x(),
+                        .pos_y = p.pos_y(),
+                        .fill_a = t * alpha_scale,
+                    });
+                }
+            }
+            continue;
+        }
+        if (p.is_cooling() != background_pass) continue;
 
         const alpha_scale = p.get_alpha_scale();
         const max_alpha: f32 = if (p.is_immortal()) 1.0 else math.scale(p.get_lifespan(), MAX_LIFESPAN, 200.0) / 255.0;

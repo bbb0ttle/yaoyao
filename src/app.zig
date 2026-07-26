@@ -384,6 +384,13 @@ pub const App = struct {
                 .off => unreachable,
             }
             self.sky_ready = true;
+            // Bake each sky particle's cloud pattern once; per-frame cost
+            // drops to a single textured blit per cloud.
+            self.gpu.bake_begin();
+            for (self.pool.alive_slice()) |idx| {
+                const p = self.pool.get_particle(idx);
+                if (p.is_sky()) self.gpu.bake_cloud(p, dpr);
+            }
         }
         if (self.sky_ready) {
             switch (self.sky_mode) {
@@ -900,6 +907,9 @@ pub const App = struct {
                 .off => {},
             }
             self.sky_ready = false;
+            // Free the baked textures now; switching to off leaves no
+            // rebuild to clean them up otherwise.
+            self.gpu.bake_begin();
         }
         self.sky_mode = mode;
     }
