@@ -123,7 +123,7 @@ enum L10n {
         .theme: ("Theme", "主题"),
         .themeFooter: (
             "Canvas colors fade smoothly when switching themes.",
-            "切换主题时,画布颜色会平滑渐变。"
+            "切换主题时，画布颜色会平滑渐变。"
         ),
         .colors: ("Colors", "配色"),
         .customColors: ("Custom Colors", "自定义颜色"),
@@ -140,7 +140,7 @@ enum L10n {
         .howItWorks: ("How It Works", "操作步骤"),
         .guideStep1: (
             "Tap \"Open Calendar App\" below to jump to this calendar. If you land on the calendar list, tap the info button next to \"%@\".",
-            "点击下方「打开日历 App」跳转到该日历。若进入的是日历列表,点击「%@」旁的详情按钮。"
+            "点击下方「打开日历 App」跳转到该日历。若进入的是日历列表，点击「%@」旁的详情按钮。"
         ),
         .guideStep2: (
             "Tap \"Add Person\" under Shared With.",
@@ -152,7 +152,7 @@ enum L10n {
         ),
         .guideStep4: (
             "Once they accept, their events appear as hearts on your canvas — and yours on theirs. They only need this app with the same calendar name (the default works).",
-            "接受后,画布实时显示双方的爱心。"
+            "接受后，画布实时显示双方的爱心。"
         ),
         .openCalendarApp: ("Open Calendar App", "打开日历 App"),
         .calendarNotShareable: (
