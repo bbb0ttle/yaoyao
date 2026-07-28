@@ -48,7 +48,9 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Oayao uses your calendar to turn your events into floating hearts. Events you create are stored in the oayao calendar.</string>
+	<string>「心的事件」将你的日历事件化作画布上漂浮的爱心，你创建的事件也会保存在日历中。</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>「心的事件」将你的日历事件化作画布上漂浮的爱心，你创建的事件也会保存在日历中。</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 </dict>

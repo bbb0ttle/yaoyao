@@ -157,23 +157,23 @@ enum L10n {
         .openCalendarApp: ("Open Calendar App", "打开日历 App"),
         .calendarNotShareable: (
             "The current calendar is not iCloud-backed, so it can't be shared. Calendars created by this app use iCloud when it's available.",
-            "当前日历不在 iCloud 上,无法共享。本应用创建的日历在 iCloud 可用时会使用 iCloud。"
+            "当前日历不在 iCloud 上，无法共享。本应用创建的日历在 iCloud 可用时会使用 iCloud。"
         ),
         .sharingUsesIcloud: (
             "Sharing uses iCloud — no account or sign-up needed in this app.",
-            "共享基于 iCloud,无需在本应用中注册账号。"
+            "共享基于 iCloud，无需在本应用中注册账号。"
         ),
         .calendarName: ("Calendar Name", "日历名称"),
         .calendarNamePlaceholder: ("Calendar name", "日历名称"),
         .calendarNameFooter: (
             "If no calendar with this name exists, a new one is created.",
-            "若不存在同名日历,将自动创建。"
+            "若不存在同名日历，将自动创建。"
         ),
         .changesApplyImmediately: ("Changes apply immediately.", "修改立即生效。"),
         .cancel: ("Cancel", "取消"),
         .title: ("Title", "标题"),
         .eventName: ("Event name", "添加心事件"),
-        .notesOptional: ("Notes (optional)", "备注(可选)"),
+        .notesOptional: ("Notes (optional)", "备注（可选）"),
         .notes: ("Notes", "备注"),
         .location: ("Location", "位置"),
         .event: ("Event", "事件"),
