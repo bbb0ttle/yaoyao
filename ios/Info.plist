@@ -8,10 +8,12 @@
 	<string>Oayao</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.bbking.oayao</string>
+	<key>CFBundleDisplayName</key>
+	<string>心的事件</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Oayao</string>
+	<string>心的事件</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
