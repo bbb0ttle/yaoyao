@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+    <title>oayao</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"/>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+    <script>
+      var wasmReadyResolve;
+      window.wasmReady = new Promise(function(resolve) {
+        wasmReadyResolve = resolve;
+      });
+      var Module = {
+        onRuntimeInitialized: function() {
+          wasmReadyResolve(Module);
+        }
+      };
+    </script>
+    <script src="/oayao.js"></script>
+  <script type="module" crossorigin src="/assets/index-B2eRjcOS.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-wOdPU_i4.css">
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="forecast"></div>
+</body>
+</html>
