@@ -57,7 +57,7 @@ pub fn createAppBundle(
     const developer_dir = xcodeDeveloperDir(b);
     // Plain swiftc does not define DEBUG on its own; pass it so #if DEBUG
     // sections (e.g. the stress-test UI) compile in debug builds only.
-    const swift_flags: []const u8 = if (optimize == .Debug) "-Onone -D DEBUG" else "-O";
+    const swift_flags: []const u8 = if (optimize == .debug) "-Onone -D DEBUG" else "-O";
 
     // Construct clang target triple from resolved target.
     const clang_arch: []const u8 = if (target.result.cpu.arch == .aarch64) "arm64" else @tagName(target.result.cpu.arch);
@@ -81,6 +81,11 @@ pub fn createAppBundle(
         \\# Resolve artifact absolute paths before any directory change.
         \\A1="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
         \\A2="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+        \\A3="$(cd "$(dirname "$3")" && pwd)/$(basename "$3")"
+        \\A4="$(cd "$(dirname "$4")" && pwd)/$(basename "$4")"
+        \\A5="$(cd "$(dirname "$5")" && pwd)/$(basename "$5")"
+        \\A6="$(cd "$(dirname "$6")" && pwd)/$(basename "$6")"
+        \\A7="$(cd "$(dirname "$7")" && pwd)/$(basename "$7")"
         \\
         \\# Compile Swift files into object files.
         \\SDK_ROOT="{s}"
@@ -91,14 +96,14 @@ pub fn createAppBundle(
         \\  {[6]s} \
         \\  -sdk "$SDK_ROOT" \
         \\  -target "{s}" \
-        \\  -import-objc-header "$7"/Bridge.h \
+        \\  -import-objc-header "$A7"/Bridge.h \
         \\  -Xcc -I"$SDK_ROOT/usr/include" \
-        \\  "$7"/CallbackBridge.swift \
-        \\  "$7"/CalendarManager.swift \
-        \\  "$7"/EventDetailSheet.swift \
-        \\  "$7"/SettingsStore.swift \
-        \\  "$7"/Localization.swift \
-        \\  "$7"/SettingsSheet.swift
+        \\  "$A7"/CallbackBridge.swift \
+        \\  "$A7"/CalendarManager.swift \
+        \\  "$A7"/EventDetailSheet.swift \
+        \\  "$A7"/SettingsStore.swift \
+        \\  "$A7"/Localization.swift \
+        \\  "$A7"/SettingsSheet.swift
         \\
         \\# Link with Apple's ld64 via xcrun clang — produces correct LC_ENCRYPTION_INFO,
         \\# segment alignment, SDK version, and PIE that App Store Connect requires.
@@ -123,13 +128,13 @@ pub fn createAppBundle(
         \\  -Xlinker -framework -Xlinker AVFoundation \
         \\  -Xlinker -framework -Xlinker EventKit
         \\
-        \\cp "$3" "$APP/Info.plist"
-        \\cp "$4" "$APP/LaunchScreen.storyboard"
-        \\cp "$5" "$APP/PrivacyInfo.xcprivacy"
+        \\cp "$A3" "$APP/Info.plist"
+        \\cp "$A4" "$APP/LaunchScreen.storyboard"
+        \\cp "$A5" "$APP/PrivacyInfo.xcprivacy"
         \\ACTOOL="{s}/usr/bin/actool"
         \\PLISTBUDDY="/usr/libexec/PlistBuddy"
         \\PARTIAL="/tmp/oayao_partial.plist"
-        \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 17.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
+        \\"$ACTOOL" "$A6" --compile "$APP" --platform {s} --minimum-deployment-target 17.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
         \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
         \\rm -f "$PARTIAL"
         \\

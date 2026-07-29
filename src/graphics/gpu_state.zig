@@ -219,7 +219,7 @@ pub const GpuState = struct {
             .fill_size = display_size,
             .stroke_a = p.get_birth_sec(),
             .fill_a = 1.0,
-            .shape = 4.0 + @as(f32, @floatFromInt(@intFromEnum(p.get_sky_kind()) - 1)),
+            .shape = 4.0 + @as(f32, @floatFromInt(@backingInt(p.get_sky_kind()) - 1)),
         };
         const inst_buf = sg.makeBuffer(.{ .data = sg.asRange(&inst) });
 

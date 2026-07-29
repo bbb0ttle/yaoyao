@@ -10,7 +10,7 @@ pub fn build(b: *Build) !void {
     // Production default is ReleaseSafe: bounds/overflow violations stay
     // panics instead of silent UB. ReleaseFast is opt-in via -Drelease=fast
     // for benchmark-verified builds only.
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSafe });
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .safe });
     const is_web = target.result.cpu.arch.isWasm();
 
     // Override iOS deployment target: min 12.0, SDK 26.5 (required by App Store Connect).
@@ -103,7 +103,7 @@ pub fn build(b: *Build) !void {
         });
         lib.step.dependOn(shd_step);
 
-        const em_extra_args: []const []const u8 = if (optimize == .Debug)
+        const em_extra_args: []const []const u8 = if (optimize == .debug)
             &.{ "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower','_oayao_set_days_counter_start_ms']" }
         else
             &.{ "-O3", "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower','_oayao_set_days_counter_start_ms']" };

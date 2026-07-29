@@ -204,7 +204,7 @@ fn fill_pass(
 
         const fill_alpha = max_alpha * t * alpha_scale;
         const stroke_alpha = @min(1.0, p.get_lifespan() / 255.0) * t * alpha_scale;
-        const shape: f32 = if (p.is_sky()) 4.0 + @as(f32, @floatFromInt(@intFromEnum(p.get_sky_kind()) - 1)) else if (display_size + stroke_width < 8.0) 0.0 else 1.0;
+        const shape: f32 = if (p.is_sky()) 4.0 + @as(f32, @floatFromInt(@backingInt(p.get_sky_kind()) - 1)) else if (display_size + stroke_width < 8.0) 0.0 else 1.0;
 
         gpu.write_instance(inst_count, .{
             .pos_x = p.pos_x(),

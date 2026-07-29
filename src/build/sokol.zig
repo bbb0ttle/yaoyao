@@ -38,9 +38,9 @@ pub fn buildClib(
     const cflags_web_release = [_][]const u8{ "-DIMPL", "-DNDEBUG", "-DSOKOL_GLES3", "-fno-sanitize=undefined" };
 
     const cflags: []const []const u8 = if (is_web)
-        (if (optimize != .Debug) &cflags_web_release else &cflags_web_debug)
+        (if (optimize != .debug) &cflags_web_release else &cflags_web_debug)
     else
-        (if (optimize != .Debug) &cflags_native_release else &cflags_native_debug);
+        (if (optimize != .debug) &cflags_native_release else &cflags_native_debug);
 
     if (is_web) {
         lib.step.dependOn(sokol_build.emSdkInstallStep(b, dep_emsdk, .{}));
