@@ -1,17 +1,27 @@
+//! Application entry point and sokol C ABI callbacks.
+
 const std = @import("std");
+const log = std.log.scoped(.oayao);
+
 const sokol = @import("sokol");
 const sapp = sokol.app;
 const slog = sokol.log;
 
 const App = @import("app.zig").App;
+const CounterHeartsFrame = @import("app.zig").CounterHeartsFrame;
+const bootstrap = @import("platform/bootstrap.zig");
+
+// Named allocator constant — replace with debugging allocator as needed.
+const APP_ALLOCATOR = std.heap.c_allocator;
 
 // Global app pointer — the minimum necessary global for sokol's C ABI
 // callbacks which provide no userdata parameter.
 var g_app: ?*App = null;
 
 export fn init() void {
-    const app = App.init(std.heap.c_allocator) catch @panic("OOM");
+    const app = App.init(APP_ALLOCATOR) catch @panic("OOM");
     g_app = app;
+    bootstrap.bootstrap();
 }
 
 export fn frame() void {
@@ -33,7 +43,7 @@ export fn frame() void {
 
     const gpu = app.gpu_mut();
     gpu.upload_instances();
-    gpu.render(w, h);
+    gpu.render(w, h, app.current_theme());
 }
 
 export fn cleanup() void {
@@ -60,10 +70,153 @@ export fn event(ev: [*c]const sapp.Event) void {
     }
 }
 
+// Legacy name kept for the web bundle (web/main.ts); new callers should
+// use the prefixed oayao_trigger_meteor_shower below.
 export fn trigger_meteor_shower(x: f32, y: f32) void {
     if (g_app) |app| {
         app.handle_click(x, y);
     }
+}
+
+export fn oayao_trigger_meteor_shower(x: f32, y: f32) void {
+    trigger_meteor_shower(x, y);
+}
+
+/// `event_id` is borrowed by the call and copied internally; the caller
+/// retains ownership and may free it afterwards.
+export fn oayao_spawn_heart(event_id: [*:0]const u8) void {
+    if (g_app) |app| {
+        const len = std.mem.sliceTo(event_id, 0).len;
+        app.spawn_heart(event_id[0..len], app.current_elapsed()) catch |err| {
+            log.warn("spawn_heart failed: {}", .{err});
+        };
+    }
+}
+
+/// `event_id` is borrowed by the call; the caller retains ownership.
+export fn oayao_remove_heart(event_id: [*:0]const u8) void {
+    if (g_app) |app| {
+        const len = std.mem.sliceTo(event_id, 0).len;
+        app.remove_heart(event_id[0..len]);
+    }
+}
+
+export fn oayao_clear_days_counter_start_ms() void {
+    if (g_app) |app| {
+        app.clear_days_counter_start_ms();
+    }
+}
+
+export fn oayao_counter_hearts_frame() CounterHeartsFrame {
+    if (g_app) |app| {
+        return app.counter_hearts_frame();
+    }
+    return .{ .x = 0, .y = 0, .w = 0, .h = 0 };
+}
+
+/// `active_ids` is borrowed by the call: a '\n'-separated list of event
+/// ids, never retained after return.
+export fn oayao_sync_hearts(active_ids: [*:0]const u8) void {
+    if (g_app) |app| {
+        const slice: [:0]const u8 = std.mem.span(active_ids);
+        app.sync_hearts(slice);
+    }
+}
+
+export fn oayao_set_heart_tap_callback(cb: ?*const fn ([*:0]const u8) callconv(.c) void) void {
+    if (g_app) |app| {
+        app.set_heart_tap_callback(cb);
+    }
+}
+
+export fn oayao_set_counter_tap_callback(cb: ?*const fn () callconv(.c) void) void {
+    if (g_app) |app| {
+        app.set_counter_tap_callback(cb);
+    }
+}
+
+export fn oayao_set_days_tap_callback(cb: ?*const fn () callconv(.c) void) void {
+    if (g_app) |app| {
+        app.set_days_tap_callback(cb);
+    }
+}
+
+export fn oayao_set_days_counter_start_ms(ms: f64) void {
+    if (g_app) |app| {
+        app.set_days_counter_start_ms(ms);
+    }
+}
+
+export fn oayao_days_counter_default_start_ms() f64 {
+    return @import("app.zig").DAYS_COUNTER_DEFAULT_START_MS;
+}
+
+export fn oayao_transition_to_theme(theme_id: u32) void {
+    if (g_app) |app| {
+        app.transition_to_theme(theme_id);
+    }
+}
+
+export fn oayao_set_custom_theme_color(role: u32, r: u8, g: u8, b: u8) void {
+    if (g_app) |app| {
+        app.set_custom_theme_color(role, r, g, b);
+    }
+}
+
+export fn oayao_set_heart_opacity(opacity: f32) void {
+    if (g_app) |app| {
+        app.set_heart_opacity(opacity);
+    }
+}
+
+export fn oayao_set_heart_size_scale(size_scale: f32) void {
+    if (g_app) |app| {
+        app.set_heart_size_scale(size_scale);
+    }
+}
+
+export fn oayao_set_heart_motion(mode: u32) void {
+    if (g_app) |app| {
+        app.set_heart_motion(mode);
+    }
+}
+
+export fn oayao_set_heart_y(fraction: f32) void {
+    if (g_app) |app| {
+        app.set_heart_y_fraction(fraction);
+    }
+}
+
+export fn oayao_reset_heart_y() void {
+    if (g_app) |app| {
+        app.reset_heart_y();
+    }
+}
+
+export fn oayao_reset_heart_config() void {
+    if (g_app) |app| {
+        app.reset_heart_config();
+    }
+}
+
+/// Sky backdrop mode: 0 = off, 1 = cumulus, 2 = cirrus, 3 = lenticular,
+/// 4 = stratocumulus, 5 = cumulonimbus. Unknown ids are ignored.
+export fn oayao_set_sky_mode(mode: u32) void {
+    if (g_app) |app| {
+        app.set_sky_mode(mode);
+    }
+}
+
+/// Legacy alias for oayao_set_sky_mode: nonzero maps to cumulus.
+export fn oayao_set_nebula_enabled(enabled: u32) void {
+    if (g_app) |app| {
+        app.set_nebula_enabled(enabled != 0);
+    }
+}
+
+export fn oayao_default_heart_y() f32 {
+    const app = g_app orelse return 0.5;
+    return app.default_heart_y();
 }
 
 pub fn main() void {
@@ -74,7 +227,6 @@ pub fn main() void {
         .event_cb = event,
         .width = 800,
         .height = 600,
-        .icon = .{ .sokol_default = true },
         .window_title = "oayao",
         .logger = .{ .func = slog.func },
         .high_dpi = true,

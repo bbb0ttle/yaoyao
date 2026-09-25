@@ -1,5 +1,6 @@
 // Particle instancing shader — heart/diamond SDF point sprites.
-// One shader for both stroke (drawn first) and fill (drawn second) passes.
+// Single-instance stroke+fill: stroke and fill are composited in the fragment
+// shader from one GpuInstance, avoiding the double-instance overdraw.
 
 @vs vs_particle
 layout(binding=0) uniform vs_params {
@@ -9,67 +10,314 @@ layout(binding=0) uniform vs_params {
 // Static quad corners: (0,0), (1,0), (0,1), (1,1)
 in vec2 quad_corner;
 
-// Per-instance data (see GpuInstance in main.zig):
-// x, y: world position of particle center
-// size: display radius in pixels
-// color: packed RGBA (normalized to [0,1])
-// shape: 0.0 = diamond, 1.0 = heart
+// Per-instance data (see GpuInstance in gpu_state.zig):
+// offset  0: vec2  inst_pos          — particle center in world pixels
+// offset  8: float inst_stroke_size   — outer radius (display_size + stroke_width)
+// offset 12: float inst_fill_size     — inner fill radius (display_size)
+// offset 16: float inst_stroke_a      — stroke alpha
+// offset 20: float inst_fill_a        — fill alpha
+// offset 24: float inst_shape         — 0=diamond, 1=heart, 2=square
 in vec2 inst_pos;
-in float inst_size;
-in vec4 inst_color;
+in float inst_stroke_size;
+in float inst_fill_size;
+in float inst_stroke_a;
+in float inst_fill_a;
 in float inst_shape;
 
-out vec2 v_uv;       // local quad coordinate [-1, 1]
-out vec4 v_color;    // per-instance color
-out float v_size;    // particle size for AA calculation
-out float v_shape;   // shape selector
+out vec2 v_uv;
+out vec2 v_pos;
+out float v_stroke_size;
+out float v_fill_size;
+out float v_stroke_a;
+out float v_fill_a;
+out float v_shape;
 
 void main() {
-    // quad_corner in [0,1], scale to [-1,1] for SDF evaluation
     vec2 local = (quad_corner - 0.5) * 2.0;
-    vec2 world = local * inst_size + inst_pos;
+    // Quad covers the larger stroke extent so it encloses both stroke and fill
+    vec2 world = local * inst_stroke_size + inst_pos;
     gl_Position = mvp * vec4(world, 0.0, 1.0);
-    v_uv = local;
-    v_color = inst_color;
-    v_size = inst_size;
+    v_uv = local;  // [-1, 1] in stroke-size world space
+    v_pos = inst_pos;
+    v_stroke_size = inst_stroke_size;
+    v_fill_size = inst_fill_size;
+    v_stroke_a = inst_stroke_a;
+    v_fill_a = inst_fill_a;
     v_shape = inst_shape;
 }
 @end
 
 @fs fs_particle
+layout(binding=1) uniform fs_params {
+    vec4 fill_color;
+    vec4 stroke_color;
+    vec4 text_color;
+};
+
+// Baked cloud texture (shape 9): one per sky particle, sampled instead of
+// recomputing noise per pixel per frame. rgb is the tint factor (white for
+// most clouds, the static iridescence for lenticular), a is the raw cloud
+// alpha — theme color and breath are applied at blit time.
+layout(binding=0) uniform texture2D cloud_tex;
+layout(binding=0) uniform sampler cloud_smp;
+
 in vec2 v_uv;
-in vec4 v_color;
-in float v_size;
+in vec2 v_pos;
+in float v_stroke_size;
+in float v_fill_size;
+in float v_stroke_a;
+in float v_fill_a;
 in float v_shape;
 out vec4 frag_color;
 
-void main() {
-    float d;
+// Hash & value noise for the nebula's irregular shapes.
+// Sine-free hash (Hoskins) — much cheaper ALU than fract(sin(...)).
+float hash2(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1030);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
 
-    if (v_shape < 0.5) {
+float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), u.x),
+               mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 3; i++) {
+        v += a * vnoise(p);
+        p *= 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
+
+float eval_sdf(vec2 uv, float shape) {
+    if (shape < 0.5) {
         // Diamond SDF: |x| + |y| <= 1
-        d = 1.0 - (abs(v_uv.x) + abs(v_uv.y));
-    } else if (v_shape < 1.5) {
-        // Heart SDF. Scale x to keep lobes inside the quad (the algebraic
-        // curve naturally reaches x ≈ ±1.12 at y ≈ 0.5).
-        // Scale y to compress vertically for a slimmer, more elegant shape
-        // closer to the Bezier-heart proportions from the main branch.
-        // y is flipped because ortho(0,w,h,0) maps local-up → screen-down.
-        float x = v_uv.x * 1.35;
-        float y = (-v_uv.y + 0.25) * 1.32;
-        float x2 = x * x;
-        float y2 = y * y;
-        float h = x2 + y2 - 1.0;
-        d = -(h * h * h - x2 * y2 * y);
+        return 1.0 - (abs(uv.x) + abs(uv.y));
+    } else if (shape < 1.5) {
+        // Heart: exact distance field (two arcs + straight tip edge), so the
+        // AA band is uniform and the stroke ring never breaks. uv is y-down
+        // in [-1,1]; heart coords are y-up with the tip at the origin.
+        vec2 p = vec2(uv.x, 0.87 - uv.y) / 1.2;
+        p.x = abs(p.x);
+        float d;
+        if (p.y + p.x > 1.0) {
+            d = length(p - vec2(0.25, 0.75)) - 0.353553;
+        } else {
+            vec2 m = vec2(0.5 * max(p.x + p.y, 0.0));
+            d = sqrt(min(dot(p - vec2(0.0, 1.0), p - vec2(0.0, 1.0)),
+                         dot(p - m, p - m))) * sign(p.x - p.y);
+        }
+        return -d * 1.2;  // positive inside, in uv units
     } else {
-        // Filled square for text pixels — fully opaque, crisp edges.
-        d = 2.0;
+        // Filled square for text pixels — fully opaque
+        return 2.0;
+    }
+}
+
+void main() {
+    // Baked cloud blit (shape 9): the noise work was done once at bake time.
+    // Clouds are always white (t.rgb holds the static iridescence factor
+    // for lenticular, 1.0 elsewhere) — never tinted by the theme.
+    if (v_shape > 8.5) {
+        vec4 t = texture(sampler2D(cloud_tex, cloud_smp), v_uv * 0.5 + 0.5);
+        frag_color = vec4(t.rgb, t.a * v_fill_a);
+        return;
     }
 
-    // Anti-aliased edge: smoothstep over 1 pixel width
-    float edge = 1.0 / max(v_size, 0.5);
-    float alpha = smoothstep(-edge, edge, d) * v_color.a;
-    frag_color = vec4(v_color.rgb, alpha);
+    // Cumulonimbus tower (shape 8): a narrow trunk flaring into a wide
+    // anvil crown, filled with cauliflower billows — shape noise multiplied
+    // by ridged noise (f * (r + f)) stacks puffy lobes along the edges and
+    // carves dark crevices between them. v_stroke_a carries the seed.
+    if (v_shape > 7.5) {
+        vec2 uv = v_uv;
+        // Anvil silhouette: trunk half-width ~0.43, crown fills the quad
+        // (uv.y is down; spread grows toward the top).
+        float spread = 1.0 - smoothstep(-0.8, 0.2, uv.y);
+        float xw = mix(2.3, 1.0, spread);
+        vec2 p = vec2(uv.x * xw, uv.y * 1.05);
+        float env = 1.0 - dot(p, p);
+        env -= smoothstep(0.3, 0.9, uv.y) * 0.5; // flat, shaded base
+        // Early-out: alpha carries a clamp(env,0,1) factor, so outside the
+        // envelope the pixel is transparent — skip all three fbm calls.
+        if (env <= 0.0) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
+        // Domain warp gives the billow field a slow swirl.
+        vec2 sp = uv * 2.0 + v_stroke_a;
+        sp += (fbm(sp * 0.5) - 0.5) * 1.4;
+        // The cauliflower signature: billows = shape × (ridge + shape).
+        float f = fbm(sp);
+        float r = 1.0 - abs(2.0 * fbm(sp * 1.7 + 3.1) - 1.0);
+        float billow = f * (r * 0.8 + f);
+        float c = smoothstep(0.18, 0.42, billow) * clamp(env, 0.0, 1.0);
+        // Self-shading: crevices follow the ridge, crowns stay bright.
+        float crest = clamp(billow * 2.2 - 0.25 - uv.y * 0.35, 0.0, 1.0);
+        float a = c * (0.45 + 0.55 * crest) * 0.9;
+        frag_color = vec4(fill_color.rgb, a * v_fill_a);
+        return;
+    }
+
+    // Stratocumulus deck (shape 7): a rolling layer of cloud patches with
+    // sharp, coverage-thresholded edges and bright gaps between them. Each
+    // particle is one large patch of the deck; overlapping instances tile
+    // into a broken sheet. v_stroke_a carries the per-patch seed, driving
+    // both the fbm offset and the coverage so no two patches match.
+    if (v_shape > 6.5) {
+        vec2 uv = v_uv;
+        // Wide flat envelope; x factor > 1 so it reaches zero inside the
+        // quad — otherwise patches clip hard at the quad's vertical edges.
+        float env = 1.0 - dot(uv * vec2(1.15, 1.7), uv * vec2(1.15, 1.7));
+        // Early-out: alpha multiplies clamp(env,0,1) — transparent outside
+        // the envelope, so skip the fbm.
+        if (env <= 0.0) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
+        // Seed-driven coverage: some patches dense, some broken.
+        float cov = 0.28 + 0.45 * fract(v_stroke_a * 0.618);
+        float n = fbm(uv * 1.6 + v_stroke_a);
+        float s = 0.06;
+        float m = smoothstep(cov - s, cov + s, n);
+        // Seen from below: shaded base, lighter tops (uv.y is down).
+        float shade = mix(1.0, 0.45, smoothstep(-0.4, 0.8, uv.y));
+        // Silver lining: a narrow ring where n hugs the coverage threshold —
+        // light catching the thin edge around each gap.
+        float ring = smoothstep(cov - s * 1.8, cov, n) * (1.0 - smoothstep(cov, cov + s * 1.8, n));
+        float a = (m * shade * 0.85 + ring * 0.3) * clamp(env, 0.0, 1.0);
+        frag_color = vec4(fill_color.rgb, a * v_fill_a);
+        return;
+    }
+
+    // Lenticular lens (shape 6): a flat, polished lens with stacked
+    // internal tonal bands — the smooth, elongated saucer shape of
+    // standing-wave clouds. No FBM on the envelope: lenticulars are
+    // defined by their glassy smoothness. v_stroke_a carries the
+    // per-lens seed.
+    if (v_shape > 5.5) {
+        vec2 uv = v_uv;
+        // Lens reaches zero at |x|=1 and |y|≈1/3 — ~3:1 width-to-height,
+        // fully contained within the quad so edges fade naturally.
+        float lens = 1.0 - (uv.x * uv.x * 1.0 + uv.y * uv.y * 9.0);
+        // Early-out: body/crown/rim all vanish at lens <= 0 and irid reduces
+        // to 1.0, so the pixel is fill_color with zero alpha — skip the sin
+        // band work.
+        if (lens <= 0.0) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
+        float lens_c = clamp(lens, 0.0, 1.0);
+        // Bend band samples along the lens arc (yy offsets up to ~4× the
+        // half-height) so the stacked-plate stripes follow the saucer curve
+        // instead of running flat.
+        float yy = uv.y + 1.4 * uv.x * uv.x;
+        float band1 = sin(yy * 18.0 + v_stroke_a * 0.08) * 0.5 + 0.5;
+        float band2 = sin(yy * 7.0 + v_stroke_a * 0.15 + 1.2) * 0.5 + 0.5;
+        // Low-frequency layer deepens the plate pile.
+        float band3 = sin(yy * 2.5 + v_stroke_a * 0.05) * 0.5 + 0.5;
+        float bands = band1 * 0.5 + band2 * 0.3 + band3 * 0.25;
+        bands = mix(1.0, bands, smoothstep(0.0, 0.5, lens) * 0.4);
+        // Sharp outer rim + concave interior highlight; sun-above lighting —
+        // bright crown, shaded base (uv.y is down).
+        float body = smoothstep(0.0, 0.22, lens) * pow(lens_c, 0.5) * (0.5 + 0.3 * bands);
+        body *= mix(1.18, 0.62, smoothstep(-0.33, 0.33, uv.y));
+        // Crown rim light pinched to a narrow band along the upper curve
+        float crown = smoothstep(0.0, 0.22, lens) * smoothstep(0.30, 0.06, lens);
+        crown *= (1.0 - abs(uv.x) * 1.05) * 0.35;
+        float a = body + crown;
+        // Faint iridescence confined to the thin edge band
+        float rim = smoothstep(0.02, 0.12, lens) * smoothstep(0.30, 0.10, lens);
+        vec3 irid = 1.0 + 0.08 * rim * sin(yy * 24.0 + v_stroke_a * 0.1 + vec3(0.0, 2.09, 4.19));
+        frag_color = vec4(fill_color.rgb * irid, a * v_fill_a);
+        return;
+    }
+
+    // Cirrus streak (shape 5): wind-sheared ice filaments — ridged fbm
+    // sampled with a y-shear so the wisps hook, inside a long horizontal
+    // envelope. Thin and translucent.
+    if (v_shape > 4.5) {
+        vec2 uv = v_uv;
+        float e = 1.0 - (uv.x * uv.x + (4.0 * uv.y) * (4.0 * uv.y));
+        // Early-out: alpha multiplies clamp(e,0,1) — transparent outside
+        // the envelope, so skip the warp and both fbm calls.
+        if (e <= 0.0) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
+        vec2 sp = vec2(uv.x * 1.5, uv.y * 8.0) + vec2(uv.y * 2.0, 0.0) + v_stroke_a;
+        // Domain warp: a low-frequency fbm bends the sample coords so the
+        // filaments curl into hooks and mare's tails.
+        float q = fbm(sp * 0.35 + v_stroke_a);
+        sp += (q - 0.5) * 2.2;
+        float wisp = 1.0 - abs(2.0 * fbm(sp) - 1.0);
+        float a = smoothstep(0.55, 0.9, wisp) * clamp(e, 0.0, 1.0) * 0.5;
+        // Large-scale clustering: a very-low-frequency mask gathers the
+        // streaks into banks instead of spreading them evenly.
+        float bank = smoothstep(0.35, 0.75, vnoise(uv * vec2(0.8, 1.2) + v_stroke_a * 0.7));
+        a *= 0.3 + 0.7 * bank;
+        frag_color = vec4(fill_color.rgb, a * v_fill_a);
+        return;
+    }
+
+    // Cumulus puff (shape 4): a dome-enveloped fbm blob — bright billowing
+    // crests, shaded flat base, like a summer afternoon cloud. v_stroke_a
+    // carries the puff's fbm seed so the pattern stays rigid while the
+    // puff drifts across the sky.
+    if (v_shape > 3.5) {
+        vec2 uv = v_uv;
+        float dome = 1.0 - dot(uv * vec2(1.0, 1.25), uv * vec2(1.0, 1.25));
+        dome -= smoothstep(0.15, 0.75, uv.y) * 0.5; // flatten and fade the base
+        // Early-out: n peaks at 0.85*0.875 + dome*0.9 - 0.28, so dome < -0.25
+        // keeps n under the 0.30 threshold — c, edge and alpha are all zero.
+        if (dome < -0.25) {
+            frag_color = vec4(fill_color.rgb, 0.0);
+            return;
+        }
+        float n = fbm(uv * 2.8 + v_stroke_a) * 0.85 + dome * 0.9 - 0.28;
+        // Monochrome puff: depth comes from alpha alone — dense crests read
+        // solid, the thin base and rims fade away. The tight threshold band
+        // turns the silhouette from smooth blob into clustered billows.
+        float c = smoothstep(0.30, 0.48, n);
+        float crest = clamp(dome * 0.85 - uv.y * 1.05 + (n - 0.45) * 1.2, 0.0, 1.0);
+        // Silver lining: the transition band catches light on the upper-right
+        // edge; the shadowed opposite edge dims slightly.
+        float edge = c * (1.0 - c) * 4.0;
+        vec2 L = normalize(vec2(0.7, -0.7));
+        float dl = dot(normalize(uv + vec2(1e-4)), L);
+        float rim = edge * max(dl, 0.0) * 0.4;
+        float shade = 1.0 - edge * max(-dl, 0.0) * 0.25;
+        float a = (c * (0.55 + 0.45 * crest) + rim) * shade;
+        frag_color = vec4(fill_color.rgb, a * v_fill_a);
+        return;
+    }
+
+    // Stroke SDF at stroke scale (v_uv is already in stroke-local space)
+    float d_stroke = eval_sdf(v_uv, v_shape);
+    float stroke_aa = 1.0 / max(v_stroke_size, 0.5);
+    float sa = smoothstep(-stroke_aa, stroke_aa, d_stroke) * v_stroke_a;
+
+    // Fill SDF at fill scale — scale v_uv so fill boundary aligns with unit circle
+    float fill_ratio = v_fill_size / max(v_stroke_size, 0.5);
+    vec2 fill_uv = v_uv / fill_ratio;
+    float d_fill = eval_sdf(fill_uv, v_shape);
+    float fill_aa = 1.0 / max(v_fill_size, 0.5);
+    float fa = smoothstep(-fill_aa, fill_aa, d_fill) * v_fill_a;
+
+    // Composite: fill over stroke (matches original two-pass alpha blending)
+    // Text pixels (shape 2) take the dedicated text color instead of fill_color.
+    vec3 fill_rgb = (v_shape >= 1.5) ? text_color.rgb : fill_color.rgb;
+    float combined_a = fa + sa * (1.0 - fa);
+    vec3 combined_rgb = (fill_rgb * fa + stroke_color.rgb * sa * (1.0 - fa))
+                      / max(combined_a, 0.001);
+    frag_color = vec4(combined_rgb, combined_a);
 }
 @end
 
