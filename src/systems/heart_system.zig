@@ -1,4 +1,7 @@
+//! Heart contour rendering system with floating pair animation.
+
 const std = @import("std");
+
 const Vec2 = @import("../core/types.zig").Vec2;
 const math = @import("../core/math.zig");
 const Particle = @import("../particles/particle.zig").Particle;
@@ -9,13 +12,26 @@ const Rng = @import("../random.zig").Rng;
 
 const CONTOUR_COUNT: usize = 30;
 
+// Calm breathing cadence: one full inhale-exhale cycle per 4 seconds,
+// much slower than the ~0.67s heartbeat pulse so the two modes read apart.
+const BREATH_PERIOD_SEC: f32 = 3.7;
+
+/// Big-heart animation style; values are part of the C ABI.
+pub const MotionMode = enum(u32) {
+    beat = 0,
+    breath = 1,
+};
+
 const ContourPoint = struct {
     base_x: f32,
     base_y: f32,
     immortal: *Particle,
 };
 
+/// Heart contour with 30 immortal contour points and two floating pair particles.
 pub const HeartSystem = struct {
+    const Self = @This();
+
     contour: [CONTOUR_COUNT]ContourPoint,
     float_pair: [2]*Particle,
     birth_sec: f32,
@@ -24,6 +40,9 @@ pub const HeartSystem = struct {
     canvas_h: f32,
     dpr: f32,
     spawn_counter: u32,
+    opacity: f32,
+    motion: MotionMode,
+    size_scale: f32,
 
     pub fn init(
         pool: *ParticlePool,
@@ -35,10 +54,10 @@ pub const HeartSystem = struct {
         fp_x: f32,
         fp_y: f32,
         dpr: f32,
-    ) HeartSystem {
+    ) Self {
         pool.reset();
 
-        var self = HeartSystem{
+        var self = Self{
             .contour = undefined,
             .float_pair = undefined,
             .birth_sec = elapsed,
@@ -47,6 +66,9 @@ pub const HeartSystem = struct {
             .canvas_h = canvas_h,
             .dpr = dpr,
             .spawn_counter = 0,
+            .opacity = 1.0,
+            .motion = .beat,
+            .size_scale = 1.0,
         };
 
         const start: f32 = 0.0;
@@ -61,11 +83,12 @@ pub const HeartSystem = struct {
             t += step;
         }) {
             const hp = math.create_heart_pos(t);
-            const pos = Vec2{ .x = hp.x * hscale + hscale + cx, .y = hp.y * hscale + hscale + cy };
+            const px = hp.x * hscale + hscale + cx;
+            const py = hp.y * hscale + hscale + cy;
             self.contour[i] = ContourPoint{
                 .base_x = hp.x,
                 .base_y = hp.y,
-                .immortal = pool.alloc_particle(pos, elapsed, .{ .immortal = true, .size = MAX_PARTICLE_SIZE * dpr }, rng),
+                .immortal = pool.alloc_particle(Vec2{ .x = px, .y = py }, elapsed, .{ .immortal = true, .size = MAX_PARTICLE_SIZE * dpr }, rng),
             };
         }
 
@@ -85,44 +108,93 @@ pub const HeartSystem = struct {
         return self;
     }
 
-    pub fn update(self: *HeartSystem, elapsed: f32, pool: *ParticlePool, rng: *Rng) void {
+    pub fn update(self: *Self, elapsed: f32, pool: *ParticlePool, rng: *Rng) void {
         const dpr = self.dpr;
-        const scale_val = math.breath(elapsed - self.birth_sec, 50.0 * dpr, 60.0 * dpr);
-        const size_val = math.breath(elapsed - self.birth_sec, 10.0 * dpr, 15.0 * dpr);
+        const t = elapsed - self.birth_sec;
+        const base = 50.0 * dpr * self.size_scale;
+        const scale_val = switch (self.motion) {
+            .beat => math.breath(t, base, base * 1.2),
+            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, base, base * 1.2),
+        };
+        const size_val = switch (self.motion) {
+            .beat => math.breath(t, 10.0 * dpr * self.size_scale, 15.0 * dpr * self.size_scale),
+            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, 10.0 * dpr * self.size_scale, 15.0 * dpr * self.size_scale),
+        };
+        // Breath mode also swells the alpha gently, like the reference
+        // breathing-circle demo; beat mode stays at constant alpha.
+        const alpha_val = self.opacity * switch (self.motion) {
+            .beat => 1.0,
+            .breath => math.breath_cycle(t, BREATH_PERIOD_SEC, 0.7, 1.0),
+        };
 
         self.spawn_counter += 1;
         const spawn_frame = self.spawn_counter % 2 == 0;
 
         for (&self.contour) |*cp| {
-            cp.immortal.pos.x = cp.base_x * scale_val + 50.0 * dpr + self.cx;
-            cp.immortal.pos.y = cp.base_y * scale_val + 50.0 * dpr + self.cy - 5.0 * dpr;
-            cp.immortal.size = size_val;
+            cp.immortal.set_pos(
+                cp.base_x * scale_val + base + self.cx,
+                cp.base_y * scale_val + base + self.cy - 5.0 * dpr,
+            );
+            cp.immortal.set_size(size_val);
+            cp.immortal.set_alpha_scale(alpha_val);
 
             if (spawn_frame) {
-                _ = pool.alloc_particle(cp.immortal.pos, elapsed, .{ .size = MAX_PARTICLE_SIZE * dpr }, rng);
+                const trail = pool.alloc_particle(cp.immortal.get_pos(), elapsed, .{ .size = MAX_PARTICLE_SIZE * dpr }, rng);
+                trail.set_alpha_scale(alpha_val);
             }
         }
     }
 
-    pub fn fill_contour_positions(self: *const HeartSystem, buf: []Vec2) void {
+    pub fn set_opacity(self: *Self, opacity: f32) void {
+        self.opacity = opacity;
+    }
+
+    pub fn set_motion(self: *Self, motion: MotionMode) void {
+        self.motion = motion;
+    }
+
+    pub fn set_size_scale(self: *Self, size_scale: f32) void {
+        self.size_scale = size_scale;
+    }
+
+    pub fn set_cy(self: *Self, cy: f32) void {
+        self.cy = cy;
+    }
+
+    pub fn set_cx(self: *Self, cx: f32) void {
+        self.cx = cx;
+    }
+
+    pub fn fill_contour_positions(self: *const Self, buf: []Vec2) void {
         for (&self.contour, 0..) |*cp, i| {
-            buf[i] = cp.immortal.pos;
+            buf[i] = Vec2{ .x = cp.immortal.pos_x(), .y = cp.immortal.pos_y() };
         }
     }
 
-    pub fn center_x(self: *const HeartSystem) f32 {
+    /// Whether a circle at (x, y) overlaps any contour point's current extent.
+    pub fn touches_contour(self: *const Self, x: f32, y: f32, radius: f32) bool {
+        for (&self.contour) |*cp| {
+            const dx = x - cp.immortal.pos_x();
+            const dy = y - cp.immortal.pos_y();
+            const reach = radius + cp.immortal.get_size();
+            if (dx * dx + dy * dy < reach * reach) return true;
+        }
+        return false;
+    }
+
+    pub fn center_x(self: *const Self) f32 {
         return self.cx;
     }
 
-    pub fn center_y(self: *const HeartSystem) f32 {
+    pub fn center_y(self: *const Self) f32 {
         return self.cy;
     }
 
-    pub fn float_pair_left(self: *HeartSystem) *Particle {
+    pub fn float_pair_left(self: *Self) *Particle {
         return self.float_pair[0];
     }
 
-    pub fn float_pair_right(self: *HeartSystem) *Particle {
+    pub fn float_pair_right(self: *Self) *Particle {
         return self.float_pair[1];
     }
 };

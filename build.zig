@@ -1,19 +1,23 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const Build = std.Build;
 
 const sokol_build = @import("sokol");
+const ios_build = @import("src/build/ios.zig");
+const sokol_clib = @import("src/build/sokol.zig");
 
 pub fn build(b: *Build) !void {
     var target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
+    // Production default is ReleaseSafe: bounds/overflow violations stay
+    // panics instead of silent UB. ReleaseFast is opt-in via -Drelease=fast
+    // for benchmark-verified builds only.
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .safe });
     const is_web = target.result.cpu.arch.isWasm();
 
     // Override iOS deployment target: min 12.0, SDK 26.5 (required by App Store Connect).
     // Must re-resolve the query so the version range is correctly embedded in the binary.
     if (target.result.os.tag == .ios) {
         var query = target.query;
-        query.os_version_min = .{ .semver = .{ .major = 12, .minor = 0, .patch = 0 } };
+        query.os_version_min = .{ .semver = .{ .major = 15, .minor = 0, .patch = 0 } };
         query.os_version_max = .{ .semver = .{ .major = 26, .minor = 5, .patch = 0 } };
         target = b.resolveTargetQuery(query);
     }
@@ -30,7 +34,7 @@ pub fn build(b: *Build) !void {
     });
 
     // --- Build sokol C library with correct paths ---
-    const lib_sokol = try buildSokolLib(b, dep_sokol, dep_emsdk, target, optimize, is_web);
+    const lib_sokol = try sokol_clib.buildClib(b, dep_sokol, dep_emsdk, target, optimize, is_web);
     mod_sokol.linkLibrary(lib_sokol);
 
     // --- Shader compilation ---
@@ -58,21 +62,15 @@ pub fn build(b: *Build) !void {
 
     // Add iOS SDK paths to the app module (needed for framework resolution at link time)
     if (target.result.os.tag == .ios) {
-        const sdk_root = iosSdkRoot(b, target);
-        const sdk_usr = b.fmt("{s}/usr", .{sdk_root});
-        const sdk_fw = b.fmt("{s}/System/Library/Frameworks", .{sdk_root});
-        const sdk_subfw = b.fmt("{s}/System/Library/SubFrameworks", .{sdk_root});
-        app_mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{sdk_usr}) });
-        app_mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/lib", .{sdk_usr}) });
-        app_mod.addSystemFrameworkPath(.{ .cwd_relative = sdk_fw });
-        app_mod.addSystemFrameworkPath(.{ .cwd_relative = sdk_subfw });
+        ios_build.addSdkPaths(b, target, app_mod);
     }
 
     if (!is_web) {
         if (target.result.os.tag == .ios) {
-            // Build static library; Apple's ld64 links the final binary in createIosAppBundle.
-            // This avoids Zig's LLD which lacks LC_ENCRYPTION_INFO, correct segment alignment,
-            // and proper SDK version embedding required by App Store Connect.
+            // Build static library; Apple's ld64 links the final binary in the
+            // bundle step. This avoids Zig's LLD which lacks LC_ENCRYPTION_INFO,
+            // correct segment alignment, and SDK version embedding required by
+            // App Store Connect.
             const lib = b.addLibrary(.{
                 .name = "oayao",
                 .root_module = app_mod,
@@ -81,7 +79,7 @@ pub fn build(b: *Build) !void {
             const install = b.addInstallArtifact(lib, .{});
             b.getInstallStep().dependOn(&install.step);
 
-            const app_step = try createIosAppBundle(b, lib, lib_sokol, target);
+            const app_step = try ios_build.createAppBundle(b, lib, lib_sokol, target, optimize);
             const install_app = b.step("ios-app", "Build Oayao.app bundle for iOS");
             install_app.dependOn(app_step);
         } else {
@@ -105,6 +103,11 @@ pub fn build(b: *Build) !void {
         });
         lib.step.dependOn(shd_step);
 
+        const em_extra_args: []const []const u8 = if (optimize == .debug)
+            &.{ "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower','_oayao_set_days_counter_start_ms']" }
+        else
+            &.{ "-O3", "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower','_oayao_set_days_counter_start_ms']" };
+
         const link_step = try sokol_build.emLinkStep(b, .{
             .lib_main = lib,
             .target = target,
@@ -114,7 +117,7 @@ pub fn build(b: *Build) !void {
             .use_emmalloc = true,
             .use_filesystem = false,
             .shell_file_path = b.path("web/shell.html"),
-            .extra_args = &.{ "-sSTACK_SIZE=512KB", "-sENVIRONMENT=web", "-sERROR_ON_UNDEFINED_SYMBOLS=0", "-sEXPORTED_FUNCTIONS=['_main','_trigger_meteor_shower']" },
+            .extra_args = em_extra_args,
         });
 
         const web_step = b.step("web", "Build oayao for web");
@@ -134,185 +137,25 @@ pub fn build(b: *Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    const tests = b.addTest(.{ .root_module = tests_mod });
+    const tests = b.addTest(.{
+        .root_module = tests_mod,
+        // -Dtest-filter="..." compiles in only matching tests; the full
+        // suite is the default.
+        .filters = if (b.option([]const u8, "test-filter", "Skip tests whose name lacks the substring")) |filter|
+            &.{filter}
+        else
+            &.{},
+    });
     const run_tests = b.addRunArtifact(tests);
     test_step.dependOn(&run_tests.step);
-}
 
-fn buildSokolLib(
-    b: *Build,
-    dep_sokol: *Build.Dependency,
-    dep_emsdk: *Build.Dependency,
-    target: Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    is_web: bool,
-) !*Build.Step.Compile {
-    const mod = b.addModule("mod_sokol_clib", .{
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
+    // --- Format check ---
+    const fmt_step = b.step("fmt", "Check formatting with zig fmt");
+    const fmt = b.addFmt(.{
+        .paths = &.{ b.path("src"), b.path("build.zig"), b.path("build.zig.zon") },
+        // particle.glsl.zig is shdc-generated: excluded per AGENTS.md.
+        .exclude_paths = &.{b.path("src/shaders/particle.glsl.zig")},
+        .check = true,
     });
-
-    const lib = b.addLibrary(.{
-        .name = "sokol_clib",
-        .linkage = .static,
-        .root_module = mod,
-    });
-
-    const csources = [_][]const u8{
-        "sokol_log.c",   "sokol_app.c",   "sokol_gfx.c",       "sokol_time.c",
-        "sokol_audio.c", "sokol_gl.c",    "sokol_debugtext.c", "sokol_shape.c",
-        "sokol_glue.c",  "sokol_fetch.c",
-    };
-
-    const cflags_native_debug = [_][]const u8{ "-DIMPL", "-DSOKOL_METAL", "-ObjC", "-DSOKOL_DEBUG", "-fno-sanitize=undefined" };
-    const cflags_native_release = [_][]const u8{ "-DIMPL", "-DNDEBUG", "-DSOKOL_METAL", "-ObjC", "-fno-sanitize=undefined" };
-    const cflags_web_debug = [_][]const u8{ "-DIMPL", "-DSOKOL_GLES3", "-fno-sanitize=undefined" };
-    const cflags_web_release = [_][]const u8{ "-DIMPL", "-DNDEBUG", "-DSOKOL_GLES3", "-fno-sanitize=undefined" };
-
-    const cflags: []const []const u8 = if (is_web)
-        (if (optimize != .Debug) &cflags_web_release else &cflags_web_debug)
-    else
-        (if (optimize != .Debug) &cflags_native_release else &cflags_native_debug);
-
-    if (is_web) {
-        const emsdk_install_step = emSdkEnsureStep(b, dep_emsdk);
-        lib.step.dependOn(emsdk_install_step);
-        mod.addSystemIncludePath(dep_emsdk.path("upstream/emscripten/cache/sysroot/include"));
-    } else if (target.result.os.tag == .ios) {
-        const sdk_root = iosSdkRoot(b, target);
-        const sdk_usr = b.fmt("{s}/usr", .{sdk_root});
-        const sdk_fw = b.fmt("{s}/System/Library/Frameworks", .{sdk_root});
-        const sdk_subfw = b.fmt("{s}/System/Library/SubFrameworks", .{sdk_root});
-        mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{sdk_usr}) });
-        mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/lib", .{sdk_usr}) });
-        mod.addSystemFrameworkPath(.{ .cwd_relative = sdk_fw });
-        mod.addSystemFrameworkPath(.{ .cwd_relative = sdk_subfw });
-        mod.linkFramework("QuartzCore", .{});
-        mod.linkFramework("AudioToolbox", .{});
-        mod.linkFramework("Metal", .{});
-        mod.linkFramework("Foundation", .{});
-        mod.linkFramework("UIKit", .{});
-        mod.linkFramework("AVFoundation", .{});
-        mod.linkFramework("CoreGraphics", .{});
-    } else {
-        mod.linkFramework("QuartzCore", .{});
-        mod.linkFramework("AudioToolbox", .{});
-        mod.linkFramework("Metal", .{});
-        mod.linkFramework("AppKit", .{});
-    }
-
-    inline for (csources) |csrc| {
-        mod.addCSourceFile(.{
-            .file = dep_sokol.path("src/sokol/c/" ++ csrc),
-            .flags = cflags,
-        });
-    }
-
-    b.installArtifact(lib);
-    return lib;
-}
-
-fn emSdkEnsureStep(b: *Build, emsdk: *Build.Dependency) *Build.Step {
-    return sokol_build.emSdkInstallStep(b, emsdk, .{});
-}
-
-fn xcodeDeveloperDir(b: *Build) []const u8 {
-    // Respect DEVELOPER_DIR env var (standard macOS convention) first,
-    // then fall back to xcode-select, then hardcoded default.
-    if (std.c.getenv("DEVELOPER_DIR")) |ptr| {
-        const slice = std.mem.sliceTo(ptr, 0);
-        return b.allocator.dupe(u8, slice) catch @panic("OOM");
-    }
-
-    var exit_code: u8 = undefined;
-    const result = b.runAllowFail(
-        &.{ "xcode-select", "-p" },
-        &exit_code,
-        .ignore,
-    ) catch return "/Applications/Xcode.app/Contents/Developer";
-    return std.mem.trimEnd(u8, result, "\n");
-}
-
-fn iosSdkRoot(b: *Build, target: Build.ResolvedTarget) []const u8 {
-    const developer = xcodeDeveloperDir(b);
-    if (target.result.abi == .simulator) {
-        return b.fmt("{s}/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk", .{developer});
-    } else {
-        return b.fmt("{s}/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk", .{developer});
-    }
-}
-
-fn createIosAppBundle(
-    b: *Build,
-    lib: *Build.Step.Compile,
-    lib_sokol: *Build.Step.Compile,
-    target: Build.ResolvedTarget,
-) !*Build.Step {
-    const platform = if (target.result.abi == .simulator) "iphonesimulator" else "iphoneos";
-    const sdk_root = iosSdkRoot(b, target);
-    const developer_dir = xcodeDeveloperDir(b);
-
-    // Construct clang target triple from resolved target.
-    // Keep the deployment target at 12.0 (set at the top of build()) for
-    // maximum device compatibility. Only the architecture varies.
-    const clang_arch: []const u8 = if (target.result.cpu.arch == .aarch64) "arm64" else @tagName(target.result.cpu.arch);
-    const clang_target = if (target.result.abi == .simulator)
-        b.fmt("{s}-apple-ios12.0-simulator", .{clang_arch})
-    else
-        b.fmt("{s}-apple-ios12.0", .{clang_arch});
-
-    const script = b.fmt(
-        \\set -e
-        \\APP="zig-out/Oayao.app"
-        \\rm -rf "$APP"
-        \\mkdir -p "$APP"
-        \\
-        \\# Link with Apple's ld64 via xcrun clang — produces correct LC_ENCRYPTION_INFO,
-        \\# segment alignment, SDK version, and PIE that App Store Connect requires.
-        \\# Zig's .a archives have misaligned Mach-O members; extract to temp .o files first.
-        \\A1="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-        \\A2="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
-        \\O1="$(mktemp -d /tmp/oayao_o1.XXXXXX)"
-        \\O2="$(mktemp -d /tmp/oayao_o2.XXXXXX)"
-        \\trap 'rm -rf "$O1" "$O2"' EXIT
-        \\ sh -c 'cd "$1" && ar x "$2" 2>/dev/null; chmod 644 ./*.o 2>/dev/null' -- "$O1" "$A1" || true
-        \\ sh -c 'cd "$1" && ar x "$2" 2>/dev/null; chmod 644 ./*.o 2>/dev/null' -- "$O2" "$A2" || true
-        \\SDK_ROOT="{s}"
-        \\xcrun clang -target {s} \
-        \\  -isysroot "$SDK_ROOT" \
-        \\  -o "$APP/Oayao" \
-        \\  "$O1"/*.o "$O2"/*.o \
-        \\  -framework UIKit \
-        \\  -framework Metal \
-        \\  -framework QuartzCore \
-        \\  -framework Foundation \
-        \\  -framework CoreGraphics \
-        \\  -framework AudioToolbox \
-        \\  -framework AVFoundation \
-        \\  -fobjc-arc
-        \\
-        \\cp "$3" "$APP/Info.plist"
-        \\cp "$4" "$APP/LaunchScreen.storyboard"
-        \\cp "$5" "$APP/PrivacyInfo.xcprivacy"
-        \\ACTOOL="{s}/usr/bin/actool"
-        \\PLISTBUDDY="/usr/libexec/PlistBuddy"
-        \\PARTIAL="/tmp/oayao_partial.plist"
-        \\"$ACTOOL" "$6" --compile "$APP" --platform {s} --minimum-deployment-target 12.0 --app-icon AppIcon --output-partial-info-plist "$PARTIAL"
-        \\"$PLISTBUDDY" -c "Merge $PARTIAL" "$APP/Info.plist"
-        \\rm -f "$PARTIAL"
-        \\echo "Created Oayao.app bundle at zig-out/Oayao.app"
-    , .{ sdk_root, clang_target, developer_dir, platform });
-
-    const cmd = b.addSystemCommand(&.{ "sh", "-c" });
-    cmd.addArg(script);
-    cmd.addArg("sh"); // $0
-    cmd.addArtifactArg(lib); // $1 — liboayao.a
-    cmd.addArtifactArg(lib_sokol); // $2 — libsokol_clib.a
-    cmd.addFileArg(b.path("ios/Info.plist")); // $3
-    cmd.addFileArg(b.path("ios/Oayao/LaunchScreen.storyboard")); // $4
-    cmd.addFileArg(b.path("ios/Oayao/PrivacyInfo.xcprivacy")); // $5
-    cmd.addDirectoryArg(b.path("ios/Oayao/Assets.xcassets")); // $6
-
-    return &cmd.step;
+    fmt_step.dependOn(&fmt.step);
 }
